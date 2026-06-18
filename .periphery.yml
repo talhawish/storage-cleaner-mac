@@ -1,0 +1,9 @@
+project: StorageCleaner.xcodeproj
+schemes:
+  - StorageCleaner
+targets:
+  - StorageCleaner
+retain_public: true
+strict: true
+index_exclude:
+  - .build/**

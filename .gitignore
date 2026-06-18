@@ -1,0 +1,34 @@
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# Swift / Package Manager
+.build/
+.swiftpm/
+/Packages
+/Package.resolved
+
+# Xcode Projects
+# We use XcodeGen, so the .xcodeproj is transient and generated from project.yml
+*.xcodeproj
+*.xcworkspace
+
+# Xcode User Data
+# These should never be committed as they are user-specific
+xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+
+# Build Artifacts
+build/
+bin/
+reports/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Project Specific
+.commandcode/
+
