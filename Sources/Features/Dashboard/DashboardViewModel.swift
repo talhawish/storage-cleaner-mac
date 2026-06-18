@@ -7,7 +7,9 @@ import Observation
 final class DashboardViewModel {
     private let scanner: any StorageScanning
     private let permissionHandler: any StoragePermissionHandling
+    private let cleanupService: CleanupService
     private var scanTask: Task<Void, Never>?
+    private var scanStartTime: Date?
 
     private(set) var phase: ScanPhase = .idle
     private(set) var progress = 0.0
@@ -16,14 +18,18 @@ final class DashboardViewModel {
     private(set) var scannerProgress: [ScannerProgress] = []
     private(set) var permissionStatuses: [StoragePermissionStatus]
     private(set) var snapshot: ScanSnapshot?
+    private(set) var lastCleanupResult: CleanupResult?
     var selectedDomain: StorageDomain?
+    var selectedFinding: StorageFinding?
 
     init(
         scanner: any StorageScanning,
-        permissionHandler: any StoragePermissionHandling = FileSystemPermissionService()
+        permissionHandler: any StoragePermissionHandling = FileSystemPermissionService(),
+        cleanupService: CleanupService = FileManagerCleanupService()
     ) {
         self.scanner = scanner
         self.permissionHandler = permissionHandler
+        self.cleanupService = cleanupService
         permissionStatuses = permissionHandler.currentStatuses()
     }
 
@@ -32,18 +38,30 @@ final class DashboardViewModel {
     }
 
     var blockedPermissions: [StoragePermissionStatus] {
-        permissionStatuses.filter { $0.state == .denied }
+        permissionStatuses.filter { $0.state == .denied && $0.scope.isBlocking }
     }
 
     var hasPermissionIssues: Bool {
         !blockedPermissions.isEmpty
     }
 
+    var warningPermissions: [StoragePermissionStatus] {
+        permissionStatuses.filter { $0.state == .denied && !$0.scope.isBlocking }
+    }
+
     var permissionSummary: String {
         let accessibleCount = permissionStatuses.filter { $0.state == .accessible }.count
-        if let blockedStatus = permissionStatuses.first(where: { $0.state != .accessible }) {
+        if let blockedStatus = permissionStatuses.first(where: { $0.state != .accessible && $0.scope.isBlocking }) {
             return "\(accessibleCount) of \(permissionStatuses.count) locations accessible; "
                 + "\(blockedStatus.scope.title) needs review at \(blockedStatus.url.lastPathComponent)"
+        }
+
+        let warningCount = warningPermissions.count
+        if warningCount > 0 {
+            let locationWord = warningCount == 1 ? "location" : "locations"
+            let needWord = warningCount == 1 ? "needs" : "need"
+            return "\(accessibleCount) of \(permissionStatuses.count) locations accessible; "
+                + "\(warningCount) \(locationWord) \(needWord) Full Disk Access"
         }
 
         return "All \(permissionStatuses.count) storage locations accessible"
@@ -89,6 +107,39 @@ final class DashboardViewModel {
         phase = .idle
     }
 
+    func deleteFiles(_ urls: [URL]) async -> CleanupResult {
+        let result = await cleanupService.delete(urls: urls)
+        lastCleanupResult = result
+
+        if var currentSnapshot = snapshot {
+            let deletedSet = Set(result.deletedURLs)
+            let updatedFindings = currentSnapshot.findings.compactMap { finding -> StorageFinding? in
+                let remainingPaths = finding.filePaths.filter { !deletedSet.contains($0) }
+                guard !remainingPaths.isEmpty else { return nil }
+                let remainingBytes = remainingPaths.reduce(Int64(0)) { total, url in
+                    total + StorageFormatting.fileSize(at: url)
+                }
+                return StorageFinding(
+                    kind: finding.kind,
+                    domain: finding.domain,
+                    bytes: remainingBytes,
+                    itemCount: remainingPaths.count,
+                    safety: finding.safety,
+                    examples: finding.examples,
+                    filePaths: remainingPaths
+                )
+            }
+            currentSnapshot = ScanSnapshot(
+                findings: updatedFindings,
+                scannedItemCount: currentSnapshot.scannedItemCount,
+                duration: currentSnapshot.duration
+            )
+            snapshot = currentSnapshot
+        }
+
+        return result
+    }
+
     private func beginScanning() {
         scanTask?.cancel()
         progress = 0
@@ -97,7 +148,9 @@ final class DashboardViewModel {
         scannerProgress = []
         snapshot = nil
         selectedDomain = nil
+        selectedFinding = nil
         phase = .scanning
+        scanStartTime = .now
 
         let scanner = scanner
         scanTask = Task { [weak self] in
@@ -116,10 +169,21 @@ final class DashboardViewModel {
             scannedItemCount = itemCount
             self.scannerProgress = scannerProgress
         case let .completed(snapshot):
-            self.snapshot = snapshot
-            scannedItemCount = snapshot.scannedItemCount
+            let duration: Duration
+            if let startTime = scanStartTime {
+                duration = .seconds(abs(startTime.timeIntervalSinceNow))
+            } else {
+                duration = snapshot.duration
+            }
+            let adjustedSnapshot = ScanSnapshot(
+                findings: snapshot.findings,
+                scannedItemCount: snapshot.scannedItemCount,
+                duration: duration
+            )
+            self.snapshot = adjustedSnapshot
+            scannedItemCount = adjustedSnapshot.scannedItemCount
             progress = 1
-            phase = snapshot.findings.isEmpty ? .empty : .results
+            phase = adjustedSnapshot.findings.isEmpty ? .empty : .results
             scanTask = nil
         }
     }

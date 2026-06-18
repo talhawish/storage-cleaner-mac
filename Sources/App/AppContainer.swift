@@ -1,14 +1,13 @@
+import Foundation
+
 struct AppContainer: Sendable {
     let storageScanner: any StorageScanning
     let permissionHandler: any StoragePermissionHandling
+    let cleanupService: CleanupService
 
     static let live = AppContainer(
         storageScanner: LiveStorageScanner.live(),
-        permissionHandler: FileSystemPermissionService()
-    )
-
-    static let uiTesting = AppContainer(
-        storageScanner: DemoStorageScanner(stepDelay: .milliseconds(250)),
-        permissionHandler: FileSystemPermissionService()
+        permissionHandler: FileSystemPermissionService(),
+        cleanupService: FileManagerCleanupService()
     )
 }

@@ -16,7 +16,8 @@ struct CandidateFindingBuilder: Sendable {
             bytes: bytes,
             itemCount: candidates.count,
             safety: safety,
-            examples: Array(candidates.prefix(3).map(\.displayName))
+            examples: Array(candidates.prefix(3).map(\.displayName)),
+            filePaths: candidates.map(\.url)
         )
     }
 }

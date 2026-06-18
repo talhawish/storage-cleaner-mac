@@ -5,15 +5,15 @@ struct XcodeStorageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.xcodeArtifacts.title
     private let scanner: PathListScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
         scanner = PathListScanner(
             kind: .xcodeArtifacts,
             domain: .appleDevelopment,
             paths: [
-                paths.home("Library/Developer/Xcode/DerivedData"),
-                paths.home("Library/Developer/Xcode/Archives"),
-                paths.home("Library/Developer/CoreSimulator"),
-                paths.home("Library/Caches/org.swift.swiftpm")
+                DependencyPaths.Apple.derivedData,
+                DependencyPaths.Apple.archives,
+                DependencyPaths.Apple.coreSimulator,
+                DependencyPaths.Apple.swiftPM
             ],
             safety: .safe,
             collector: collector
@@ -30,16 +30,11 @@ struct DockerStorageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.dockerArtifacts.title
     private let scanner: PathListScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
         scanner = PathListScanner(
             kind: .dockerArtifacts,
             domain: .containers,
-            paths: [
-                paths.home("Library/Containers/com.docker.docker"),
-                paths.home(".docker"),
-                paths.home(".colima"),
-                paths.home("Library/Application Support/OrbStack")
-            ],
+            paths: DependencyPaths.Docker.cacheDirs,
             safety: .review,
             collector: collector
         )
@@ -55,15 +50,11 @@ struct FlutterStorageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.flutterArtifacts.title
     private let scanner: PathListScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
         scanner = PathListScanner(
             kind: .flutterArtifacts,
             domain: .mobileDevelopment,
-            paths: [
-                paths.home(".pub-cache"),
-                paths.home("Library/Caches/flutter"),
-                paths.home("Developer/flutter")
-            ],
+            paths: DependencyPaths.Flutter.cacheDirs,
             safety: .review,
             collector: collector
         )
@@ -79,17 +70,11 @@ struct AndroidStudioStorageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.androidStudioArtifacts.title
     private let scanner: PathListScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
         scanner = PathListScanner(
             kind: .androidStudioArtifacts,
             domain: .mobileDevelopment,
-            paths: [
-                paths.home("Library/Android/sdk"),
-                paths.home("Library/Android/sdk/system-images"),
-                paths.home(".android/avd"),
-                paths.home("Library/Caches/Google/AndroidStudio"),
-                paths.home(".gradle/caches")
-            ],
+            paths: DependencyPaths.Android.cacheDirs,
             safety: .review,
             collector: collector
         )
@@ -105,15 +90,20 @@ struct AndroidPackageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.androidPackages.title
     private let scanner: FilePatternScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
+        let roots = [
+            DependencyPaths.home("Downloads"),
+            DependencyPaths.home("Desktop"),
+            DependencyPaths.home("Developer")
+        ]
         scanner = FilePatternScanner(
             kind: .androidPackages,
             domain: .mobileDevelopment,
-            roots: [paths.home("Downloads"), paths.home("Desktop"), paths.home("Developer")],
+            roots: roots,
             safety: .review,
             collector: collector
         ) { url in
-            ["apk", "aab", "ipa"].contains(url.pathExtension.lowercased())
+            ["apk", "aab"].contains(url.pathExtension.lowercased())
         }
     }
 
@@ -127,16 +117,22 @@ struct ScreenshotStorageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.screenshots.title
     private let scanner: FilePatternScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
+        let roots = [
+            DependencyPaths.home("Desktop"),
+            DependencyPaths.home("Pictures"),
+            DependencyPaths.home("Downloads")
+        ]
         scanner = FilePatternScanner(
             kind: .screenshots,
             domain: .screenshots,
-            roots: [paths.home("Desktop"), paths.home("Pictures"), paths.home("Downloads")],
+            roots: roots,
             safety: .review,
             collector: collector
         ) { url in
+            guard DependencyPaths.Media.imageExtensions.contains(url.pathExtension.lowercased()) else { return false }
             let name = url.lastPathComponent.lowercased()
-            return name.contains("screenshot") || name.contains("screen shot")
+            return name.contains("screenshot") || name.contains("screen shot") || name.contains("simulator screen shot")
         }
     }
 
@@ -150,17 +146,11 @@ struct BrowserCacheScanner: StorageCategoryScanning {
     let title = StorageFindingKind.browserCaches.title
     private let scanner: PathListScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
         scanner = PathListScanner(
             kind: .browserCaches,
             domain: .browserData,
-            paths: [
-                paths.home("Library/Caches/com.apple.Safari"),
-                paths.home("Library/Caches/Google/Chrome"),
-                paths.home("Library/Caches/Microsoft Edge"),
-                paths.home("Library/Caches/Firefox"),
-                paths.home("Library/Caches/company.thebrowser.Browser")
-            ],
+            paths: DependencyPaths.Browser.cacheDirs,
             safety: .safe,
             collector: collector
         )
@@ -176,11 +166,11 @@ struct TrashStorageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.trash.title
     private let scanner: PathListScanner
 
-    init(paths: PathBuilder = PathBuilder(), collector: FileSystemCollector) {
+    init(collector: FileSystemCollector) {
         scanner = PathListScanner(
             kind: .trash,
             domain: .trash,
-            paths: [paths.home(".Trash")],
+            paths: [DependencyPaths.home(".Trash")],
             safety: .review,
             collector: collector
         )

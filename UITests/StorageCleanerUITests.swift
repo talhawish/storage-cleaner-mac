@@ -14,11 +14,8 @@ final class StorageCleanerUITests: XCTestCase {
         scanButton.click()
 
         XCTAssertTrue(app.staticTexts["scan-progress-title"].waitForExistence(timeout: 3))
-        let reclaimableSummary = NSPredicate(
-            format: "label CONTAINS %@",
-            "potentially reclaimable"
-        )
-        let summary = app.buttons.matching(reclaimableSummary).firstMatch
+
+        let summary = app.otherElements["scan-summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 12))
     }
 

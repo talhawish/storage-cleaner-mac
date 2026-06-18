@@ -1,0 +1,120 @@
+import SwiftUI
+
+struct AppRowView: View {
+    let app: AppItem
+    let isSelected: Bool
+    let onToggle: () -> Void
+    let onReveal: () -> Void
+    let onDelete: () -> Void
+
+    @State private var appIcon: NSImage?
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Toggle(isOn: Binding(
+                get: { isSelected },
+                set: { _ in onToggle() }
+            )) {
+                EmptyView()
+            }
+            .toggleStyle(.checkbox)
+            .accessibilityLabel("Select \(app.displayName)")
+
+            appIconView
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(app.displayName)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                Text(app.bundleIdentifier)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(StorageFormatting.bytes(app.sizeBytes))
+                    .font(.callout.monospacedDigit().weight(.medium))
+
+                if app.isSystemApp {
+                    Text("System")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            if isHovering {
+                actionButtons
+                    .transition(.opacity)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(isHovering ? Color.accentColor.opacity(0.04) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onHover { isHovering = $0 }
+        .contextMenu {
+            contextMenuContent
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(app.displayName), \(StorageFormatting.bytes(app.sizeBytes))")
+    }
+
+    private var appIconView: some View {
+        Group {
+            if let icon = appIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: "app.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(AppTheme.accent)
+            }
+        }
+        .frame(width: 36, height: 36)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .task {
+            appIcon = NSWorkspace.shared.icon(forFile: app.url.path)
+        }
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: 4) {
+            Button {
+                onReveal()
+            } label: {
+                Image(systemName: "folder")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .help("Reveal in Finder")
+
+            if !app.isSystemApp {
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .help("Move to Trash")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var contextMenuContent: some View {
+        Button("Reveal in Finder") { onReveal() }
+        Button("Copy Name") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(app.displayName, forType: .string) }
+        Button("Copy Bundle ID") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(app.bundleIdentifier, forType: .string) }
+        if !app.isSystemApp {
+            Divider()
+            Button("Move to Trash", role: .destructive) { onDelete() }
+        }
+    }
+}

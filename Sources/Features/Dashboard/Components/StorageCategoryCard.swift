@@ -2,13 +2,14 @@ import SwiftUI
 
 struct StorageCategoryCard: View {
     let finding: StorageFinding
+    let onNavigate: (StorageFinding) -> Void
     @State private var isHovering = false
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
     var body: some View {
         Button(
-            action: {},
+            action: { onNavigate(finding) },
             label: {
             VStack(alignment: .leading, spacing: 17) {
                 HStack(alignment: .top) {

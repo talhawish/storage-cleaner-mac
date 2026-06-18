@@ -21,6 +21,7 @@ struct LiveStorageScanner: StorageScanning {
     }
 
     private func scan(to continuation: AsyncStream<ScanEvent>.Continuation) async {
+        let scanStart = Date()
         let count = scanners.count
         guard count > 0 else {
             yieldEmptyCompleted(to: continuation)
@@ -71,13 +72,14 @@ struct LiveStorageScanner: StorageScanning {
 
         let completedFindings = findings.compactMap { $0 }
         let totalInspected = inspectedCounts.reduce(0, +)
+        let elapsed = scanStart.timeIntervalSinceNow
 
         continuation.yield(
             .completed(
                 ScanSnapshot(
                     findings: completedFindings,
                     scannedItemCount: totalInspected,
-                    duration: .seconds(2)
+                    duration: .seconds(abs(elapsed))
                 )
             )
         )
@@ -144,29 +146,33 @@ struct LiveStorageScanner: StorageScanning {
 
 extension LiveStorageScanner {
     static func live() -> LiveStorageScanner {
-        let paths = PathBuilder()
         let collector = FileSystemCollector()
 
         return LiveStorageScanner(
             scanners: [
-                XcodeStorageScanner(paths: paths, collector: collector),
-                DockerStorageScanner(paths: paths, collector: collector),
-                FlutterStorageScanner(paths: paths, collector: collector),
-                AndroidStudioStorageScanner(paths: paths, collector: collector),
-                AndroidPackageScanner(paths: paths, collector: collector),
-                NodeDependencyScanner(paths: paths, collector: collector),
-                PackageArtifactScanner(paths: paths, collector: collector),
-                BrowserCacheScanner(paths: paths, collector: collector),
-                AIModelCacheScanner(paths: paths, collector: collector),
-                LargeVideoScanner(paths: paths, collector: collector),
-                ScreenRecordingScanner(paths: paths, collector: collector),
-                LargePhotoScanner(paths: paths, collector: collector),
-                DuplicatePhotoScanner(paths: paths, collector: collector),
-                DuplicateVideoScanner(paths: paths, collector: collector),
-                ScreenshotStorageScanner(paths: paths, collector: collector),
-                JunkFileScanner(paths: paths, collector: collector),
-                CLIAppScanner(paths: paths, collector: collector),
-                TrashStorageScanner(paths: paths, collector: collector)
+                XcodeStorageScanner(collector: collector),
+                DockerStorageScanner(collector: collector),
+                FlutterStorageScanner(collector: collector),
+                AndroidStudioStorageScanner(collector: collector),
+                AndroidPackageScanner(collector: collector),
+                NodeDependencyScanner(collector: collector),
+                PythonDependencyScanner(collector: collector),
+                RustDependencyScanner(collector: collector),
+                GoDependencyScanner(collector: collector),
+                PHPCacheScanner(collector: collector),
+                RubyDependencyScanner(collector: collector),
+                DotNetCacheScanner(collector: collector),
+                GradleCacheScanner(collector: collector),
+                AIModelCacheScanner(collector: collector),
+                LargeVideoScanner(collector: collector),
+                ScreenRecordingScanner(collector: collector),
+                LargePhotoScanner(collector: collector),
+                DuplicatePhotoScanner(collector: collector),
+                DuplicateVideoScanner(collector: collector),
+                ScreenshotStorageScanner(collector: collector),
+                JunkFileScanner(collector: collector),
+                CLIAppScanner(collector: collector),
+                TrashStorageScanner(collector: collector)
             ]
         )
     }

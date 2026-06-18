@@ -80,7 +80,7 @@ final class FileSystemScannerTests: XCTestCase {
         try Data(repeating: 5, count: 10_000).write(to: toolchainDir.appending(path: "rustc"))
 
         let scanner = CLIAppScanner(
-            paths: PathBuilder(homeDirectory: temporaryDirectory),
+            homeDirectory: temporaryDirectory,
             collector: FileSystemCollector()
         )
 
@@ -101,7 +101,7 @@ final class FileSystemScannerTests: XCTestCase {
         try Data(repeating: 6, count: 50_000).write(to: downloadsDir.appending(path: bottle))
 
         let scanner = CLIAppScanner(
-            paths: PathBuilder(homeDirectory: temporaryDirectory),
+            homeDirectory: temporaryDirectory,
             collector: FileSystemCollector()
         )
 
@@ -117,7 +117,7 @@ final class FileSystemScannerTests: XCTestCase {
         try FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
 
         let scanner = CLIAppScanner(
-            paths: PathBuilder(homeDirectory: emptyDir),
+            homeDirectory: emptyDir,
             collector: FileSystemCollector()
         )
 

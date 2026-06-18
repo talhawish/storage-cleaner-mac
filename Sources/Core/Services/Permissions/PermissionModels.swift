@@ -28,6 +28,13 @@ enum StoragePermissionScope: String, CaseIterable, Sendable {
         case .trash: "Trash"
         }
     }
+
+    var isBlocking: Bool {
+        switch self {
+        case .trash: false
+        default: true
+        }
+    }
 }
 
 enum StoragePermissionState: Equatable, Sendable {

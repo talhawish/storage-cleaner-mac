@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 @main
@@ -5,11 +6,12 @@ struct StorageCleanerApp: App {
     @State private var viewModel: DashboardViewModel
 
     init() {
-        let container = AppContainer.current
+        let container = AppContainer.live
         _viewModel = State(
             initialValue: DashboardViewModel(
                 scanner: container.storageScanner,
-                permissionHandler: container.permissionHandler
+                permissionHandler: container.permissionHandler,
+                cleanupService: container.cleanupService
             )
         )
     }
@@ -21,15 +23,10 @@ struct StorageCleanerApp: App {
         }
         .defaultSize(width: 1_180, height: 760)
         .windowResizability(.contentMinSize)
+        .modelContainer(PersistenceController.shared)
 
         Settings {
             SettingsView()
         }
-    }
-}
-
-private extension AppContainer {
-    static var current: AppContainer {
-        ProcessInfo.processInfo.arguments.contains("--use-demo-scanner") ? .uiTesting : .live
     }
 }

@@ -1,14 +1,19 @@
 import Foundation
 
-struct StorageFinding: Identifiable, Equatable, Sendable {
+struct StorageFinding: Identifiable, Equatable, Hashable, Sendable {
     let kind: StorageFindingKind
     let domain: StorageDomain
     let bytes: Int64
     let itemCount: Int
     let safety: CleanupSafety
     let examples: [String]
+    let filePaths: [URL]
 
     var id: StorageFindingKind { kind }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(kind)
+    }
 }
 
 struct ScannerProgress: Identifiable, Equatable, Sendable {
@@ -43,7 +48,13 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case duplicateVideos
     case screenshots
     case browserCaches
-    case packageArtifacts
+    case pythonDependencies
+    case rustDependencies
+    case goDependencies
+    case phpDependencies
+    case rubyDependencies
+    case dotnetDependencies
+    case gradleDependencies
     case junkFiles
     case cliApps
     case trash
@@ -51,7 +62,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     var title: String {
         switch self {
         case .xcodeArtifacts: "Xcode artifacts"
-        case .nodeDependencies: "Node dependencies"
+        case .nodeDependencies: "Node.js dependencies"
         case .dockerArtifacts: "Docker artifacts"
         case .flutterArtifacts: "Flutter artifacts"
         case .androidStudioArtifacts: "Android Studio artifacts"
@@ -64,7 +75,13 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .duplicateVideos: "Duplicate videos"
         case .screenshots: "Screenshots"
         case .browserCaches: "Browser caches"
-        case .packageArtifacts: "Package artifacts"
+        case .pythonDependencies: "Python dependencies"
+        case .rustDependencies: "Rust dependencies"
+        case .goDependencies: "Go dependencies"
+        case .phpDependencies: "PHP dependencies"
+        case .rubyDependencies: "Ruby dependencies"
+        case .dotnetDependencies: ".NET dependencies"
+        case .gradleDependencies: "Gradle & Maven dependencies"
         case .junkFiles: "Junk files"
         case .cliApps: "CLI apps & toolchains"
         case .trash: "Trash"
@@ -74,11 +91,11 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     var summary: String {
         switch self {
         case .xcodeArtifacts: "DerivedData, archives, simulators, and SwiftPM checkouts"
-        case .nodeDependencies: "node_modules folders and npm, pnpm, or yarn cache data"
+        case .nodeDependencies: "npm, pnpm, yarn, and Bun caches and installed packages"
         case .dockerArtifacts: "Images, volumes, builder layers, and local container runtimes"
         case .flutterArtifacts: "Flutter build folders, pub cache files, and generated app bundles"
         case .androidStudioArtifacts: "Android Studio system data, emulator files, SDK caches, and Gradle outputs"
-        case .androidPackages: "Loose APK, AAB, and emulator package outputs"
+        case .androidPackages: "Loose APK and AAB build outputs"
         case .aiModelCaches: "Local model downloads, embeddings, and generated cache files"
         case .largeVideos: "Large movie files, exports, captures, and old demos"
         case .screenRecordings: "macOS recordings, meeting captures, simulator demos, and tutorials"
@@ -87,8 +104,14 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .duplicateVideos: "Likely duplicate video exports, recordings, and repeated captures"
         case .screenshots: "Desktop screenshots, simulator screenshots, and old review captures"
         case .browserCaches: "Safari, Chrome, Edge, Firefox, and Arc cache folders"
-        case .packageArtifacts: "Gradle, Maven, Composer, pip, Poetry, Cargo, Go, and NuGet caches"
-        case .junkFiles: "Temporary files, logs, stale downloads, and disposable archives"
+        case .pythonDependencies: "pip, Poetry, conda, pyenv, and virtual environment caches"
+        case .rustDependencies: "Cargo registry, build artifacts, and installed toolchains"
+        case .goDependencies: "Go module cache and downloaded packages"
+        case .phpDependencies: "Composer downloaded packages and cache"
+        case .rubyDependencies: "RubyGems cache, Bundler packages, rbenv and RVM versions"
+        case .dotnetDependencies: "NuGet packages and .NET build caches"
+        case .gradleDependencies: "Gradle build cache, Maven repository, and downloaded dependencies"
+        case .junkFiles: "Temporary files, logs, and stale downloads"
         case .cliApps: "Homebrew formulae, Rust toolchains, Node version managers, and installed CLI tools"
         case .trash: "Files already moved to Trash but still occupying disk space"
         }

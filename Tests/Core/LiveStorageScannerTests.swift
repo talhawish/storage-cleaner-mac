@@ -69,7 +69,8 @@ final class LiveStorageScannerTests: XCTestCase {
                 bytes: 100,
                 itemCount: 1,
                 safety: .review,
-                examples: ["Screen shot 1.png"]
+                examples: ["Screen shot 1.png"],
+                filePaths: []
             ),
             inspectedItemCount: 1,
             message: "Found"
@@ -84,7 +85,8 @@ final class LiveStorageScannerTests: XCTestCase {
                 bytes: 42,
                 itemCount: 1,
                 safety: .review,
-                examples: ["old.zip"]
+                examples: ["old.zip"],
+                filePaths: []
             ),
             inspectedItemCount: 1,
             message: "Measured"
@@ -99,7 +101,8 @@ final class LiveStorageScannerTests: XCTestCase {
                 bytes: 77,
                 itemCount: 1,
                 safety: .safe,
-                examples: ["tmp.log"]
+                examples: ["tmp.log"],
+                filePaths: []
             ),
             inspectedItemCount: 1,
             message: "Cleaned"

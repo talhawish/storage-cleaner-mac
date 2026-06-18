@@ -23,7 +23,7 @@ final class DashboardViewModelTests: XCTestCase {
 
     func testCancelReturnsToIdle() {
         let viewModel = DashboardViewModel(
-            scanner: DemoStorageScanner(stepDelay: .seconds(1)),
+            scanner: DelayedScanner(),
             permissionHandler: StubPermissionHandler(statuses: allAccessibleStatuses)
         )
 
@@ -140,7 +140,8 @@ private struct ImmediateScanner: StorageScanning {
                     bytes: 10,
                     itemCount: 1,
                     safety: .review,
-                    examples: ["Screen recordings"]
+                    examples: ["Screen recordings"],
+                    filePaths: []
                 )
             ],
             scannedItemCount: 1,
@@ -169,3 +170,37 @@ private let allAccessibleStatuses: [StoragePermissionStatus] =
             state: .accessible
         )
     }
+
+private struct DelayedScanner: StorageScanning {
+    func scanEvents() -> AsyncStream<ScanEvent> {
+        AsyncStream { continuation in
+            let task = Task {
+                try? await Task.sleep(for: .seconds(10))
+                continuation.yield(.completed(snapshot))
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    private var snapshot: ScanSnapshot {
+        ScanSnapshot(
+            findings: [
+                StorageFinding(
+                    kind: .largeVideos,
+                    domain: .media,
+                    bytes: 10,
+                    itemCount: 1,
+                    safety: .review,
+                    examples: ["Screen recordings"],
+                    filePaths: []
+                )
+            ],
+            scannedItemCount: 1,
+            duration: .seconds(10)
+        )
+    }
+}
