@@ -69,7 +69,7 @@ struct GoDependencyScanner: StorageCategoryScanning {
         scanner = PathListScanner(
             kind: .goDependencies,
             domain: .otherCaches,
-            paths: DependencyPaths.Go.cacheDirs,
+            paths: DependencyPaths.Golang.cacheDirs,
             safety: .review,
             collector: collector
         )
@@ -169,7 +169,7 @@ struct AIModelCacheScanner: StorageCategoryScanning {
         scanner = PathListScanner(
             kind: .aiModelCaches,
             domain: .artificialIntelligence,
-            paths: DependencyPaths.AI.cacheDirs,
+            paths: DependencyPaths.ArtificialIntelligence.cacheDirs,
             safety: .review,
             collector: collector
         )

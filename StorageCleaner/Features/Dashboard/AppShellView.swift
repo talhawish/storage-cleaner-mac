@@ -3,15 +3,12 @@ import SwiftUI
 struct AppShellView: View {
     @Bindable var viewModel: DashboardViewModel
     @State private var selection: SidebarItem? = .section(.overview)
-    @State private var showSettings = false
 
     var body: some View {
         NavigationSplitView {
             SidebarView(
                 selection: $selection,
-                showSettings: $showSettings,
-                isScanning: viewModel.isScanning,
-                developerDomains: viewModel.developerDomainsDetected
+                isScanning: viewModel.isScanning
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } detail: {
@@ -26,8 +23,6 @@ struct AppShellView: View {
                         ProjectActivityView()
                     case .section(.developerStorage):
                         developerStorageView()
-                    case let .developerDomain(domain):
-                        developerStorageView(domainFilter: domain)
                     case .section(.runtimeVersions):
                         RuntimeVersionsView(
                             onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
@@ -57,6 +52,8 @@ struct AppShellView: View {
                         leftoversView(kinds: section?.filterKinds ?? [])
                     case .section(.cleanupHistory):
                         CleanupHistoryView()
+                    case .section(.settings):
+                        InAppSettingsView()
                     }
                 }
                 .navigationDestination(item: $viewModel.selectedFinding) { finding in
@@ -104,23 +101,24 @@ struct AppShellView: View {
                 }
             }
             .background {
-                LinearGradient(
-                    colors: [
-                        AppTheme.accent.opacity(0.055),
-                        Color.clear,
-                        AppTheme.violet.opacity(0.035)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                ZStack {
+                    AppTheme.appBackground
+
+                    LinearGradient(
+                        colors: [
+                            AppTheme.accent.opacity(0.045),
+                            Color.clear,
+                            AppTheme.violet.opacity(0.03)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
                 .ignoresSafeArea()
             }
         }
         .navigationSplitViewStyle(.balanced)
         .tint(AppTheme.accent)
-        .sheet(isPresented: $showSettings) {
-            InAppSettingsView()
-        }
     }
 }
 
@@ -130,7 +128,7 @@ extension AppShellView {
     private var section: AppSection? { selection?.section }
 
     @ViewBuilder
-    private func developerStorageView(domainFilter: StorageDomain? = nil) -> some View {
+    private func developerStorageView() -> some View {
         let kinds = DeveloperDomains.kinds
         switch viewModel.phase {
         case .scanning:
@@ -153,7 +151,6 @@ extension AppShellView {
         case .idle, .results, .empty:
             DeveloperStorageView(
                 findings: viewModel.snapshot?.findings ?? [],
-                domainFilter: domainFilter,
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
                     Task { await viewModel.deleteFiles(urls) }

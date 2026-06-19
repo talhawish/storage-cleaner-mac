@@ -13,8 +13,8 @@ struct DomainUsageTile: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-                HStack(spacing: AppTheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+                HStack(spacing: AppTheme.Spacing.small) {
                     Image(systemName: usage.domain.symbolName)
                         .font(.system(size: AppTheme.IconSize.body, weight: .semibold))
                         .foregroundStyle(tint)
@@ -40,7 +40,7 @@ struct DomainUsageTile: View {
 
                 ShareBar(fraction: usage.share, tint: tint)
             }
-            .padding(AppTheme.Spacing.lg)
+            .padding(AppTheme.Spacing.mediumLarge)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }

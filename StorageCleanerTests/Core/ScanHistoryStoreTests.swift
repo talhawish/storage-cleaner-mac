@@ -4,24 +4,24 @@ import XCTest
 
 @MainActor
 final class ScanHistoryStoreTests: XCTestCase {
-    /// Held for the test's lifetime: a `ModelContext` does not strongly retain its
-    /// `ModelContainer`, so without this the container would deallocate as soon as
-    /// `makeStore()` returns, leaving the context orphaned and crashing on first use.
-    private var container: ModelContainer?
-
-    override func tearDownWithError() throws {
-        container = nil
+    private struct StoreFixture {
+        let container: ModelContainer
+        let store: SwiftDataScanHistoryStore
+        let context: ModelContext
     }
 
-    private func makeStore() -> (store: SwiftDataScanHistoryStore, context: ModelContext) {
+    private func makeStore() -> StoreFixture {
         let container = PersistenceController.makeInMemory()
-        self.container = container
         let context = container.mainContext
-        return (SwiftDataScanHistoryStore(context: context), context)
+        return StoreFixture(
+            container: container,
+            store: SwiftDataScanHistoryStore(context: context),
+            context: context
+        )
     }
 
     func testRecordCompletedScanPersistsScanAndFindings() throws {
-        let (store, context) = makeStore()
+        let fixture = makeStore()
         let snapshot = ScanSnapshot(
             findings: [
                 StorageFinding(
@@ -38,9 +38,9 @@ final class ScanHistoryStoreTests: XCTestCase {
             duration: .seconds(5)
         )
 
-        store.recordCompletedScan(snapshot)
+        fixture.store.recordCompletedScan(snapshot)
 
-        let scans = try context.fetch(FetchDescriptor<StoredScan>())
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
         XCTAssertEqual(scans.count, 1)
         let scan = try XCTUnwrap(scans.first)
         XCTAssertEqual(scan.scannedItemCount, 12)
@@ -51,16 +51,16 @@ final class ScanHistoryStoreTests: XCTestCase {
     }
 
     func testEmptyScanIsNotRecorded() throws {
-        let (store, context) = makeStore()
+        let fixture = makeStore()
 
-        store.recordCompletedScan(ScanSnapshot(findings: [], scannedItemCount: 0, duration: .seconds(1)))
+        fixture.store.recordCompletedScan(ScanSnapshot(findings: [], scannedItemCount: 0, duration: .seconds(1)))
 
-        XCTAssertTrue(try context.fetch(FetchDescriptor<StoredScan>()).isEmpty)
+        XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredScan>()).isEmpty)
     }
 
     func testCleanupActionsAttachToMostRecentScan() throws {
-        let (store, context) = makeStore()
-        store.recordCompletedScan(
+        let fixture = makeStore()
+        fixture.store.recordCompletedScan(
             ScanSnapshot(
                 findings: [
                     StorageFinding(
@@ -78,19 +78,19 @@ final class ScanHistoryStoreTests: XCTestCase {
             )
         )
 
-        store.recordCleanupActions([CleanupAuditEntry(kind: .trash, bytesReclaimed: 10, itemCount: 1)])
+        fixture.store.recordCleanupActions([CleanupAuditEntry(kind: .trash, bytesReclaimed: 10, itemCount: 1)])
 
-        let actions = try context.fetch(FetchDescriptor<StoredCleanupAction>())
+        let actions = try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>())
         XCTAssertEqual(actions.count, 1)
         XCTAssertEqual(actions.first?.bytesReclaimed, 10)
         XCTAssertNotNil(actions.first?.scan)
 
-        let scans = try context.fetch(FetchDescriptor<StoredScan>())
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
         XCTAssertEqual(scans.first?.cleanupActions.count, 1)
     }
 
     func testDuplicateGroupsSurvivePersistenceRoundTrip() throws {
-        let (store, context) = makeStore()
+        let fixture = makeStore()
         let keep = URL(filePath: "/tmp/keep.png")
         let dupe = URL(filePath: "/tmp/dupe.png")
         let group = DuplicateGroup(
@@ -118,9 +118,9 @@ final class ScanHistoryStoreTests: XCTestCase {
             duration: .seconds(1)
         )
 
-        store.recordCompletedScan(snapshot)
+        fixture.store.recordCompletedScan(snapshot)
 
-        let stored = try XCTUnwrap(try context.fetch(FetchDescriptor<StoredFinding>()).first)
+        let stored = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredFinding>()).first)
         let restored = try XCTUnwrap(stored.toStorageFinding())
         XCTAssertEqual(restored.duplicateGroups.count, 1)
         XCTAssertEqual(restored.duplicateGroups.first?.contentHash, "abc123")
@@ -129,10 +129,10 @@ final class ScanHistoryStoreTests: XCTestCase {
     }
 
     func testEmptyCleanupActionsAreNoOp() throws {
-        let (store, context) = makeStore()
+        let fixture = makeStore()
 
-        store.recordCleanupActions([])
+        fixture.store.recordCleanupActions([])
 
-        XCTAssertTrue(try context.fetch(FetchDescriptor<StoredCleanupAction>()).isEmpty)
+        XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>()).isEmpty)
     }
 }

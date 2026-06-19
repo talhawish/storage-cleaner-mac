@@ -13,7 +13,7 @@ struct OverviewTipCard: View {
         Button {
             onAction(tip)
         } label: {
-            HStack(spacing: AppTheme.Spacing.md) {
+            HStack(spacing: AppTheme.Spacing.medium) {
                 Image(systemName: tip.icon)
                     .font(.system(size: AppTheme.IconSize.sub, weight: .semibold))
                     .foregroundStyle(tip.tint)
@@ -32,14 +32,14 @@ struct OverviewTipCard: View {
                 }
 
                 if tip.action != nil {
-                    Spacer(minLength: AppTheme.Spacing.sm)
+                    Spacer(minLength: AppTheme.Spacing.small)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
                 }
             }
-            .padding(AppTheme.Spacing.lg)
+            .padding(AppTheme.Spacing.mediumLarge)
             .frame(width: 320, alignment: .leading)
             .contentShape(Rectangle())
         }

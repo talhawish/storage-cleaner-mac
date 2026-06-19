@@ -36,7 +36,7 @@ enum StorageOverview {
 
         return Dictionary(grouping: relevant, by: \.domain)
             .map { usage(domain: $0.key, findings: $0.value, total: total, isOther: false) }
-            .sorted { $0.bytes > $1.bytes }
+            .sorted(by: sortUsages)
     }
 
     /// The top `maxTiles` domains for the breakdown grid. When more domains exist, the remainder are
@@ -65,6 +65,11 @@ enum StorageOverview {
 
     private static func bytes(in findings: [StorageFinding], safety: CleanupSafety) -> Int64 {
         findings.filter { $0.safety == safety }.reduce(Int64(0)) { $0 + $1.bytes }
+    }
+
+    private static func sortUsages(_ lhs: DomainUsage, _ rhs: DomainUsage) -> Bool {
+        if lhs.bytes != rhs.bytes { return lhs.bytes > rhs.bytes }
+        return lhs.domain.title < rhs.domain.title
     }
 
     private static func usage(

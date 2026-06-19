@@ -10,8 +10,8 @@ struct OverviewSummaryBar: View {
     let quickClean: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: AppTheme.Spacing.xl) {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+        HStack(alignment: .center, spacing: AppTheme.Spacing.large) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.extraSmall) {
                 Text("Potentially reclaimable")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -19,16 +19,16 @@ struct OverviewSummaryBar: View {
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .contentTransition(.numericText())
 
-                HStack(spacing: AppTheme.Spacing.sm) {
+                HStack(spacing: AppTheme.Spacing.small) {
                     SafetyChip(label: "\(StorageFormatting.bytes(safeBytes)) safe", safety: .safe)
                     SafetyChip(label: "\(StorageFormatting.bytes(reviewBytes)) review", safety: .review)
                 }
                 .padding(.top, 2)
             }
 
-            Spacer(minLength: AppTheme.Spacing.md)
+            Spacer(minLength: AppTheme.Spacing.medium)
 
-            VStack(alignment: .trailing, spacing: AppTheme.Spacing.sm) {
+            VStack(alignment: .trailing, spacing: AppTheme.Spacing.small) {
                 Button(action: quickClean) {
                     Label("Quick Clean", systemImage: "sparkles")
                 }
@@ -45,7 +45,7 @@ struct OverviewSummaryBar: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .padding(AppTheme.Spacing.xl)
+        .padding(AppTheme.Spacing.large)
         .cardSurface()
         .accessibilityIdentifier("scan-summary")
         .accessibilityElement(children: .combine)

@@ -6,13 +6,13 @@ enum AppTheme {
 
     /// Spacing scale. Use these instead of ad-hoc literals for consistent rhythm.
     enum Spacing {
-        static let xs: CGFloat = 4
-        static let sm: CGFloat = 8
-        static let md: CGFloat = 12
-        static let lg: CGFloat = 16
-        static let xl: CGFloat = 20
-        static let xxl: CGFloat = 28
-        static let xxxl: CGFloat = 40
+        static let extraSmall: CGFloat = 4
+        static let small: CGFloat = 8
+        static let medium: CGFloat = 12
+        static let mediumLarge: CGFloat = 16
+        static let large: CGFloat = 20
+        static let extraLarge: CGFloat = 28
+        static let huge: CGFloat = 40
     }
 
     /// Icon point sizes by context.
@@ -24,10 +24,16 @@ enum AppTheme {
         static let hero: CGFloat = 56
     }
 
+    /// Adaptive surfaces for card-heavy screens. Native control colors keep light mode readable while
+    /// preserving the system appearance in dark mode.
+    static let appBackground = Color(nsColor: .windowBackgroundColor)
+    static let surface = Color(nsColor: .controlBackgroundColor)
+    static let subtleSurface = Color.primary.opacity(0.045)
+
     /// Adaptive hairline border for card surfaces. Resolves to a subtle dark line in light mode and
     /// a subtle light line in dark mode, so card edges stay defined in both appearances. Replaces
     /// hardcoded `.white.opacity(...)` strokes, which are invisible over light material.
-    static let hairline = Color.primary.opacity(0.08)
+    static let hairline = Color.primary.opacity(0.12)
 
     static let accent = Color(red: 0.25, green: 0.47, blue: 0.98)
     static let cyan = Color(red: 0.16, green: 0.72, blue: 0.88)
@@ -67,12 +73,13 @@ enum AppTheme {
 struct CardSurface: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(.regularMaterial)
+            .background(AppTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
                     .stroke(AppTheme.hairline, lineWidth: 1)
             }
+            .shadow(color: Color.primary.opacity(0.045), radius: 10, y: 4)
     }
 }
 

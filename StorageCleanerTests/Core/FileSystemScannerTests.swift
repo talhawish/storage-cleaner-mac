@@ -106,16 +106,29 @@ final class FileSystemScannerTests: XCTestCase {
         let xipArchive = downloads.appending(path: "Xcode.xip")
         let geoDatabase = downloads.appending(path: "GeoLite2-City.mmdb")
         let databaseDump = downloads.appending(path: "production.sql")
+        let document = downloads.appending(path: "research-paper.pdf")
+        let audio = downloads.appending(path: "mixdown.mp3")
+        let textExport = downloads.appending(path: "error-report.txt")
+        let extensionlessData = downloads.appending(path: "large-export")
         let smallFile = downloads.appending(path: "notes.txt")
+        let expectedLargeFiles = [
+            diskImage,
+            archive,
+            zstdArchive,
+            debianPackage,
+            javaArchive,
+            xipArchive,
+            geoDatabase,
+            databaseDump,
+            document,
+            audio,
+            textExport,
+            extensionlessData
+        ]
 
-        try Data(repeating: 1, count: 24_000).write(to: diskImage)
-        try Data(repeating: 2, count: 18_000).write(to: archive)
-        try Data(repeating: 3, count: 17_000).write(to: zstdArchive)
-        try Data(repeating: 4, count: 16_000).write(to: debianPackage)
-        try Data(repeating: 5, count: 15_000).write(to: javaArchive)
-        try Data(repeating: 6, count: 14_000).write(to: xipArchive)
-        try Data(repeating: 7, count: 16_000).write(to: geoDatabase)
-        try Data(repeating: 8, count: 14_000).write(to: databaseDump)
+        for (index, url) in expectedLargeFiles.enumerated() {
+            try Data(repeating: UInt8(index + 1), count: 13_000 + index).write(to: url)
+        }
         try Data(repeating: 9, count: 4_000).write(to: smallFile)
 
         let scanner = LargeFileScanner(
@@ -128,17 +141,8 @@ final class FileSystemScannerTests: XCTestCase {
         let paths = result.finding?.filePaths.map { $0.standardizedFileURL } ?? []
 
         XCTAssertEqual(result.finding?.kind, .largeFiles)
-        XCTAssertEqual(Set(paths), Set([
-            diskImage.standardizedFileURL,
-            archive.standardizedFileURL,
-            zstdArchive.standardizedFileURL,
-            debianPackage.standardizedFileURL,
-            javaArchive.standardizedFileURL,
-            xipArchive.standardizedFileURL,
-            geoDatabase.standardizedFileURL,
-            databaseDump.standardizedFileURL
-        ]))
-        XCTAssertEqual(result.inspectedItemCount, 9)
+        XCTAssertEqual(Set(paths), Set(expectedLargeFiles.map(\.standardizedFileURL)))
+        XCTAssertEqual(result.inspectedItemCount, 13)
     }
 
     func testLargeFileScannerExcludesAppAndDependencyInternals() async throws {

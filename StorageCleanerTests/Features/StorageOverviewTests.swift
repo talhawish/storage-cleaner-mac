@@ -27,7 +27,7 @@ final class StorageOverviewTests: XCTestCase {
             finding(.nodeDependencies, .webDevelopment, bytes: 100, items: 5)
         ])
 
-        XCTAssertEqual(usages.map(\.domain), [.webDevelopment, .appleDevelopment])
+        XCTAssertEqual(usages.map(\.domain), [.appleDevelopment, .webDevelopment])
         let apple = usages.first { $0.domain == .appleDevelopment }
         XCTAssertEqual(apple?.bytes, 100)
         XCTAssertEqual(apple?.itemCount, 5)

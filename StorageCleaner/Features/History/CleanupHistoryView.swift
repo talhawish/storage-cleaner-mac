@@ -43,6 +43,7 @@ struct HistoryRowView: View {
             HStack {
                 Image(systemName: "magnifyingglass.circle.fill")
                     .foregroundStyle(AppTheme.accent)
+                    .accessibilityHidden(true)
                 Text(scan.date, style: .date)
                     .font(.headline)
                 + Text(" at ")
@@ -67,6 +68,7 @@ struct HistoryRowView: View {
                 HStack {
                     Image(systemName: "trash.circle.fill")
                         .foregroundStyle(.red)
+                        .accessibilityHidden(true)
                     Text("\(scan.cleanupActions.count) cleanup actions")
                         .font(.caption.weight(.medium))
                     Spacer()

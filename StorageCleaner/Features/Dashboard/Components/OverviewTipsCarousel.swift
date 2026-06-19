@@ -9,7 +9,7 @@ struct OverviewTipsCarousel: View {
     var body: some View {
         if !tips.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: AppTheme.Spacing.md) {
+                HStack(spacing: AppTheme.Spacing.medium) {
                     ForEach(tips) { tip in
                         OverviewTipCard(tip: tip, onAction: onAction)
                     }

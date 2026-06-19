@@ -66,9 +66,26 @@ struct MediaThumbnailView: View {
     }
 
     private var fallbackSystemImage: String {
-        DependencyPaths.Media.videoExtensions.contains(url.pathExtension.lowercased())
-            ? "film"
-            : "photo"
+        switch url.pathExtension.lowercased() {
+        case let ext where DependencyPaths.Media.videoExtensions.contains(ext):
+            "film"
+        case let ext where DependencyPaths.Media.imageExtensions.contains(ext):
+            "photo"
+        case "pdf":
+            "doc.richtext"
+        case "mp3", "wav", "m4a", "aac", "flac":
+            "waveform"
+        case "zip", "tar", "gz", "7z", "rar", "xz", "zst":
+            "archivebox"
+        case "dmg", "iso":
+            "opticaldisc"
+        case "sql", "sqlite", "sqlite3", "db", "mmdb":
+            "cylinder.split.1x2"
+        case "swift", "py", "js", "ts", "go", "rs", "java", "kt", "rb", "json", "xml", "yaml", "yml":
+            "chevron.left.forwardslash.chevron.right"
+        default:
+            "doc"
+        }
     }
 }
 

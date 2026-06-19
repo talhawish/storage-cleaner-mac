@@ -8,6 +8,13 @@ enum QuickCleanPhase {
     case success
 }
 
+private let quickCleanReadyMessage = "Scan and remove safe-to-delete files in one step.\n"
+    + "Customize what's included in Settings → Safe to Delete."
+
+private func quickCleanSummary(for result: CleanupResult) -> String {
+    "Removed \(result.deletedCount) items, freed \(StorageFormatting.bytes(result.totalBytesReclaimed))"
+}
+
 struct QuickCleanView: View {
     let onClean: ([URL]) async -> CleanupResult
     @Environment(\.dismiss)
@@ -63,6 +70,7 @@ struct QuickCleanView: View {
                 Image(systemName: "sparkle")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
+                    .accessibilityHidden(true)
                 Text("Quick Clean")
                     .font(.title3.weight(.semibold))
             }
@@ -73,8 +81,10 @@ struct QuickCleanView: View {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Close")
         }
         .padding(20)
     }
@@ -90,12 +100,13 @@ struct QuickCleanView: View {
                 Image(systemName: "sparkle")
                     .font(.system(size: 40, weight: .medium))
                     .foregroundStyle(AppTheme.accent)
+                    .accessibilityHidden(true)
             }
 
             VStack(spacing: 8) {
                 Text("Ready to Quick Clean")
                     .font(.title2.weight(.semibold))
-                Text("Scan and remove safe-to-delete files in one step.\nCustomize what's included in Settings → Safe to Delete.")
+                Text(quickCleanReadyMessage)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -174,6 +185,7 @@ struct QuickCleanView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 24, weight: .medium))
                     .foregroundStyle(AppTheme.mint)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -212,6 +224,7 @@ struct QuickCleanView: View {
                         HStack {
                             Image(systemName: finding.domain.symbolName)
                                 .foregroundStyle(AppTheme.color(for: finding.domain))
+                                .accessibilityHidden(true)
                             Text(finding.kind.title)
                             Spacer()
                             Text(StorageFormatting.bytes(finding.bytes))
@@ -240,6 +253,7 @@ struct QuickCleanView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
+                .accessibilityHidden(true)
 
             Text(url.lastPathComponent)
                 .font(.callout)
@@ -297,13 +311,14 @@ struct QuickCleanView: View {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 44, weight: .medium))
                     .foregroundStyle(AppTheme.mint)
+                    .accessibilityHidden(true)
             }
 
             VStack(spacing: 6) {
                 Text("Clean Complete!")
                     .font(.title2.weight(.semibold))
                 if let result = cleanupResult {
-                    Text("Removed \(result.deletedCount) items, freed \(StorageFormatting.bytes(result.totalBytesReclaimed))")
+                    Text(quickCleanSummary(for: result))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if result.failedCount > 0 {

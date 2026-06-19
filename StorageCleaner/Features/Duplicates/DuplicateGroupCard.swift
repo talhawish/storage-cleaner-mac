@@ -31,18 +31,18 @@ struct DuplicateGroupCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
             header
             strip
         }
-        .padding(AppTheme.Spacing.lg)
+        .padding(AppTheme.Spacing.mediumLarge)
         .cardSurface()
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center, spacing: AppTheme.Spacing.md) {
+        HStack(alignment: .center, spacing: AppTheme.Spacing.medium) {
             Image(systemName: group.isVideo ? "film.stack.fill" : "photo.stack.fill")
                 .font(.system(size: AppTheme.IconSize.sub))
                 .foregroundStyle(AppTheme.indigo)
@@ -56,7 +56,7 @@ struct DuplicateGroupCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            Spacer(minLength: AppTheme.Spacing.md)
+            Spacer(minLength: AppTheme.Spacing.medium)
 
             Button(action: onKeepBestRemoveOthers) {
                 Label("Keep best · remove \(group.removableCount)", systemImage: "wand.and.stars")
@@ -71,7 +71,7 @@ struct DuplicateGroupCard: View {
 
     private var strip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: AppTheme.Spacing.md) {
+            HStack(alignment: .top, spacing: AppTheme.Spacing.medium) {
                 ForEach(orderedFiles) { file in
                     DuplicateThumbnailCell(
                         file: file,

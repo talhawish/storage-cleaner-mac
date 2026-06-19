@@ -1,11 +1,26 @@
 import SwiftUI
 
 struct SafeToDeleteView: View {
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("enabledCleanupOptions")
     private var enabledOptionsData = ""
     @State private var enabledOptions: Set<String> = []
     @State private var showResetConfirmation = false
+
+    private let optionColorPalette: [String: Color] = [
+        "blue": AppTheme.accent,
+        "cyan": AppTheme.cyan,
+        "mint": AppTheme.mint,
+        "orange": AppTheme.orange,
+        "pink": AppTheme.pink,
+        "rose": AppTheme.rose,
+        "indigo": AppTheme.indigo,
+        "teal": AppTheme.teal,
+        "violet": AppTheme.violet,
+        "yellow": .yellow,
+        "red": .red,
+        "green": .green,
+        "gray": .gray
+    ]
 
     private var allOptions: [CleanupOption] {
         CleanupOptionsRegistry.allOptions
@@ -27,10 +42,6 @@ struct SafeToDeleteView: View {
         .onChange(of: enabledOptions) { saveEnabled() }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            ToolbarItem(placement: .automatic) {
                 Button("Reset to Defaults") {
                     showResetConfirmation = true
                 }
@@ -51,7 +62,10 @@ struct SafeToDeleteView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Safe to Delete")
                 .font(.largeTitle.bold())
-            Text("Choose which categories are included in Quick Clean. Items marked as safe can be removed without risk.")
+            Text(
+                "Choose which categories are included in Quick Clean. "
+                    + "Items marked as safe can be removed without risk."
+            )
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -76,6 +90,7 @@ struct SafeToDeleteView: View {
                 Image(systemName: iconForCategory(category))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(colorForCategory(category))
+                    .accessibilityHidden(true)
                 Text(category.rawValue)
                     .font(.headline)
             }
@@ -178,21 +193,6 @@ struct SafeToDeleteView: View {
     }
 
     private func colorForString(_ name: String) -> Color {
-        switch name {
-        case "blue": AppTheme.accent
-        case "cyan": AppTheme.cyan
-        case "mint": AppTheme.mint
-        case "orange": AppTheme.orange
-        case "pink": AppTheme.pink
-        case "rose": AppTheme.rose
-        case "indigo": AppTheme.indigo
-        case "teal": AppTheme.teal
-        case "violet": AppTheme.violet
-        case "yellow": .yellow
-        case "red": .red
-        case "green": .green
-        case "gray": .gray
-        default: .secondary
-        }
+        optionColorPalette[name, default: .secondary]
     }
 }

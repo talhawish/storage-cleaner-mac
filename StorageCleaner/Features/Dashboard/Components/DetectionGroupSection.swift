@@ -14,7 +14,7 @@ struct DetectionGroupSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.small) {
             SectionHeader(
                 title: usage.domain.title,
                 subtitle: subtitle,

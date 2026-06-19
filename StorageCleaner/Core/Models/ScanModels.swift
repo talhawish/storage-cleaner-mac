@@ -122,7 +122,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .androidStudioArtifacts: "Android Studio system data, emulator files, SDK caches, and Gradle outputs"
         case .androidPackages: "Loose APK and AAB build outputs"
         case .aiModelCaches: "Local model downloads, embeddings, and generated cache files"
-        case .largeFiles: "Large archives, installers, datasets, disk images, and exports"
+        case .largeFiles: "Large documents, archives, installers, datasets, disk images, exports, and other files"
         case .largeVideos: "Large movie files, exports, captures, and old demos"
         case .screenRecordings: "macOS recordings, meeting captures, simulator demos, and tutorials"
         case .largePhotos: "RAW photos, large edited exports, and oversized image assets"

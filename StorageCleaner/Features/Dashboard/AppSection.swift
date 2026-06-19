@@ -1,20 +1,18 @@
-/// A selectable item in the sidebar. Static `section`s coexist with dynamic `developerDomain`
-/// rows that appear only when a scan detects storage in that domain.
+/// A selectable item in the sidebar.
 enum SidebarItem: Hashable, Identifiable {
     case section(AppSection)
-    case developerDomain(StorageDomain)
 
     var id: String {
         switch self {
         case let .section(section): "section.\(section.rawValue)"
-        case let .developerDomain(domain): "domain.\(domain.rawValue)"
         }
     }
 
-    /// The underlying `AppSection` when this item is a static section, else `nil`.
-    var section: AppSection? {
-        if case let .section(section) = self { return section }
-        return nil
+    /// The underlying `AppSection` for the selected sidebar item.
+    var section: AppSection {
+        switch self {
+        case let .section(section): section
+        }
     }
 }
 
@@ -31,6 +29,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case duplicates
     case leftovers
     case cleanupHistory
+    case settings
 
     var id: Self { self }
 
@@ -48,6 +47,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .duplicates: "Duplicates"
         case .leftovers: "Leftovers"
         case .cleanupHistory: "Cleanup History"
+        case .settings: "Settings"
         }
     }
 
@@ -65,6 +65,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .duplicates: "square.on.square"
         case .leftovers: "archivebox.fill"
         case .cleanupHistory: "clock.arrow.circlepath"
+        case .settings: "gearshape.fill"
         }
     }
 

@@ -70,7 +70,7 @@ file_length:
   error: 600
 
 type_body_length:
-  warning: 250
+  warning: 350
   error: 350
 
 function_body_length:

@@ -11,7 +11,7 @@ struct DetectionRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: AppTheme.Spacing.md) {
+            HStack(spacing: AppTheme.Spacing.medium) {
                 Image(systemName: finding.domain.symbolName)
                     .font(.system(size: AppTheme.IconSize.body, weight: .semibold))
                     .foregroundStyle(tint)
@@ -30,7 +30,7 @@ struct DetectionRow: View {
                         .lineLimit(1)
                 }
 
-                Spacer(minLength: AppTheme.Spacing.md)
+                Spacer(minLength: AppTheme.Spacing.medium)
 
                 StatusBadge(safety: finding.safety)
 
@@ -48,8 +48,8 @@ struct DetectionRow: View {
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, AppTheme.Spacing.lg)
-            .padding(.vertical, AppTheme.Spacing.md)
+            .padding(.horizontal, AppTheme.Spacing.mediumLarge)
+            .padding(.vertical, AppTheme.Spacing.medium)
             .contentShape(Rectangle())
             .background(isHovering ? tint.opacity(0.06) : Color.clear)
         }

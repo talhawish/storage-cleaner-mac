@@ -1,7 +1,7 @@
 import Foundation
 
 /// Surfaces runtimes with multiple installed versions as a `.runtimeVersions` finding so the
-/// Overview and the dynamic sidebar reflect how much can be reclaimed by removing older versions.
+/// Overview and Runtime Versions reflect how much can be reclaimed by removing older versions.
 ///
 /// The finding's `bytes`/`filePaths` describe only the **older** (removable) versions — the newest
 /// of each runtime is always kept — so the dashboard's reclaim estimate stays correct. The grouped

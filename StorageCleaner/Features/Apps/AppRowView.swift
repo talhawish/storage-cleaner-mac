@@ -69,10 +69,12 @@ struct AppRowView: View {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
+                    .accessibilityHidden(true)
             } else {
                 Image(systemName: "app.fill")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(AppTheme.accent)
+                    .accessibilityHidden(true)
             }
         }
         .frame(width: 36, height: 36)
@@ -89,9 +91,11 @@ struct AppRowView: View {
             } label: {
                 Image(systemName: "folder")
                     .font(.system(size: 12))
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
             .help("Reveal in Finder")
+            .accessibilityLabel("Reveal in Finder")
 
             if !app.isSystemApp {
                 Button {
@@ -100,18 +104,25 @@ struct AppRowView: View {
                     Image(systemName: "trash")
                         .font(.system(size: 12))
                         .foregroundStyle(.red)
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
                 .help("Move to Trash")
+                .accessibilityLabel("Move to Trash")
             }
         }
     }
 
-    @ViewBuilder
-    private var contextMenuContent: some View {
+    @ViewBuilder private var contextMenuContent: some View {
         Button("Reveal in Finder") { onReveal() }
-        Button("Copy Name") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(app.displayName, forType: .string) }
-        Button("Copy Bundle ID") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(app.bundleIdentifier, forType: .string) }
+        Button("Copy Name") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(app.displayName, forType: .string)
+        }
+        Button("Copy Bundle ID") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(app.bundleIdentifier, forType: .string)
+        }
         if !app.isSystemApp {
             Divider()
             Button("Move to Trash", role: .destructive) { onDelete() }

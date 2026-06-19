@@ -47,7 +47,7 @@ enum DependencyPaths {
 
     // MARK: - Go
 
-    enum Go {
+    enum Golang {
         static let cacheDirs: [URL] = [
             home("go/pkg/mod")
         ]
@@ -162,7 +162,7 @@ enum DependencyPaths {
 
     // MARK: - AI Models
 
-    enum AI {
+    enum ArtificialIntelligence {
         static let cacheDirs: [URL] = [
             home(".ollama/models"),
             home(".cache/huggingface"),

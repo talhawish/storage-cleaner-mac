@@ -72,8 +72,7 @@ struct AppsView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem {
             Menu {
                 Picker("Sort by", selection: $sortOption) {
@@ -83,8 +82,10 @@ struct AppsView: View {
                 }
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
+                    .accessibilityHidden(true)
             }
             .help("Sort apps")
+            .accessibilityLabel("Sort apps")
         }
 
         ToolbarItem {
@@ -92,8 +93,10 @@ struct AppsView: View {
                 Task { await loadApps() }
             } label: {
                 Image(systemName: "arrow.clockwise")
+                    .accessibilityHidden(true)
             }
             .help("Rescan applications")
+            .accessibilityLabel("Rescan applications")
         }
     }
 
@@ -150,6 +153,7 @@ struct AppsView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle.fill")
+                            .accessibilityHidden(true)
                         Text("Clear selection")
                     }
                     .font(.subheadline.weight(.medium))

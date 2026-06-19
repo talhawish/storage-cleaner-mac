@@ -10,11 +10,13 @@ struct FileRowView: View {
     let isSelected: Bool
     let pathDisplayMode: PathDisplayMode
     let onToggle: () -> Void
+    let onPreview: (() -> Void)?
 
     @State private var fileExists = true
     @State private var fileSize: Int64 = 0
     @State private var modDate: Date?
     @State private var isHovering = false
+    @FocusState private var isFocused: Bool
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -22,12 +24,14 @@ struct FileRowView: View {
         url: URL,
         isSelected: Bool,
         pathDisplayMode: PathDisplayMode = .parentName,
-        onToggle: @escaping () -> Void
+        onToggle: @escaping () -> Void,
+        onPreview: (() -> Void)? = nil
     ) {
         self.url = url
         self.isSelected = isSelected
         self.pathDisplayMode = pathDisplayMode
         self.onToggle = onToggle
+        self.onPreview = onPreview
     }
 
     var body: some View {
@@ -41,7 +45,7 @@ struct FileRowView: View {
             .toggleStyle(.checkbox)
             .accessibilityLabel("Select \(url.lastPathComponent)")
 
-            iconView
+            previewControl
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(url.lastPathComponent)
@@ -53,6 +57,7 @@ struct FileRowView: View {
                     Image(systemName: "folder")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                     Text(parentDirectoryName)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -83,25 +88,44 @@ struct FileRowView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
-        .background(isHovering ? Color.accentColor.opacity(0.04) : .clear)
+        .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
+        .focusable(onPreview != nil)
+        .focused($isFocused)
+        .onKeyPress(.space) { previewFromKeyboard() }
+        .onKeyPress(.return) { previewFromKeyboard() }
+        .contextMenu {
+            if let onPreview {
+                Button("Preview", systemImage: "eye") {
+                    onPreview()
+                }
+                Divider()
+            }
+            Button(isSelected ? "Deselect" : "Select", systemImage: "checkmark.circle") { onToggle() }
+            Button("Show in Finder", systemImage: "folder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        }
         .task { loadFileInfo() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
     }
 
-    private var iconView: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(iconBackground)
-                .frame(width: 36, height: 36)
+    private var previewControl: some View {
+        FileRowPreviewControl(
+            url: url,
+            isFocused: isFocused,
+            isHovering: isHovering,
+            onPreview: previewAction
+        )
+    }
 
-            Image(systemName: iconForURL)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(iconForeground)
+    private var rowBackground: Color {
+        if isFocused {
+            return Color.accentColor.opacity(0.08)
         }
-        .accessibilityHidden(true)
+        return isHovering ? Color.accentColor.opacity(0.04) : .clear
     }
 
     private var parentDirectoryName: String {
@@ -114,37 +138,137 @@ struct FileRowView: View {
         return name.isEmpty ? parent.path : name
     }
 
-    private var iconForURL: String {
-        if url.hasDirectoryPath {
-            return "folder.fill"
+    private var accessibilityDescription: String {
+        var parts = [url.lastPathComponent]
+        if fileExists {
+            parts.append(StorageFormatting.bytes(fileSize))
+        } else {
+            parts.append("Missing")
         }
-        switch url.pathExtension.lowercased() {
-        case "mov", "mp4", "m4v", "avi", "mkv", "webm":
-            return "film.fill"
-        case "jpg", "jpeg", "png", "heic", "tiff", "raw", "dng", "gif":
-            return "photo.fill"
-        case "apk", "aab":
-            return "app.badge.fill"
-        case "dmg":
-            return "opticaldisc.fill"
-        case "zip", "tar", "gz", "7z", "rar":
-            return "archivebox.fill"
-        case "log", "crash":
-            return "doc.text.fill"
-        case "tmp", "temp":
-            return "doc.badge.clock.fill"
-        case "mp3", "wav", "m4a", "aac", "flac":
-            return "waveform"
-        case "pdf":
-            return "doc.richtext.fill"
-        case "swift", "py", "js", "ts", "go", "rs", "java", "kt", "rb":
-            return "chevron.left.forwardslash.chevron.right"
-        default:
-            return "doc.fill"
+        if let date = modDate {
+            parts.append("Modified \(date.formatted(.relative(presentation: .named)))")
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private var previewAction: (() -> Void)? {
+        guard let onPreview else { return nil }
+        return {
+            isFocused = true
+            onPreview()
         }
     }
 
-    private var iconBackground: Color {
+    private func loadFileInfo() {
+        let fileManager = FileManager.default
+        fileExists = fileManager.fileExists(atPath: url.path)
+
+        if fileExists {
+            let resourceKeys: [URLResourceKey] = [
+                .fileAllocatedSizeKey,
+                .fileSizeKey,
+                .contentModificationDateKey
+            ]
+            let values = try? url.resourceValues(forKeys: Set(resourceKeys))
+            fileSize = Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+            modDate = values?.contentModificationDate
+        }
+    }
+
+    private func previewFromKeyboard() -> KeyPress.Result {
+        guard let onPreview else { return .ignored }
+        onPreview()
+        return .handled
+    }
+}
+
+private struct FileRowPreviewControl: View {
+    let url: URL
+    let isFocused: Bool
+    let isHovering: Bool
+    let onPreview: (() -> Void)?
+
+    var body: some View {
+        if let onPreview {
+            Button(action: onPreview) {
+                thumbnailView
+            }
+            .buttonStyle(.plain)
+            .help("Preview \(url.lastPathComponent)")
+            .accessibilityLabel("Preview \(url.lastPathComponent)")
+        } else {
+            iconView
+        }
+    }
+
+    private var thumbnailView: some View {
+        MediaThumbnailView(
+            url: url,
+            sideLength: 80,
+            displaySideLength: 40,
+            cornerRadius: 8,
+            contentMode: .fill
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(thumbnailBorderColor, lineWidth: isFocused ? 2 : 1)
+        }
+    }
+
+    private var iconView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(FileRowIconStyle.background(for: url))
+                .frame(width: 36, height: 36)
+
+            Image(systemName: FileRowIconStyle.symbol(for: url))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(FileRowIconStyle.foreground(for: url))
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var thumbnailBorderColor: Color {
+        if isFocused {
+            return AppTheme.accent.opacity(0.7)
+        }
+        return isHovering ? .secondary.opacity(0.5) : .black.opacity(0.06)
+    }
+}
+
+private enum FileRowIconStyle {
+    private static let symbolsByExtension: [String: String] = [
+        "mov": "film.fill", "mp4": "film.fill", "m4v": "film.fill", "avi": "film.fill",
+        "mkv": "film.fill", "webm": "film.fill",
+        "jpg": "photo.fill", "jpeg": "photo.fill", "png": "photo.fill", "heic": "photo.fill",
+        "tiff": "photo.fill", "raw": "photo.fill", "dng": "photo.fill", "gif": "photo.fill",
+        "apk": "app.badge.fill", "aab": "app.badge.fill",
+        "dmg": "opticaldisc.fill",
+        "zip": "archivebox.fill", "tar": "archivebox.fill", "gz": "archivebox.fill",
+        "7z": "archivebox.fill", "rar": "archivebox.fill",
+        "log": "doc.text.fill", "crash": "doc.text.fill",
+        "tmp": "doc.badge.clock.fill", "temp": "doc.badge.clock.fill",
+        "mp3": "waveform", "wav": "waveform", "m4a": "waveform", "aac": "waveform", "flac": "waveform",
+        "pdf": "doc.richtext.fill",
+        "swift": "chevron.left.forwardslash.chevron.right",
+        "py": "chevron.left.forwardslash.chevron.right",
+        "js": "chevron.left.forwardslash.chevron.right",
+        "ts": "chevron.left.forwardslash.chevron.right",
+        "go": "chevron.left.forwardslash.chevron.right",
+        "rs": "chevron.left.forwardslash.chevron.right",
+        "java": "chevron.left.forwardslash.chevron.right",
+        "kt": "chevron.left.forwardslash.chevron.right",
+        "rb": "chevron.left.forwardslash.chevron.right"
+    ]
+
+    static func symbol(for url: URL) -> String {
+        if url.hasDirectoryPath {
+            return "folder.fill"
+        }
+        return symbolsByExtension[url.pathExtension.lowercased()] ?? "doc.fill"
+    }
+
+    static func background(for url: URL) -> Color {
         if url.hasDirectoryPath {
             return AppTheme.accent.opacity(0.12)
         }
@@ -168,7 +292,7 @@ struct FileRowView: View {
         }
     }
 
-    private var iconForeground: Color {
+    static func foreground(for url: URL) -> Color {
         if url.hasDirectoryPath {
             return AppTheme.accent
         }
@@ -189,35 +313,6 @@ struct FileRowView: View {
             return AppTheme.mint
         default:
             return .secondary
-        }
-    }
-
-    private var accessibilityDescription: String {
-        var parts = [url.lastPathComponent]
-        if fileExists {
-            parts.append(StorageFormatting.bytes(fileSize))
-        } else {
-            parts.append("Missing")
-        }
-        if let date = modDate {
-            parts.append("Modified \(date.formatted(.relative(presentation: .named)))")
-        }
-        return parts.joined(separator: ", ")
-    }
-
-    private func loadFileInfo() {
-        let fileManager = FileManager.default
-        fileExists = fileManager.fileExists(atPath: url.path)
-
-        if fileExists {
-            let resourceKeys: [URLResourceKey] = [
-                .fileAllocatedSizeKey,
-                .fileSizeKey,
-                .contentModificationDateKey
-            ]
-            let values = try? url.resourceValues(forKeys: Set(resourceKeys))
-            fileSize = Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
-            modDate = values?.contentModificationDate
         }
     }
 }

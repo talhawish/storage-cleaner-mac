@@ -41,7 +41,7 @@ final class DeveloperDomainsTests: XCTestCase {
         let findings = [
             finding(.screenshots, .screenshots),
             finding(.trash, .trash),
-            finding(.cliApps, .cliTooling) // CLI Tooling has its own section, not a dynamic row
+            finding(.cliApps, .cliTooling) // CLI Tooling has its own section.
         ]
 
         XCTAssertTrue(DeveloperDomains.detected(in: findings).isEmpty)

@@ -85,8 +85,7 @@ struct CategoryDetailView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             if !selectedURLs.isEmpty {
                 Button {
@@ -108,8 +107,10 @@ struct CategoryDetailView: View {
                 }
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
+                    .accessibilityHidden(true)
             }
             .help("Sort files")
+            .accessibilityLabel("Sort files")
         }
 
         ToolbarItem {
@@ -137,7 +138,9 @@ struct CategoryDetailView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
+                    .accessibilityHidden(true)
             }
+            .accessibilityLabel("More actions")
         }
     }
 
@@ -197,7 +200,6 @@ struct CategoryDetailView: View {
         .background(.ultraThinMaterial)
     }
 
-
     private var selectionBar: some View {
         HStack(spacing: 12) {
             Button {
@@ -210,6 +212,7 @@ struct CategoryDetailView: View {
                 HStack(spacing: 6) {
                     Image(systemName: allVisibleSelected ? "checkmark.circle.fill" : "circle.dashed")
                         .foregroundStyle(allVisibleSelected ? AppTheme.accent : .secondary)
+                        .accessibilityHidden(true)
                     Text(allVisibleSelected ? "Deselect Visible" : "Select Visible")
                         .font(.subheadline.weight(.medium))
                 }
@@ -282,9 +285,13 @@ struct CategoryDetailView: View {
         case .sizeAsc:
             urls.sorted { StorageFormatting.fileSize(at: $0) < StorageFormatting.fileSize(at: $1) }
         case .nameAsc:
-            urls.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+            urls.sorted {
+                $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+            }
         case .nameDesc:
-            urls.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedDescending }
+            urls.sorted {
+                $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedDescending
+            }
         case .dateAsc:
             urls.sorted { StorageFormatting.modificationDate(at: $0) < StorageFormatting.modificationDate(at: $1) }
         case .dateDesc:

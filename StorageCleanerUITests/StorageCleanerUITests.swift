@@ -13,8 +13,8 @@ final class StorageCleanerUITests: XCTestCase {
         XCTAssertTrue(scanButton.waitForExistence(timeout: 3))
         scanButton.click()
 
-        let summary = app.staticTexts["Potentially reclaimable"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 12))
+        let results = app.descendants(matching: .any)["dashboard-results"]
+        XCTAssertTrue(results.waitForExistence(timeout: 12))
     }
 
     @MainActor
@@ -28,6 +28,19 @@ final class StorageCleanerUITests: XCTestCase {
         cancelButton.click()
 
         XCTAssertTrue(app.buttons["primary-scan-button"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testSettingsShowsLargeFileThresholdPicker() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+
+        let settingsRow = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(settingsRow.waitForExistence(timeout: 3))
+        settingsRow.click()
+
+        let thresholdPicker = app.descendants(matching: .any)["large-file-threshold-picker"]
+        XCTAssertTrue(thresholdPicker.waitForExistence(timeout: 3))
+        XCTAssertTrue(thresholdPicker.isHittable)
     }
 
     @MainActor

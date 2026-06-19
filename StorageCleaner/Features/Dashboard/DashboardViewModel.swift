@@ -49,12 +49,6 @@ final class DashboardViewModel {
         phase == .scanning
     }
 
-    /// Developer domains present in the latest scan, in display order. Drives the dynamic
-    /// per-domain rows in the sidebar.
-    var developerDomainsDetected: [StorageDomain] {
-        DeveloperDomains.detected(in: snapshot?.findings ?? [])
-    }
-
     var blockedPermissions: [StoragePermissionStatus] {
         permissionStatuses.filter { $0.state == .denied && $0.scope.isBlocking }
     }

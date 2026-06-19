@@ -90,7 +90,7 @@ struct DuplicatesView: View {
             )
 
             ScrollView {
-                LazyVStack(spacing: AppTheme.Spacing.lg) {
+                LazyVStack(spacing: AppTheme.Spacing.mediumLarge) {
                     ForEach(groups) { group in
                         DuplicateGroupCard(
                             group: group,
@@ -102,7 +102,7 @@ struct DuplicatesView: View {
                         )
                     }
                 }
-                .padding(AppTheme.Spacing.lg)
+                .padding(AppTheme.Spacing.mediumLarge)
             }
         }
     }

@@ -136,30 +136,33 @@ struct DashboardView: View {
     @ViewBuilder
     private func results(scrollProxy: ScrollViewProxy) -> some View {
         if let snapshot = viewModel.snapshot {
-            OverviewSummaryBar(
-                snapshot: snapshot,
-                safeBytes: viewModel.safeReclaimableBytes,
-                reviewBytes: viewModel.reviewReclaimableBytes,
-                startScan: viewModel.startScan,
-                quickClean: { showQuickClean = true }
-            )
+            VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
+                OverviewSummaryBar(
+                    snapshot: snapshot,
+                    safeBytes: viewModel.safeReclaimableBytes,
+                    reviewBytes: viewModel.reviewReclaimableBytes,
+                    startScan: viewModel.startScan,
+                    quickClean: { showQuickClean = true }
+                )
 
-            if !viewModel.domainTiles.isEmpty {
-                SpaceBreakdownGrid(tiles: viewModel.domainTiles) { domain in
-                    withAnimation(reduceMotion ? nil : .snappy) {
-                        scrollProxy.scrollTo(domain, anchor: .top)
+                if !viewModel.domainTiles.isEmpty {
+                    SpaceBreakdownGrid(tiles: viewModel.domainTiles) { domain in
+                        withAnimation(reduceMotion ? nil : .snappy) {
+                            scrollProxy.scrollTo(domain, anchor: .top)
+                        }
+                    }
+                }
+
+                OverviewTipsCarousel(tips: viewModel.overviewTips, onAction: handleTip)
+
+                VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
+                    ForEach(viewModel.domainGroups) { usage in
+                        DetectionGroupSection(usage: usage) { viewModel.selectedFinding = $0 }
+                            .id(usage.domain)
                     }
                 }
             }
-
-            OverviewTipsCarousel(tips: viewModel.overviewTips, onAction: handleTip)
-
-            VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
-                ForEach(viewModel.domainGroups) { usage in
-                    DetectionGroupSection(usage: usage) { viewModel.selectedFinding = $0 }
-                        .id(usage.domain)
-                }
-            }
+            .accessibilityIdentifier("dashboard-results")
         }
     }
 

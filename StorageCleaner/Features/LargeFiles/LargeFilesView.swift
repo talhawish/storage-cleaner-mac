@@ -9,6 +9,7 @@ struct LargeFilesView: View {
     @State private var locationFilter: LargeFileLocationFilter = .all
     @State private var selectedURLs: Set<URL> = []
     @State private var showDeleteConfirmation = false
+    @State private var previewURL: URL?
 
     private let thresholdOptions: [(String, Int64)] = [
         ("10 MB", 10_000_000),
@@ -110,6 +111,14 @@ struct LargeFilesView: View {
                     + "(\(StorageFormatting.bytes(totalSelectedBytes))) to Trash."
             )
         }
+        .sheet(isPresented: Binding(
+            get: { previewURL != nil },
+            set: { if !$0 { previewURL = nil } }
+        )) {
+            if let url = previewURL {
+                MediaPreviewSheet(url: url)
+            }
+        }
     }
 
     private var largeFilesContent: some View {
@@ -159,7 +168,8 @@ struct LargeFilesView: View {
                     url: record.url,
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
-                    onToggle: { toggle(record.url) }
+                    onToggle: { toggle(record.url) },
+                    onPreview: { previewURL = record.url }
                 )
             }
         } header: {

@@ -63,6 +63,7 @@ struct DeleteAppConfirmationSheet: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 48, height: 48)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .accessibilityHidden(true)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {

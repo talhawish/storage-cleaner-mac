@@ -112,6 +112,7 @@ struct DeleteConfirmationSheet: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(iconColor(url))
                 .frame(width: 20)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(url.lastPathComponent)
@@ -199,8 +200,10 @@ struct CategoryInfoSheet: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Close")
             }
 
             ZStack {

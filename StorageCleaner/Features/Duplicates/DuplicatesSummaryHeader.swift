@@ -32,13 +32,13 @@ struct DuplicatesSummaryHeader: View {
     let onRemoveSelected: () -> Void
 
     var body: some View {
-        VStack(spacing: AppTheme.Spacing.md) {
-            HStack(alignment: .center, spacing: AppTheme.Spacing.lg) {
+        VStack(spacing: AppTheme.Spacing.medium) {
+            HStack(alignment: .center, spacing: AppTheme.Spacing.mediumLarge) {
                 stat(value: "\(groupCount)", label: groupCount == 1 ? "group" : "groups")
                 stat(value: "\(copyCount)", label: "duplicate copies")
                 stat(value: StorageFormatting.bytes(totalReclaimableBytes), label: "reclaimable")
 
-                Spacer(minLength: AppTheme.Spacing.md)
+                Spacer(minLength: AppTheme.Spacing.medium)
 
                 Picker("Filter", selection: $filter) {
                     ForEach(DuplicateMediaFilter.allCases) { Text($0.rawValue).tag($0) }
@@ -48,7 +48,7 @@ struct DuplicatesSummaryHeader: View {
                 .fixedSize()
             }
 
-            HStack(spacing: AppTheme.Spacing.sm) {
+            HStack(spacing: AppTheme.Spacing.small) {
                 Menu {
                     Button("Select all duplicates", systemImage: "checkmark.circle", action: onSelectAll)
                     Button("Deselect all", systemImage: "circle", action: onDeselectAll)
@@ -78,7 +78,7 @@ struct DuplicatesSummaryHeader: View {
                 .keyboardShortcut(.delete, modifiers: [.command])
             }
         }
-        .padding(AppTheme.Spacing.lg)
+        .padding(AppTheme.Spacing.mediumLarge)
         .background(.regularMaterial)
         .overlay(alignment: .bottom) {
             Rectangle().fill(AppTheme.hairline).frame(height: 1)

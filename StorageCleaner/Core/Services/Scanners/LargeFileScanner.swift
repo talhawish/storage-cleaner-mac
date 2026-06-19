@@ -37,18 +37,6 @@ struct LargeFileScanner: StorageCategoryScanning {
 }
 
 struct LargeFileSafetyPolicy: Sendable {
-    private let allowedExtensions: Set<String> = [
-        "7z", "ace", "arj", "br", "bz2", "cab", "cb7", "cbr", "cbt", "cbz", "cpio", "cpgz",
-        "deb", "dmg", "ear", "gz", "iso", "jar", "lz", "lz4", "lzh", "lzma", "pkg", "rar",
-        "rpm", "sit", "sitx", "tar", "tbz", "tbz2", "tgz", "tlz", "txz", "war", "xar", "xip",
-        "xz", "zip", "zipx", "zst",
-        "aab", "apk", "ipa", "ipsw",
-        "avi", "m4v", "mkv", "mov", "mp4", "webm",
-        "heic", "jpeg", "jpg", "png", "psd", "raw", "tiff", "webp",
-        "avro", "bak", "backup", "csv", "db", "db3", "dump", "h5", "hdf5", "jsonl",
-        "log", "mmdb", "ndjson", "onnx", "orc", "parquet", "realm", "sql", "sqlite", "sqlite3"
-    ]
-
     private let blockedPathComponents: Set<String> = [
         ".build", ".git", ".gradle", ".swiftpm", ".venv",
         "Applications", "Library", "System",
@@ -60,7 +48,7 @@ struct LargeFileSafetyPolicy: Sendable {
         guard components.isDisjoint(with: blockedPathComponents) else { return false }
         guard !url.lastPathComponent.hasPrefix(".") else { return false }
         guard !isExecutable(url) else { return false }
-        return allowedExtensions.contains(url.pathExtension.lowercased())
+        return true
     }
 
     private func isExecutable(_ url: URL) -> Bool {
