@@ -60,6 +60,7 @@ enum DependencyPaths {
             home("Library/Caches/composer"),
             home(".composer/cache")
         ]
+        static let projectVendorMaxDepth = Projects.maxDepth + 1
     }
 
     // MARK: - Ruby

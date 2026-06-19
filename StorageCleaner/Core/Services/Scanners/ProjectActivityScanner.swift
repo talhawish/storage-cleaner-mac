@@ -130,8 +130,6 @@ actor ProjectActivityScanner {
         ) else { return metrics }
 
         let rootDepth = directory.pathComponents.count
-        let dependencyNames = technology.dependencyDirectoryNames
-
         while let item = enumerator.nextObject() as? URL {
             guard !Task.isCancelled else { break }
             guard let values = try? item.resourceValues(forKeys: Set(keys)),
@@ -141,7 +139,12 @@ actor ProjectActivityScanner {
             let components = item.pathComponents
             let relativeComponents = components.dropFirst(rootDepth)
 
-            if relativeComponents.contains(where: dependencyNames.contains) {
+            if ProjectDependencyRules.isDependencyFile(
+                item,
+                for: technology,
+                projectRoot: directory,
+                fileManager: fileManager
+            ) {
                 metrics.totalSize += size
                 metrics.dependencySize += size
             } else if !relativeComponents.contains(where: { $0.hasPrefix(".") }) {

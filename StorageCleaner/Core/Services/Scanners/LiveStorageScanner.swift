@@ -185,7 +185,7 @@ extension LiveStorageScanner {
                 PythonDependencyScanner(collector: collector),
                 RustDependencyScanner(collector: collector),
                 GoDependencyScanner(collector: collector),
-                PHPCacheScanner(collector: collector),
+                PHPDependencyScanner(collector: collector),
                 RubyDependencyScanner(collector: collector),
                 DotNetCacheScanner(collector: collector),
                 GradleCacheScanner(collector: collector),

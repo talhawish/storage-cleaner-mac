@@ -21,6 +21,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case projectActivity
     case apps
     case developerStorage
+    case docker
     case runtimeVersions
     case simulatorsEmulators
     case largeFiles
@@ -39,6 +40,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .projectActivity: "Project Activity"
         case .apps: "Applications"
         case .developerStorage: "Developer Storage"
+        case .docker: "Docker"
         case .runtimeVersions: "Runtime Versions"
         case .simulatorsEmulators: "Simulators & Emulators"
         case .largeFiles: "Large Files"
@@ -57,6 +59,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .projectActivity: "clock.badge.checkmark"
         case .apps: "app.badge.fill"
         case .developerStorage: "chevron.left.forwardslash.chevron.right"
+        case .docker: "shippingbox.fill"
         case .runtimeVersions: "square.stack.3d.up.fill"
         case .simulatorsEmulators: "iphone.gen3"
         case .largeFiles: "doc.badge.ellipsis"
@@ -71,6 +74,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var filterKinds: [StorageFindingKind] {
         switch self {
+        case .docker: [.dockerArtifacts]
         case .largeFiles: [.largeFiles, .largeVideos, .largePhotos]
         case .cliPrograms: [.cliApps]
         case .runtimeVersions: [.runtimeVersions]

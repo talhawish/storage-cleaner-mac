@@ -91,12 +91,15 @@ enum ProjectMarker: Hashable, Sendable {
     case fileExtension(String)
     /// A nested path that exists relative to the directory (e.g. `app/build.gradle`).
     case relativePath(String)
+    /// A Composer PHP project, identified by `composer.json` or `vendor/autoload.php`.
+    case composerProject
 
     var displayName: String {
         switch self {
         case let .file(name): name
         case let .fileExtension(ext): "*.\(ext)"
         case let .relativePath(path): path
+        case .composerProject: "composer.json or vendor/autoload.php"
         }
     }
 
@@ -108,6 +111,8 @@ enum ProjectMarker: Hashable, Sendable {
             contents.contains { $0.hasSuffix(".\(ext)") }
         case let .relativePath(path):
             fileManager.fileExists(atPath: directory.appendingPathComponent(path).path)
+        case .composerProject:
+            ProjectDependencyRules.isComposerProject(at: directory, fileManager: fileManager)
         }
     }
 }
@@ -156,7 +161,7 @@ enum ProjectDetector {
             .file("go.mod")
         ]),
         ProjectDetectionRule(technology: .php, markers: [
-            .file("composer.json")
+            .composerProject
         ]),
         ProjectDetectionRule(technology: .python, markers: [
             .file("pyproject.toml"),

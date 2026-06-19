@@ -4,6 +4,7 @@ struct DeveloperStorageView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
+    var onDockerChanged: () -> Void = {}
     @State private var selectedDomain: StorageDomain?
 
     private var allDeveloperFindings: [StorageFinding] {
@@ -84,7 +85,11 @@ struct DeveloperStorageView: View {
             Section {
                 ForEach(developerFindings) { finding in
                     NavigationLink {
-                        CategoryDetailView(finding: finding, onDelete: onDelete)
+                        if finding.kind == .dockerArtifacts {
+                            DockerView(onDockerChanged: onDockerChanged)
+                        } else {
+                            CategoryDetailView(finding: finding, onDelete: onDelete)
+                        }
                     } label: {
                         DeveloperStorageRow(finding: finding)
                     }

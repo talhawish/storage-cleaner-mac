@@ -44,9 +44,9 @@ struct DeleteConfirmationSheet: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Delete \(selectedURLs.count) items")
+                Text("Move \(selectedURLs.count) items to Trash")
                     .font(.title3.weight(.semibold))
-                Text("Permanently remove from your Mac")
+                Text("Review the selected files before cleanup")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -73,7 +73,7 @@ struct DeleteConfirmationSheet: View {
                 .font(.system(size: 14))
                 .accessibilityHidden(true)
 
-            Text("This action cannot be undone. The files will be permanently deleted from your Mac.")
+            Text("These files will be moved to Trash and can be restored until the Trash is emptied.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -146,7 +146,7 @@ struct DeleteConfirmationSheet: View {
                 confirmed = true
                 onDelete()
             } label: {
-                Label("Delete Permanently", systemImage: "trash.fill")
+                Label("Move to Trash", systemImage: "trash.fill")
                     .frame(minWidth: 160)
             }
             .buttonStyle(.borderedProminent)

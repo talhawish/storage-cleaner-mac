@@ -7,7 +7,8 @@ import Foundation
 /// version directories are laid out) and new tools are added by extending the descriptor lists
 /// below — no new control flow. Coverage today:
 ///
-/// * Version managers — nvm, Volta, fnm (Node), pyenv (Python), rbenv & RVM (Ruby), rustup (Rust).
+/// * Version managers — nvm, Volta, fnm (Node), pyenv (Python), rbenv & RVM (Ruby), rustup (Rust),
+///   goenv & GVM (Go), local .NET SDK installs, Jabba/jEnv (Java), and mise/rtx.
 /// * Homebrew versioned formulae — `php@8.1` + `php@8.2`, `node` + `node@18`, `python@3.x`, …
 /// * Plugin managers — asdf (`~/.asdf/installs/<plugin>/*`) and SDKMAN (`~/.sdkman/candidates/*`).
 /// * System JDKs — `/Library/Java/JavaVirtualMachines/*.jdk` (detected; removal is manual since
@@ -74,6 +75,20 @@ enum RuntimeVersionCatalog {
         ) {
             add(entry.runtime, .sdkman, [entry.item])
         }
+        for entry in nestedItems(
+            installsRoot: environment.home.appendingPathComponent(".local/share/mise/installs"),
+            pluginMap: misePluginMap,
+            source: .mise
+        ) {
+            add(entry.runtime, .mise, [entry.item])
+        }
+        for entry in nestedItems(
+            installsRoot: environment.home.appendingPathComponent(".local/share/rtx/installs"),
+            pluginMap: misePluginMap,
+            source: .mise
+        ) {
+            add(entry.runtime, .mise, [entry.item])
+        }
 
         return buckets.values
             .map { finalize(runtime: $0.runtime, source: $0.source, items: $0.items) }
@@ -121,9 +136,14 @@ private extension RuntimeVersionCatalog {
             ManagerDescriptor(runtime: .python, source: .pyenv, base: at(".pyenv/versions")),
             ManagerDescriptor(runtime: .ruby, source: .rbenv, base: at(".rbenv/versions")),
             ManagerDescriptor(runtime: .ruby, source: .rvm, base: at(".rvm/rubies")),
-            ManagerDescriptor(runtime: .rust, source: .rustup, base: at(".rustup/toolchains"))
-            // Extension point: add new version managers here (e.g. Laravel Herd's PHP versions
-            // dir, jenv, etc.) once their on-disk layout is confirmed to be user-owned.
+            ManagerDescriptor(runtime: .rust, source: .rustup, base: at(".rustup/toolchains")),
+            ManagerDescriptor(runtime: .golang, source: .goenv, base: at(".goenv/versions")),
+            ManagerDescriptor(runtime: .golang, source: .gvm, base: at(".gvm/gos")),
+            ManagerDescriptor(runtime: .dotnet, source: .dotnet, base: at(".dotnet/sdk")),
+            ManagerDescriptor(runtime: .java, source: .jabba, base: at(".jabba/jdk")),
+            ManagerDescriptor(runtime: .java, source: .jenv, base: at(".jenv/versions"))
+            // Extension point: add new version managers here once their on-disk layout is confirmed
+            // to be user-owned.
         ]
     }
 
@@ -133,6 +153,16 @@ private extension RuntimeVersionCatalog {
         "golang": .golang, "go": .golang, "rust": .rust, "java": .java, "kotlin": .kotlin,
         "php": .php, "elixir": .elixir, "erlang": .erlang, "perl": .perl,
         "dart": .dart, "deno": .deno, "bun": .bun, "dotnet-core": .dotnet
+    ]
+
+    /// mise keeps installs in the same plugin/version shape as asdf. rtx was the previous name and
+    /// used the same layout, so both roots can share this map.
+    static let misePluginMap: [String: DevRuntime] = [
+        "node": .node, "nodejs": .node, "python": .python, "ruby": .ruby,
+        "go": .golang, "golang": .golang, "rust": .rust, "java": .java, "kotlin": .kotlin,
+        "php": .php, "elixir": .elixir, "erlang": .erlang, "perl": .perl,
+        "dart": .dart, "deno": .deno, "bun": .bun, "dotnet": .dotnet, "dotnet-core": .dotnet,
+        "swift": .swift
     ]
 
     /// Maps a SDKMAN candidate directory name to a runtime (build tools like gradle/maven are

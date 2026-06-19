@@ -3,6 +3,7 @@ import SwiftUI
 struct SidebarView: View {
     @Binding var selection: SidebarItem?
     let isScanning: Bool
+    @State private var isDockerInstalled = DockerService.live.isInstalled
 
     var body: some View {
         List(selection: $selection) {
@@ -14,6 +15,9 @@ struct SidebarView: View {
 
             Section("Developer") {
                 SidebarRow(section: .developerStorage)
+                if isDockerInstalled {
+                    SidebarRow(section: .docker)
+                }
                 SidebarRow(section: .runtimeVersions)
                 SidebarRow(section: .simulatorsEmulators)
                 SidebarRow(section: .cliPrograms)
@@ -45,6 +49,9 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .task {
+            isDockerInstalled = DockerService.live.isInstalled
+        }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
                 Divider()

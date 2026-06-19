@@ -110,6 +110,43 @@ final class RuntimeVersionCatalogTests: XCTestCase {
         XCTAssertTrue(java.source.requiresManualRemoval)
     }
 
+    func testGoenvVersionsAreDetected() throws {
+        _ = try makeDir("home/.goenv/versions/1.21.7")
+        _ = try makeDir("home/.goenv/versions/1.22.3")
+
+        let groups = RuntimeVersionCatalog.discoverGroups(environment: environment())
+        let golang = try XCTUnwrap(group(groups, runtime: .golang, source: .goenv))
+
+        XCTAssertEqual(golang.items.map(\.versionLabel), ["1.22.3", "1.21.7"])
+        XCTAssertEqual(golang.olderItems.map(\.versionLabel), ["1.21.7"])
+    }
+
+    func testDotNetSdkVersionsAreDetected() throws {
+        _ = try makeDir("home/.dotnet/sdk/8.0.204")
+        _ = try makeDir("home/.dotnet/sdk/9.0.100-preview.4")
+        _ = try makeDir("home/.dotnet/sdk/9.0.100")
+
+        let groups = RuntimeVersionCatalog.discoverGroups(environment: environment())
+        let dotnet = try XCTUnwrap(group(groups, runtime: .dotnet, source: .dotnet))
+
+        XCTAssertEqual(dotnet.items.first?.versionLabel, "9.0.100")
+        XCTAssertEqual(dotnet.olderItems.count, 2)
+    }
+
+    func testMiseInstallsAreDetectedAcrossRuntimes() throws {
+        _ = try makeDir("home/.local/share/mise/installs/go/1.21.7")
+        _ = try makeDir("home/.local/share/mise/installs/go/1.22.3")
+        _ = try makeDir("home/.local/share/mise/installs/dotnet/8.0.204")
+        _ = try makeDir("home/.local/share/mise/installs/dotnet/9.0.100")
+
+        let groups = RuntimeVersionCatalog.discoverGroups(environment: environment())
+        let golang = try XCTUnwrap(group(groups, runtime: .golang, source: .mise))
+        let dotnet = try XCTUnwrap(group(groups, runtime: .dotnet, source: .mise))
+
+        XCTAssertEqual(golang.items.first?.versionLabel, "1.22.3")
+        XCTAssertEqual(dotnet.items.first?.versionLabel, "9.0.100")
+    }
+
     // MARK: - Sizing
 
     func testMeasuredFillsInByteSizes() throws {

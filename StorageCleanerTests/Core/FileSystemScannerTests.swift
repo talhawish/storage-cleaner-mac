@@ -42,6 +42,80 @@ final class FileSystemScannerTests: XCTestCase {
         XCTAssertEqual(result.inspectedItemCount, 1)
     }
 
+    func testPHPDependencyScannerFindsNestedComposerVendorFolders() async throws {
+        let composerCache = temporaryDirectory.appending(path: "composer-cache", directoryHint: .isDirectory)
+        let nestedBackend = temporaryDirectory.appending(
+            path: "digital-profile/backend",
+            directoryHint: .isDirectory
+        )
+        let cryptoTest = temporaryDirectory.appending(path: "crypto-test", directoryHint: .isDirectory)
+        let unrelatedVendor = temporaryDirectory.appending(path: "go-service/vendor", directoryHint: .isDirectory)
+
+        try FileManager.default.createDirectory(at: composerCache, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nestedBackend, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: cryptoTest, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: unrelatedVendor, withIntermediateDirectories: true)
+
+        let backendVendor = nestedBackend.appending(path: "vendor", directoryHint: .isDirectory)
+        let cryptoVendor = cryptoTest.appending(path: "vendor", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: backendVendor, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: cryptoVendor, withIntermediateDirectories: true)
+
+        try #"{"require":{"php":"^8.3"}}"#.write(
+            to: nestedBackend.appending(path: "composer.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try #"{"require":{"guzzlehttp/guzzle":"^7.0"}}"#.write(
+            to: cryptoTest.appending(path: "composer.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try Data(repeating: 1, count: 12_000).write(to: composerCache.appending(path: "packages.zip"))
+        try Data(repeating: 2, count: 16_000).write(to: backendVendor.appending(path: "autoload.php"))
+        try Data(repeating: 3, count: 20_000).write(to: cryptoVendor.appending(path: "composer.lock"))
+        try Data(repeating: 4, count: 24_000).write(to: unrelatedVendor.appending(path: "module.go"))
+
+        let scanner = PHPDependencyScanner(
+            cachePaths: [composerCache],
+            projectRoots: [temporaryDirectory],
+            maxProjectDependencyDepth: 4,
+            collector: FileSystemCollector()
+        )
+
+        let result = await scanner.scan()
+        let paths = Set(result.finding?.filePaths.map(\.standardizedFileURL) ?? [])
+
+        XCTAssertEqual(result.finding?.kind, .phpDependencies)
+        XCTAssertEqual(result.finding?.domain, .webDevelopment)
+        XCTAssertEqual(result.finding?.safety, .review)
+        XCTAssertEqual(paths, Set([
+            composerCache.standardizedFileURL,
+            backendVendor.standardizedFileURL,
+            cryptoVendor.standardizedFileURL
+        ]))
+        XCTAssertEqual(result.finding?.itemCount, 3)
+        XCTAssertFalse(paths.contains(unrelatedVendor.standardizedFileURL))
+    }
+
+    func testPHPDependencyScannerTreatsVendorAutoloadAsComposerFallback() async throws {
+        let project = temporaryDirectory.appending(path: "legacy-php", directoryHint: .isDirectory)
+        let vendor = project.appending(path: "vendor", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: vendor, withIntermediateDirectories: true)
+        try Data(repeating: 5, count: 12_000).write(to: vendor.appending(path: "autoload.php"))
+
+        let scanner = PHPDependencyScanner(
+            cachePaths: [],
+            projectRoots: [temporaryDirectory],
+            maxProjectDependencyDepth: 3,
+            collector: FileSystemCollector()
+        )
+
+        let result = await scanner.scan()
+
+        XCTAssertEqual(result.finding?.filePaths.map(\.standardizedFileURL), [vendor.standardizedFileURL])
+    }
+
     func testScreenRecordingScannerReturnsVideosNotScreenshots() async throws {
         let movies = temporaryDirectory.appending(path: "Movies", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: movies, withIntermediateDirectories: true)

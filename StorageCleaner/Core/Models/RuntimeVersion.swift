@@ -93,6 +93,12 @@ enum VersionSource: String, Sendable {
     case jvm
     case herd
     case asdf
+    case goenv
+    case gvm
+    case dotnet
+    case mise
+    case jabba
+    case jenv
 
     /// Friendly manager label shown under the runtime title.
     var displayName: String {
@@ -109,6 +115,12 @@ enum VersionSource: String, Sendable {
         case .jvm: "System (/Library/Java)"
         case .herd: "Laravel Herd"
         case .asdf: "asdf"
+        case .goenv: "goenv"
+        case .gvm: "GVM"
+        case .dotnet: ".NET SDK"
+        case .mise: "mise"
+        case .jabba: "Jabba"
+        case .jenv: "jEnv"
         }
     }
 

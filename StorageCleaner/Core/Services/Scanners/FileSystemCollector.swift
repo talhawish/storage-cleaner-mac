@@ -60,10 +60,44 @@ struct FileSystemCollector: Sendable {
         return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
     }
 
+    /// Collects directories under `roots` that satisfy `matcher`, capping results at `limit`.
+    /// Matching directories are measured as a single candidate and their descendants are skipped so
+    /// nested dependency folders are not double-counted.
+    func collectDirectories(
+        at roots: [URL],
+        matching matcher: @Sendable (URL) -> Bool,
+        maxDepth: Int,
+        limit: Int = 500
+    ) -> FileCollectionResult {
+        let fileManager = FileManager.default
+        var candidates: [FileCandidate] = []
+        var inspectedItemCount = 0
+
+        for root in roots where fileManager.fileExists(atPath: root.path) {
+            guard !Task.isCancelled else {
+                return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
+            }
+            collectDirectories(
+                at: root,
+                matching: matcher,
+                policy: DirectoryCollectionPolicy(maxDepth: maxDepth, limit: limit),
+                into: &candidates,
+                inspectedItemCount: &inspectedItemCount
+            )
+        }
+
+        return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
+    }
+
     /// How `collectFiles` caps and prioritizes its results.
     private struct CollectionPolicy {
         let limit: Int
         let prioritizeLargest: Bool
+    }
+
+    private struct DirectoryCollectionPolicy {
+        let maxDepth: Int
+        let limit: Int
     }
 
     /// Collects byte-identical duplicate groups under `roots`. Each returned group has 2+ copies
@@ -121,6 +155,46 @@ struct FileSystemCollector: Sendable {
             } else {
                 candidates.append(candidate)
             }
+        }
+    }
+
+    private func collectDirectories(
+        at root: URL,
+        matching matcher: @Sendable (URL) -> Bool,
+        policy: DirectoryCollectionPolicy,
+        into candidates: inout [FileCandidate],
+        inspectedItemCount: inout Int
+    ) {
+        let fileManager = FileManager.default
+        guard candidates.count < policy.limit else { return }
+
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            return
+        }
+
+        let rootDepth = root.pathComponents.count
+
+        for case let url as URL in enumerator {
+            guard !Task.isCancelled else { return }
+            guard candidates.count < policy.limit else { return }
+
+            let depth = url.pathComponents.count - rootDepth
+            if depth > policy.maxDepth {
+                enumerator.skipDescendants()
+                continue
+            }
+
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+            guard values?.isDirectory == true else { continue }
+            inspectedItemCount += 1
+
+            guard matcher(url) else { continue }
+            candidates.append(FileCandidate(url: url, bytes: sizeOfItem(at: url)))
+            enumerator.skipDescendants()
         }
     }
 

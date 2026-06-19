@@ -63,6 +63,34 @@ final class ProjectHibernationServiceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appending(path: "Package.swift").path))
     }
 
+    func testHibernatePHPProjectUsesComposerVendorFallback() async throws {
+        let root = workingDirectory.appending(path: "legacy-php", directoryHint: .isDirectory)
+        let vendor = root.appending(path: "vendor", directoryHint: .isDirectory)
+        let unrelatedVendor = root.appending(path: "tools/vendor", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: vendor, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: unrelatedVendor, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 4_000).write(to: root.appending(path: "index.php"))
+        try Data(repeating: 2, count: 18_000).write(to: vendor.appending(path: "autoload.php"))
+        try Data(repeating: 3, count: 22_000).write(to: unrelatedVendor.appending(path: "dep.bin"))
+
+        let project = ProjectInfo(
+            name: "legacy-php",
+            path: root,
+            technology: .php,
+            lastModifiedDate: Date(timeIntervalSince1970: 0),
+            totalSize: 44_000,
+            childProjectCount: 0,
+            dependencySize: 18_000
+        )
+
+        let outcome = await service.hibernate(project)
+
+        XCTAssertTrue(outcome.succeeded)
+        XCTAssertEqual(outcome.reclaimedBytes, 18_000)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vendor.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelatedVendor.path))
+    }
+
     func testHibernateMissingProjectFails() async throws {
         let project = ProjectInfo(
             name: "ghost",

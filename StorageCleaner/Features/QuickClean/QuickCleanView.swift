@@ -24,8 +24,10 @@ struct QuickCleanView: View {
     @State private var progress = 0.0
     @State private var scannedFindings: [StorageFinding] = []
     @State private var selectedURLs: Set<URL> = []
+    @State private var scannedBytesByURL: [URL: Int64] = [:]
     @State private var cleanupResult: CleanupResult?
     @State private var scanStartTime: Date?
+    @State private var showCleanConfirmation = false
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -38,8 +40,24 @@ struct QuickCleanView: View {
 
     private var totalSelectedBytes: Int64 {
         selectedURLs.reduce(Int64(0)) { total, url in
-            total + StorageFormatting.fileSize(at: url)
+            total + (scannedBytesByURL[url] ?? StorageFormatting.fileSize(at: url))
         }
+    }
+
+    private var selectedURLsForCleanup: [URL] {
+        selectedURLs.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    private var confirmationFinding: StorageFinding {
+        StorageFinding(
+            kind: .junkFiles,
+            domain: .otherCaches,
+            bytes: totalSelectedBytes,
+            itemCount: selectedURLs.count,
+            safety: .safe,
+            examples: Array(selectedURLsForCleanup.prefix(3).map(\.lastPathComponent)),
+            filePaths: selectedURLsForCleanup
+        )
     }
 
     var body: some View {
@@ -62,6 +80,19 @@ struct QuickCleanView: View {
             }
         }
         .frame(width: 640, height: 520)
+        .sheet(isPresented: $showCleanConfirmation) {
+            DeleteConfirmationSheet(
+                finding: confirmationFinding,
+                selectedURLs: selectedURLsForCleanup,
+                totalBytes: totalSelectedBytes,
+                onDelete: {
+                    let urls = selectedURLsForCleanup
+                    showCleanConfirmation = false
+                    performCleanup(urls)
+                },
+                onCancel: { showCleanConfirmation = false }
+            )
+        }
     }
 
     private var headerBar: some View {
@@ -189,7 +220,7 @@ struct QuickCleanView: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Ready to Clean")
+                Text("Review Quick Clean")
                     .font(.headline)
                 Text("\(selectedURLs.count) items, \(StorageFormatting.bytes(totalSelectedBytes)) total")
                     .font(.subheadline)
@@ -211,14 +242,8 @@ struct QuickCleanView: View {
             LazyVStack(spacing: 0) {
                 ForEach(scannedFindings) { finding in
                     Section {
-                        ForEach(finding.filePaths.prefix(10), id: \.self) { url in
+                        ForEach(finding.filePaths, id: \.self) { url in
                             fileRow(url, finding: finding)
-                        }
-                        if finding.filePaths.count > 10 {
-                            Text("+ \(finding.filePaths.count - 10) more items")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                                .padding(.vertical, 4)
                         }
                     } header: {
                         HStack {
@@ -256,10 +281,21 @@ struct QuickCleanView: View {
                 .accessibilityHidden(true)
 
             Text(url.lastPathComponent)
-                .font(.callout)
+                .font(.callout.weight(.medium))
                 .lineLimit(1)
 
             Spacer()
+
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(StorageFormatting.bytes(scannedBytesByURL[url] ?? StorageFormatting.fileSize(at: url)))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Text(url.deletingLastPathComponent().path)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: 260, alignment: .trailing)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 4)
@@ -274,13 +310,12 @@ struct QuickCleanView: View {
             Spacer()
 
             Button {
-                performCleanup()
+                showCleanConfirmation = true
             } label: {
-                Label("Clean \(StorageFormatting.bytes(totalSelectedBytes))", systemImage: "trash.fill")
+                Label("Review & Confirm", systemImage: "checkmark.shield.fill")
                     .frame(minWidth: 200)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.red)
             .controlSize(.large)
             .disabled(selectedURLs.isEmpty)
         }
@@ -344,13 +379,16 @@ struct QuickCleanView: View {
         progress = 0
         scanStartTime = .now
         scannedFindings = []
+        scannedBytesByURL = [:]
+        cleanupResult = nil
 
         Task {
-            let findings = await performQuickScan()
+            let scanResult = await performQuickScan()
             guard !Task.isCancelled else { return }
 
-            scannedFindings = findings
-            selectedURLs = Set(findings.flatMap(\.filePaths))
+            scannedFindings = scanResult.findings
+            scannedBytesByURL = scanResult.bytesByURL
+            selectedURLs = Set(scanResult.findings.flatMap(\.filePaths))
 
             if selectedURLs.isEmpty {
                 withAnimation { phase = .success }
@@ -361,9 +399,10 @@ struct QuickCleanView: View {
         }
     }
 
-    private func performQuickScan() async -> [StorageFinding] {
+    private func performQuickScan() async -> QuickCleanScanResult {
         let collector = FileSystemCollector()
         var findings: [StorageFinding] = []
+        var bytesByURL: [URL: Int64] = [:]
 
         let enabledOptions = enabledOptionIDs.isEmpty
             ? CleanupOptionsRegistry.safeByDefaultIDs
@@ -393,18 +432,21 @@ struct QuickCleanView: View {
                 filePaths: candidates.map(\.url)
             )
             findings.append(finding)
+            for candidate in candidates {
+                bytesByURL[candidate.url] = candidate.bytes
+            }
 
             await MainActor.run {
                 progress = Double(findings.count) / Double(max(enabledOptions.count, 1))
             }
         }
 
-        return findings
+        return QuickCleanScanResult(findings: findings, bytesByURL: bytesByURL)
     }
 
-    private func performCleanup() {
+    private func performCleanup(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
         phase = .cleaning
-        let urls = Array(selectedURLs)
 
         Task {
             let result = await onClean(urls)
@@ -422,4 +464,9 @@ struct QuickCleanView: View {
             selectedURLs.insert(url)
         }
     }
+}
+
+private struct QuickCleanScanResult: Sendable {
+    let findings: [StorageFinding]
+    let bytesByURL: [URL: Int64]
 }

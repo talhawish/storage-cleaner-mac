@@ -108,6 +108,22 @@ final class ProjectActivityScannerTests: XCTestCase {
         XCTAssertEqual(project.projectSize, 10_002)
     }
 
+    func testPHPProjectActivityUsesComposerVendorFallback() async throws {
+        let root = temporaryDirectory.appending(path: "legacy_php", directoryHint: .isDirectory)
+        let vendor = root.appending(path: "vendor", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: vendor, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 8_000).write(to: root.appending(path: "index.php"))
+        try Data(repeating: 2, count: 20_000).write(to: vendor.appending(path: "autoload.php"))
+
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2)
+        let snapshot = await scanner.scan()
+        let project = try XCTUnwrap(snapshot.projects.first)
+
+        XCTAssertEqual(project.technology, .php)
+        XCTAssertEqual(project.dependencySize, 20_000)
+        XCTAssertEqual(project.projectSize, 8_000)
+    }
+
     func testHiddenDependencyDirectoriesAreCountedButHiddenSourceIsNot() async throws {
         let root = temporaryDirectory.appending(path: "swift_pkg", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

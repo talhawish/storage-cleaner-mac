@@ -127,7 +127,7 @@ struct RuntimeVersionsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Runtime Versions")
                     .font(.title2.weight(.semibold))
-                Text("Older Node, Python, Ruby, PHP, Rust, and JDK versions kept by your version managers")
+                Text("Older language runtimes and SDKs kept by your version managers")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -177,7 +177,8 @@ struct RuntimeVersionsView: View {
         AnimatedEmptyState(
             title: "No Duplicate Versions",
             message: "Every language runtime has a single installed version. When you keep multiple "
-                + "versions of Node, Python, Ruby, PHP, Rust, or a JDK, the older ones show up here.",
+                + "versions of tools like Node, Python, Go, .NET, Rust, PHP, or a JDK, the older "
+                + "ones show up here.",
             actionTitle: "Rescan",
             systemImage: "square.stack.3d.up",
             action: { Task { await load() } }

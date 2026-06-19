@@ -80,26 +80,6 @@ struct GoDependencyScanner: StorageCategoryScanning {
     }
 }
 
-struct PHPCacheScanner: StorageCategoryScanning {
-    let kind: StorageFindingKind = .phpDependencies
-    let title = StorageFindingKind.phpDependencies.title
-    private let scanner: PathListScanner
-
-    init(collector: FileSystemCollector) {
-        scanner = PathListScanner(
-            kind: .phpDependencies,
-            domain: .otherCaches,
-            paths: DependencyPaths.PHP.cacheDirs,
-            safety: .review,
-            collector: collector
-        )
-    }
-
-    func scan() async -> CategoryScanResult {
-        await scanner.scan()
-    }
-}
-
 struct RubyDependencyScanner: StorageCategoryScanning {
     let kind: StorageFindingKind = .rubyDependencies
     let title = StorageFindingKind.rubyDependencies.title

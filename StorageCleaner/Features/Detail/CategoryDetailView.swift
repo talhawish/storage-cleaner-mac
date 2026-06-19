@@ -9,6 +9,10 @@ struct CategoryDetailView: View {
     @State private var sortOption: SortOption = .sizeDesc
     @State private var showDeleteConfirmation = false
     @State private var showInfo = false
+    @State private var fileMetadata: [URL: DetailFileMetadata] = [:]
+    @State private var childLevels: [URL: DetailDirectoryLevel] = [:]
+    @State private var directoryStack: [DetailDirectoryLevel] = []
+    @State private var removedURLs: Set<URL> = []
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -33,17 +37,26 @@ struct CategoryDetailView: View {
     }
 
     private var filteredURLs: [URL] {
-        let urls = finding.filePaths
+        let urls = currentURLs
         guard !searchText.isEmpty else { return sortedURLs(from: urls) }
         let filtered = urls.filter { url in
-            url.lastPathComponent.localizedCaseInsensitiveContains(searchText)
+            displayName(for: url).localizedCaseInsensitiveContains(searchText)
                 || url.deletingLastPathComponent().path.localizedCaseInsensitiveContains(searchText)
         }
         return sortedURLs(from: filtered)
     }
 
+    private var currentURLs: [URL] {
+        let urls = directoryStack.last?.urls ?? finding.filePaths
+        return urls.filter { !removedURLs.contains($0) }
+    }
+
+    private var currentLevelTitle: String {
+        directoryStack.last?.title ?? finding.kind.title
+    }
+
     private var totalSelectedBytes: Int64 {
-        selectedURLs.reduce(Int64(0)) { total, url in total + StorageFormatting.fileSize(at: url) }
+        selectedURLs.reduce(Int64(0)) { total, url in total + (fileMetadata[url]?.bytes ?? 0) }
     }
 
     private var allVisibleSelected: Bool {
@@ -74,7 +87,9 @@ struct CategoryDetailView: View {
                 totalBytes: totalSelectedBytes,
                 onDelete: {
                     let urls = Array(selectedURLs)
+                    removedURLs.formUnion(urls)
                     selectedURLs.removeAll()
+                    showDeleteConfirmation = false
                     onDelete(urls)
                 },
                 onCancel: { showDeleteConfirmation = false }
@@ -82,6 +97,9 @@ struct CategoryDetailView: View {
         }
         .sheet(isPresented: $showInfo) {
             CategoryInfoSheet(finding: finding)
+        }
+        .task(id: currentURLs) {
+            await loadFileMetadata()
         }
     }
 
@@ -202,6 +220,24 @@ struct CategoryDetailView: View {
 
     private var selectionBar: some View {
         HStack(spacing: 12) {
+            if !directoryStack.isEmpty {
+                Button {
+                    popDirectoryLevel()
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.plain)
+                .help("Back to parent folder")
+
+                Divider().frame(height: 16)
+
+                Text(currentLevelTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
             Button {
                 if allVisibleSelected {
                     for url in filteredURLs { selectedURLs.remove(url) }
@@ -235,7 +271,7 @@ struct CategoryDetailView: View {
 
             Spacer()
 
-            Text("\(filteredURLs.count) of \(finding.filePaths.count) items")
+            Text("\(filteredURLs.count) of \(currentURLs.count) items")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -251,7 +287,10 @@ struct CategoryDetailView: View {
                 FileRowView(
                     url: url,
                     isSelected: selectedURLs.contains(url),
-                    onToggle: { toggle(url) }
+                    metadata: fileMetadata[url],
+                    canOpen: childLevels[url] != nil,
+                    onToggle: { toggle(url) },
+                    onOpen: { pushDirectoryLevel(from: url) }
                 )
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 2, leading: 20, bottom: 2, trailing: 20))
@@ -278,24 +317,66 @@ struct CategoryDetailView: View {
         }
     }
 
+    private func pushDirectoryLevel(from url: URL) {
+        guard let level = childLevels[url] ?? DetailDirectoryChildren.level(for: url) else { return }
+        directoryStack.append(level)
+        selectedURLs.removeAll()
+        searchText = ""
+    }
+
+    private func popDirectoryLevel() {
+        guard !directoryStack.isEmpty else { return }
+        directoryStack.removeLast()
+        selectedURLs.removeAll()
+        searchText = ""
+    }
+
     private func sortedURLs(from urls: [URL]) -> [URL] {
         switch sortOption {
         case .sizeDesc:
-            urls.sorted { StorageFormatting.fileSize(at: $0) > StorageFormatting.fileSize(at: $1) }
+            urls.sorted { metadataBytes(for: $0) > metadataBytes(for: $1) }
         case .sizeAsc:
-            urls.sorted { StorageFormatting.fileSize(at: $0) < StorageFormatting.fileSize(at: $1) }
+            urls.sorted { metadataBytes(for: $0) < metadataBytes(for: $1) }
         case .nameAsc:
             urls.sorted {
-                $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+                displayName(for: $0).localizedCaseInsensitiveCompare(displayName(for: $1)) == .orderedAscending
             }
         case .nameDesc:
             urls.sorted {
-                $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedDescending
+                displayName(for: $0).localizedCaseInsensitiveCompare(displayName(for: $1)) == .orderedDescending
             }
         case .dateAsc:
             urls.sorted { StorageFormatting.modificationDate(at: $0) < StorageFormatting.modificationDate(at: $1) }
         case .dateDesc:
             urls.sorted { StorageFormatting.modificationDate(at: $0) > StorageFormatting.modificationDate(at: $1) }
         }
+    }
+
+    private func metadataBytes(for url: URL) -> Int64 {
+        fileMetadata[url]?.bytes ?? 0
+    }
+
+    private func displayName(for url: URL) -> String {
+        fileMetadata[url]?.displayName ?? url.lastPathComponent
+    }
+
+    private func loadFileMetadata() async {
+        let urls = currentURLs
+        let loaded = await Task.detached(priority: .utility) {
+            let metadata = Dictionary(
+                urls.map { ($0, DetailFileMetadata.load(for: $0)) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            let levels = Dictionary(
+                urls.compactMap { url in
+                    DetailDirectoryChildren.level(for: url).map { (url, $0) }
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
+            return (metadata, levels)
+        }.value
+        guard !Task.isCancelled else { return }
+        fileMetadata.merge(loaded.0, uniquingKeysWith: { _, new in new })
+        childLevels.merge(loaded.1, uniquingKeysWith: { _, new in new })
     }
 }

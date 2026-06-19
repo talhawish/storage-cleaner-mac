@@ -23,6 +23,10 @@ struct AppShellView: View {
                         ProjectActivityView()
                     case .section(.developerStorage):
                         developerStorageView()
+                    case .section(.docker):
+                        DockerView(onDockerChanged: {
+                            viewModel.startScan(for: [.dockerArtifacts])
+                        })
                     case .section(.runtimeVersions):
                         RuntimeVersionsView(
                             onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
@@ -67,6 +71,10 @@ struct AppShellView: View {
                                 Task { await viewModel.deleteFiles(urls) }
                             }
                         )
+                    } else if finding.kind == .dockerArtifacts {
+                        DockerView(onDockerChanged: {
+                            viewModel.startScan(for: [.dockerArtifacts])
+                        })
                     } else if finding.kind == .cliApps {
                         // Reuse the exact same CLI Programs view/discovery as the
                         // sidebar, so tapping the Overview card shows identical results.
@@ -156,6 +164,9 @@ extension AppShellView {
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
                     Task { await viewModel.deleteFiles(urls) }
+                },
+                onDockerChanged: {
+                    viewModel.startScan(for: [.dockerArtifacts])
                 }
             )
         }

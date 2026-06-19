@@ -116,8 +116,7 @@ actor ProjectHibernationService {
     /// skipped, so a nested `node_modules/foo/node_modules` is removed only
     /// once via its parent.
     private func dependencyDirectories(in project: ProjectInfo) -> [URL] {
-        let names = project.technology.dependencyDirectoryNames
-        guard !names.isEmpty else { return [] }
+        guard !project.technology.dependencyDirectoryNames.isEmpty else { return [] }
 
         // Hidden dependency folders (`.build`, `.gradle`, `.dart_tool`, …) are
         // common, so hidden files are intentionally not skipped here.
@@ -130,7 +129,12 @@ actor ProjectHibernationService {
         while let url = enumerator.nextObject() as? URL {
             guard !Task.isCancelled else { break }
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
-            if names.contains(url.lastPathComponent) {
+            if ProjectDependencyRules.isDependencyDirectory(
+                url,
+                for: project.technology,
+                projectRoot: project.path,
+                fileManager: fileManager
+            ) {
                 matches.append(url)
                 enumerator.skipDescendants()
             }

@@ -207,17 +207,25 @@ final class DashboardViewModel {
             return prunedDuplicateFinding(from: finding, deletedURLs: reclaimedBytesByURL)
         }
 
-        let remainingPaths = finding.filePaths.filter { reclaimedBytesByURL[$0] == nil }
-        guard !remainingPaths.isEmpty else { return nil }
-        guard remainingPaths.count != finding.filePaths.count else { return finding }
-
-        let reclaimedBytes = finding.filePaths.reduce(Int64(0)) { total, url in
-            total + (reclaimedBytesByURL[url] ?? 0)
+        let remainingPaths = finding.filePaths.filter { scannedURL in
+            !reclaimedBytesByURL.keys.contains { deletedURL in
+                deletedURL == scannedURL
+            }
         }
+        guard !remainingPaths.isEmpty else { return nil }
+
+        let reclaimedBytes = reclaimedBytesByURL.reduce(Int64(0)) { total, entry in
+            finding.contains(entry.key) ? total + entry.value : total
+        }
+        guard reclaimedBytes > 0 || remainingPaths.count != finding.filePaths.count else { return finding }
+
+        let updatedBytes = max(0, finding.bytes - reclaimedBytes)
+        guard updatedBytes > 0 else { return nil }
+
         return StorageFinding(
             kind: finding.kind,
             domain: finding.domain,
-            bytes: max(0, finding.bytes - reclaimedBytes),
+            bytes: updatedBytes,
             itemCount: remainingPaths.count,
             safety: finding.safety,
             examples: finding.examples,
@@ -230,7 +238,7 @@ final class DashboardViewModel {
         guard let historyStore, !reclaimedBytesByURL.isEmpty, let snapshot else { return }
 
         let entries = snapshot.findings.compactMap { finding -> CleanupAuditEntry? in
-            let deletedPaths = finding.trackedURLs.filter { reclaimedBytesByURL[$0] != nil }
+            let deletedPaths = reclaimedBytesByURL.keys.filter { finding.contains($0) }
             guard !deletedPaths.isEmpty else { return nil }
             let bytes = deletedPaths.reduce(Int64(0)) { $0 + (reclaimedBytesByURL[$1] ?? 0) }
             return CleanupAuditEntry(kind: finding.kind, bytesReclaimed: bytes, itemCount: deletedPaths.count)
@@ -392,6 +400,24 @@ extension DashboardViewModel {
                 )
             }
         }.value
+    }
+}
+
+private extension StorageFinding {
+    func contains(_ url: URL) -> Bool {
+        trackedURLs.contains { scannedURL in
+            scannedURL == url || scannedURL.isAncestor(of: url)
+        }
+    }
+}
+
+private extension URL {
+    func isAncestor(of descendant: URL) -> Bool {
+        let ancestorPath = standardizedFileURL.path
+        let descendantPath = descendant.standardizedFileURL.path
+        guard descendantPath.hasPrefix(ancestorPath) else { return false }
+        let remainder = descendantPath.dropFirst(ancestorPath.count)
+        return remainder.first == "/"
     }
 }
 

@@ -28,10 +28,12 @@ struct XcodeStorageScanner: StorageCategoryScanning {
 struct DockerStorageScanner: StorageCategoryScanning {
     let kind: StorageFindingKind = .dockerArtifacts
     let title = StorageFindingKind.dockerArtifacts.title
-    private let scanner: PathListScanner
+    private let dockerService: DockerService
+    private let fallbackScanner: PathListScanner
 
-    init(collector: FileSystemCollector) {
-        scanner = PathListScanner(
+    init(collector: FileSystemCollector, dockerService: DockerService = .live) {
+        self.dockerService = dockerService
+        fallbackScanner = PathListScanner(
             kind: .dockerArtifacts,
             domain: .containers,
             paths: DependencyPaths.Docker.cacheDirs,
@@ -41,7 +43,24 @@ struct DockerStorageScanner: StorageCategoryScanning {
     }
 
     func scan() async -> CategoryScanResult {
-        await scanner.scan()
+        let snapshot = await dockerService.loadSnapshot()
+        if snapshot.daemonAvailable, snapshot.totalBytes > 0 {
+            return CategoryScanResult(
+                finding: StorageFinding(
+                    kind: .dockerArtifacts,
+                    domain: .containers,
+                    bytes: snapshot.totalBytes,
+                    itemCount: max(snapshot.itemCount, 1),
+                    safety: .review,
+                    examples: snapshot.overviewExamples,
+                    filePaths: []
+                ),
+                inspectedItemCount: snapshot.itemCount,
+                message: "Measured Docker images, containers, volumes, and builder cache"
+            )
+        }
+
+        return await fallbackScanner.scan()
     }
 }
 

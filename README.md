@@ -216,7 +216,8 @@ The live scanner currently inspects these storage candidate types:
   Downloads, and Desktop
 - Screenshots: desktop screenshots, simulator screenshots, and stale review captures
 - Browser caches: Safari, Chrome, Edge, Firefox, Arc, code caches, and temporary profile data
-- Package artifacts: Gradle, Maven, Composer, pip, Poetry, conda, Cargo, Go, NuGet, and Flutter caches
+- Package artifacts: Gradle, Maven, Composer caches and project `vendor` folders, pip, Poetry,
+  conda, Cargo, Go, NuGet, and Flutter caches
 - Duplicate runtime versions: multiple installed versions of the same language runtime (Node via
   nvm/Volta/fnm, Python via pyenv, Ruby via rbenv/RVM, Rust via rustup, plus Homebrew versioned
   formulae like `php@8.1`/`php@8.2`, asdf, SDKMAN, and system JDKs) — keep the newest, reclaim the rest

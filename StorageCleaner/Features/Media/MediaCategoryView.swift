@@ -130,7 +130,7 @@ struct MediaCategoryView: View {
                 }
             }
         }
-        .sheet(isPresented: $showDeleteConfirmation) {
+            .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
                 finding: StorageFinding(
                     kind: findings.first?.kind ?? .screenshots,
@@ -146,6 +146,7 @@ struct MediaCategoryView: View {
                 onDelete: {
                     let urls = Array(selectedURLs)
                     selectedURLs.removeAll()
+                    showDeleteConfirmation = false
                     onDelete(urls)
                 },
                 onCancel: { showDeleteConfirmation = false }

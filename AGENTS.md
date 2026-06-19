@@ -224,6 +224,8 @@ Critical workflows:
 
 * 100%
 
+The more tests are well thought out and strict, the higher the chance of catching breaks early and the fewer bugs reach production.
+
 ---
 
 ## Rule 5: Performance First
@@ -435,6 +437,8 @@ Required:
 * Strict typing with proper enums — prefer enums over strings or magic values for state, options, and categories
 * Consistent naming, formatting, and patterns across the entire codebase
 * Immutability by default — use `let` over `var`, and value types where appropriate
+* **Search existing code first** — before implementing, grep/glob for reusable scanners, engines, formatters, validators, or UI components. The codebase has many shared engines (e.g., `FilePatternScanner`, `PathListScanner`, `LargeFileScanner`, `DuplicateMediaScanner`, `CandidateFindingBuilder`, `FileSystemCollector`) and DesignSystem components. Reuse them rather than reimplementing.
+* **Show complete paths** — when displaying file or project locations in the UI, show the full path (or a meaningful truncated version with `...` in the middle) so users can identify the exact location. Avoid showing only the filename or last path component.
 
 Avoid:
 

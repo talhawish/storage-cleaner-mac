@@ -9,29 +9,34 @@ struct FileRowView: View {
     let url: URL
     let isSelected: Bool
     let pathDisplayMode: PathDisplayMode
+    let metadata: DetailFileMetadata?
+    let canOpen: Bool
     let onToggle: () -> Void
     let onPreview: (() -> Void)?
+    let onOpen: (() -> Void)?
 
-    @State private var fileExists = true
-    @State private var fileSize: Int64 = 0
-    @State private var modDate: Date?
+    @State private var loadedMetadata: DetailFileMetadata?
     @State private var isHovering = false
     @FocusState private var isFocused: Bool
-    @Environment(\.accessibilityReduceMotion)
-    private var reduceMotion
 
     init(
         url: URL,
         isSelected: Bool,
         pathDisplayMode: PathDisplayMode = .parentName,
+        metadata: DetailFileMetadata? = nil,
+        canOpen: Bool = false,
         onToggle: @escaping () -> Void,
-        onPreview: (() -> Void)? = nil
+        onPreview: (() -> Void)? = nil,
+        onOpen: (() -> Void)? = nil
     ) {
         self.url = url
         self.isSelected = isSelected
         self.pathDisplayMode = pathDisplayMode
+        self.metadata = metadata
+        self.canOpen = canOpen
         self.onToggle = onToggle
         self.onPreview = onPreview
+        self.onOpen = onOpen
     }
 
     var body: some View {
@@ -48,10 +53,10 @@ struct FileRowView: View {
             previewControl
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(url.lastPathComponent)
+                Text(displayName)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                    .foregroundStyle(fileExists ? .primary : .secondary)
+                    .foregroundStyle(currentMetadata.exists ? .primary : .secondary)
 
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
@@ -68,18 +73,23 @@ struct FileRowView: View {
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 3) {
-                if fileExists {
-                    Text(StorageFormatting.bytes(fileSize))
-                        .font(.callout.monospacedDigit().weight(.medium))
-                        .foregroundStyle(.primary)
-                } else {
-                    Label("Missing", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.red)
+            if canOpen, let onOpen {
+                Button(action: onOpen) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help("Open \(displayName)")
+                .accessibilityLabel("Open \(displayName)")
+            }
 
-                if let date = modDate {
+            VStack(alignment: .trailing, spacing: 3) {
+                sizeLabel
+
+                if let date = currentMetadata.modifiedAt {
                     Text(date.formatted(.relative(presentation: .named)))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -107,9 +117,44 @@ struct FileRowView: View {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
         }
-        .task { loadFileInfo() }
+        .task(id: url) { await loadMetadataIfNeeded() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
+    }
+
+    @ViewBuilder private var sizeLabel: some View {
+        if !currentMetadata.exists {
+            Label("Missing", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.red)
+        } else if let bytes = loadedBytes {
+            Text(StorageFormatting.bytes(bytes))
+                .font(.callout.monospacedDigit().weight(.medium))
+                .foregroundStyle(.primary)
+        } else {
+            Text("Calculating…")
+                .font(.callout.monospacedDigit().weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var currentMetadata: DetailFileMetadata {
+        metadata ?? loadedMetadata ?? DetailFileMetadata(
+            exists: true,
+            bytes: 0,
+            modifiedAt: nil,
+            displayName: nil,
+            parentDisplayName: nil
+        )
+    }
+
+    private var loadedBytes: Int64? {
+        guard metadata != nil || loadedMetadata != nil else { return nil }
+        return currentMetadata.bytes
+    }
+
+    private var displayName: String {
+        currentMetadata.displayName ?? url.lastPathComponent
     }
 
     private var previewControl: some View {
@@ -129,6 +174,10 @@ struct FileRowView: View {
     }
 
     private var parentDirectoryName: String {
+        if let parentDisplayName = currentMetadata.parentDisplayName {
+            return parentDisplayName
+        }
+
         let parent = url.deletingLastPathComponent()
         if pathDisplayMode == .fullPath {
             return parent.path
@@ -139,13 +188,15 @@ struct FileRowView: View {
     }
 
     private var accessibilityDescription: String {
-        var parts = [url.lastPathComponent]
-        if fileExists {
-            parts.append(StorageFormatting.bytes(fileSize))
+        var parts = [displayName]
+        if currentMetadata.exists {
+            if let bytes = loadedBytes {
+                parts.append(StorageFormatting.bytes(bytes))
+            }
         } else {
             parts.append("Missing")
         }
-        if let date = modDate {
+        if let date = currentMetadata.modifiedAt {
             parts.append("Modified \(date.formatted(.relative(presentation: .named)))")
         }
         return parts.joined(separator: ", ")
@@ -159,20 +210,14 @@ struct FileRowView: View {
         }
     }
 
-    private func loadFileInfo() {
-        let fileManager = FileManager.default
-        fileExists = fileManager.fileExists(atPath: url.path)
-
-        if fileExists {
-            let resourceKeys: [URLResourceKey] = [
-                .fileAllocatedSizeKey,
-                .fileSizeKey,
-                .contentModificationDateKey
-            ]
-            let values = try? url.resourceValues(forKeys: Set(resourceKeys))
-            fileSize = Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
-            modDate = values?.contentModificationDate
-        }
+    private func loadMetadataIfNeeded() async {
+        guard metadata == nil else { return }
+        let url = url
+        let loaded = await Task.detached(priority: .utility) {
+            DetailFileMetadata.load(for: url)
+        }.value
+        guard !Task.isCancelled else { return }
+        loadedMetadata = loaded
     }
 
     private func previewFromKeyboard() -> KeyPress.Result {
