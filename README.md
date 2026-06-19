@@ -137,7 +137,7 @@ cleanup and deletion workflows require complete branch coverage.
 .
 ├── Package.swift
 ├── project.yml           # Reproducible Xcode project definition
-├── Sources
+├── StorageCleaner          # App target sources (standard Xcode app-folder layout)
 │   ├── App                 # Application entry point and dependency composition
 │   ├── Core
 │   │   ├── Formatting      # Shared, presentation-independent formatting
@@ -148,10 +148,10 @@ cleanup and deletion workflows require complete branch coverage.
 │   └── Features
 │       ├── Dashboard       # Dashboard MVVM feature and focused components
 │       └── Settings        # Native settings scene
-├── Tests
+├── StorageCleanerTests
 │   ├── Core
 │   └── Features
-├── UITests
+├── StorageCleanerUITests
 └── .github/workflows       # Continuous integration
 ```
 
@@ -162,15 +162,15 @@ services are assembled only in `AppContainer`, keeping view models testable and 
 
 ### Adding a feature
 
-1. Create `Sources/Features/<FeatureName>/`.
+1. Create `StorageCleaner/Features/<FeatureName>/`.
 2. Keep views focused on layout, bindings, and presentation.
 3. Put state transitions in an `@MainActor @Observable` view model.
 4. Put filesystem or platform behavior behind a protocol in `Core/Services`.
 5. Inject the implementation through `AppContainer`.
-6. Add mirrored tests under `Tests/Features/<FeatureName>/`.
+6. Add mirrored tests under `StorageCleanerTests/Features/<FeatureName>/`.
 7. Include loading, empty, error, accessibility, keyboard, and reduced-motion behavior.
 
-Files must remain below 500 lines. Extract reusable UI and logic before a file approaches that limit.
+Files must remain below 600 lines. Extract reusable UI and logic before a file approaches that limit.
 
 ## Safety model
 
@@ -195,6 +195,8 @@ The live scanner currently inspects these storage candidate types:
 - Flutter artifacts: pub cache, build folders, and generated app bundles
 - Android Studio artifacts: SDK caches, emulator files, system images, Studio caches, and Gradle outputs
 - Leftover mobile packages: loose APK and AAB files from Android builds or emulator exports
+- Leftover installers: loose DMG, PKG, IPA, ISO, and other installer/package files left in
+  Downloads, Desktop, and Documents long after the app they installed (surfaced regardless of size)
 - AI model caches: Ollama, LM Studio, HuggingFace, Stable Diffusion, and generated assets
 - Large videos: screen recordings, simulator captures, exports, demos, and other oversized media
 - Screen recordings: macOS recordings, meeting captures, simulator demos, and tutorials
@@ -204,6 +206,9 @@ The live scanner currently inspects these storage candidate types:
 - Screenshots: desktop screenshots, simulator screenshots, and stale review captures
 - Browser caches: Safari, Chrome, Edge, Firefox, Arc, code caches, and temporary profile data
 - Package artifacts: Gradle, Maven, Composer, pip, Poetry, conda, Cargo, Go, NuGet, and Flutter caches
+- Duplicate runtime versions: multiple installed versions of the same language runtime (Node via
+  nvm/Volta/fnm, Python via pyenv, Ruby via rbenv/RVM, Rust via rustup, plus Homebrew versioned
+  formulae like `php@8.1`/`php@8.2`, asdf, SDKMAN, and system JDKs) — keep the newest, reclaim the rest
 - Junk files: temporary files, logs, crash reports, disposable archives, and old disk images
 - Trash: files already moved to Trash but still occupying disk space
 

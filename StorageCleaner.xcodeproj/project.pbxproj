@@ -1,0 +1,519 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		63986957B8DB093218BC7607 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD1B790A669019A2C9C3BC64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7D644E1763C5644866325F31;
+			remoteInfo = StorageCleaner;
+		};
+		ED00EEB6CCC92935195905E8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD1B790A669019A2C9C3BC64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7D644E1763C5644866325F31;
+			remoteInfo = StorageCleaner;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1851C548899D7A5619F3DE00 /* StorageCleanerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StorageCleanerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9CA13CA641AEFADB568F814B /* StorageCleaner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StorageCleaner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FF06B4ADE3609A7877846BE0 /* StorageCleanerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StorageCleanerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		5C0000000000000000000A01 /* StorageCleaner */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StorageCleaner;
+			sourceTree = "<group>";
+		};
+		5C0000000000000000000A02 /* StorageCleanerTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StorageCleanerTests;
+			sourceTree = "<group>";
+		};
+		5C0000000000000000000A03 /* StorageCleanerUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StorageCleanerUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1A0000000000000000000F01 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A0000000000000000000F02 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A0000000000000000000F03 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		720485A8313EE58D17B18B3D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9CA13CA641AEFADB568F814B /* StorageCleaner.app */,
+				1851C548899D7A5619F3DE00 /* StorageCleanerTests.xctest */,
+				FF06B4ADE3609A7877846BE0 /* StorageCleanerUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D14D9CA2E03F972156F329E6 = {
+			isa = PBXGroup;
+			children = (
+				5C0000000000000000000A01 /* StorageCleaner */,
+				5C0000000000000000000A02 /* StorageCleanerTests */,
+				5C0000000000000000000A03 /* StorageCleanerUITests */,
+				720485A8313EE58D17B18B3D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0478D3B8CD85577FA8D5B225 /* StorageCleanerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 53D13C23D4C555D618492E5F /* Build configuration list for PBXNativeTarget "StorageCleanerTests" */;
+			buildPhases = (
+				EC966233B2383344BEA97172 /* Sources */,
+				1A0000000000000000000F02 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5451F90C94E59ADECE069CBE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5C0000000000000000000A02 /* StorageCleanerTests */,
+			);
+			name = StorageCleanerTests;
+			packageProductDependencies = (
+			);
+			productName = StorageCleanerTests;
+			productReference = 1851C548899D7A5619F3DE00 /* StorageCleanerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		7D644E1763C5644866325F31 /* StorageCleaner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2F5585A6116E0C4DD582EBD1 /* Build configuration list for PBXNativeTarget "StorageCleaner" */;
+			buildPhases = (
+				0258341AFCB083CB3331B396 /* Sources */,
+				1A0000000000000000000F01 /* Frameworks */,
+				CF919FEF30E085F3A241204A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5C0000000000000000000A01 /* StorageCleaner */,
+			);
+			name = StorageCleaner;
+			packageProductDependencies = (
+			);
+			productName = StorageCleaner;
+			productReference = 9CA13CA641AEFADB568F814B /* StorageCleaner.app */;
+			productType = "com.apple.product-type.application";
+		};
+		9DD81546DF07800BE4F332EB /* StorageCleanerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6384822587A22A4652242ED6 /* Build configuration list for PBXNativeTarget "StorageCleanerUITests" */;
+			buildPhases = (
+				4FC66A8AD9E836E3F27B7063 /* Sources */,
+				1A0000000000000000000F03 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5FAFC3A8BB0ED4B789D76C67 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5C0000000000000000000A03 /* StorageCleanerUITests */,
+			);
+			name = StorageCleanerUITests;
+			packageProductDependencies = (
+			);
+			productName = StorageCleanerUITests;
+			productReference = FF06B4ADE3609A7877846BE0 /* StorageCleanerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		DD1B790A669019A2C9C3BC64 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					7D644E1763C5644866325F31 = {
+						ProvisioningStyle = Automatic;
+					};
+					9DD81546DF07800BE4F332EB = {
+						TestTargetID = 7D644E1763C5644866325F31;
+					};
+				};
+			};
+			buildConfigurationList = 63E66BCA23025E9E2D954D6A /* Build configuration list for PBXProject "StorageCleaner" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = D14D9CA2E03F972156F329E6;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 720485A8313EE58D17B18B3D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7D644E1763C5644866325F31 /* StorageCleaner */,
+				0478D3B8CD85577FA8D5B225 /* StorageCleanerTests */,
+				9DD81546DF07800BE4F332EB /* StorageCleanerUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CF919FEF30E085F3A241204A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0258341AFCB083CB3331B396 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4FC66A8AD9E836E3F27B7063 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EC966233B2383344BEA97172 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5451F90C94E59ADECE069CBE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7D644E1763C5644866325F31 /* StorageCleaner */;
+			targetProxy = 63986957B8DB093218BC7607 /* PBXContainerItemProxy */;
+		};
+		5FAFC3A8BB0ED4B789D76C67 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7D644E1763C5644866325F31 /* StorageCleaner */;
+			targetProxy = ED00EEB6CCC92935195905E8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4BB8714582CAB2227C059E1A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Storage Cleaner";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		5AFD4AFA5D21DDF71511809E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = StorageCleaner;
+			};
+			name = Release;
+		};
+		6C3D356EF02F8528D28CDCA9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = StorageCleaner;
+			};
+			name = Debug;
+		};
+		854E3D49C78EF0C59378596F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B1B251044E41D27570789854 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		CC9F9DC629AD7D28A4922AC1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StorageCleaner.app/Contents/MacOS/StorageCleaner";
+			};
+			name = Debug;
+		};
+		F05D5ED06950DEF60A7A9149 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StorageCleaner.app/Contents/MacOS/StorageCleaner";
+			};
+			name = Release;
+		};
+		F6DC35CF230249087F0108DD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Storage Cleaner";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2F5585A6116E0C4DD582EBD1 /* Build configuration list for PBXNativeTarget "StorageCleaner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6DC35CF230249087F0108DD /* Debug */,
+				4BB8714582CAB2227C059E1A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		53D13C23D4C555D618492E5F /* Build configuration list for PBXNativeTarget "StorageCleanerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CC9F9DC629AD7D28A4922AC1 /* Debug */,
+				F05D5ED06950DEF60A7A9149 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6384822587A22A4652242ED6 /* Build configuration list for PBXNativeTarget "StorageCleanerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6C3D356EF02F8528D28CDCA9 /* Debug */,
+				5AFD4AFA5D21DDF71511809E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		63E66BCA23025E9E2D954D6A /* Build configuration list for PBXProject "StorageCleaner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				854E3D49C78EF0C59378596F /* Debug */,
+				B1B251044E41D27570789854 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = DD1B790A669019A2C9C3BC64 /* Project object */;
+}

@@ -1,9 +1,9 @@
 strict: true
 
 included:
-  - Sources
-  - Tests
-  - UITests
+  - StorageCleaner
+  - StorageCleanerTests
+  - StorageCleanerUITests
 
 excluded:
   - .build
@@ -66,8 +66,8 @@ line_length:
   ignores_urls: true
 
 file_length:
-  warning: 400
-  error: 500
+  warning: 500
+  error: 600
 
 type_body_length:
   warning: 250

@@ -9,9 +9,9 @@ Thumbs.db
 /Package.resolved
 
 # Xcode Projects
-# We use XcodeGen, so the .xcodeproj is transient and generated from project.yml
-*.xcodeproj
-*.xcworkspace
+# The .xcodeproj is committed and uses filesystem-synchronized groups, so files
+# on disk are added to targets automatically — no regeneration needed. Only the
+# user-specific state below is ignored.
 
 # Xcode User Data
 # These should never be committed as they are user-specific

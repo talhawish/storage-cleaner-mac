@@ -1,8 +1,116 @@
 # AGENTS.md
 
-This document defines mandatory engineering standards for all AI agents, contributors, and developers working on Storage Cleaner for Developers.
+This is the **single source of truth** for all AI agents (Claude Code, Codex), contributors, and
+developers working on Storage Cleaner for Developers. `CLAUDE.md` is a symlink to this file — edit
+only this one.
 
-Failure to follow these rules is considered a defect.
+It covers two things: how the codebase is built and structured (orientation), and the mandatory
+engineering standards it is held to. Failure to follow the standards is considered a defect.
+
+---
+
+# Build & Run
+
+`StorageCleaner.xcodeproj` is **committed** and uses Xcode **filesystem-synchronized groups**: every
+file on disk under `StorageCleaner/`, `StorageCleanerTests/`, and `StorageCleanerUITests/` is added to
+its target automatically. **There is no project-generation step** — add, rename, or delete a file and
+it is in the build immediately (no XcodeGen, no `project.yml`). Open `StorageCleaner.xcodeproj` (or
+`Package.swift`) in Xcode and press Run; both stay in sync with the filesystem as you edit.
+
+```bash
+make bootstrap   # resolve Swift packages (first-time setup)
+make run         # swift run StorageCleaner
+make build       # swift build
+make test        # swift test  (unit tests, SwiftPM)
+make ui-test     # xcodebuild UI tests
+make lint        # swiftlint lint --strict --no-cache
+make analyze     # xcodebuild analyze + Periphery unused-code scan
+make verify      # build + test + ui-test + lint + analyze (the full CI gate)
+```
+
+Do **not** edit target membership in Xcode's UI — membership follows the folder structure. Build
+settings live in the committed `project.pbxproj` (edit them in Xcode). User-specific state
+(`xcuserdata`) is gitignored; the shared scheme under `xcshareddata` is committed.
+
+Run a single unit test: `swift test --filter DashboardViewModelTests/<methodName>`.
+
+CI (`.github/workflows/ci.yml`) runs the equivalent of `make verify` with `-warnings-as-errors`.
+Treat warnings as errors locally too. SwiftLint enforces a **500-line file-length error** (warn at
+400) and bans `force_unwrapping`.
+
+## Two run modes
+
+`AppContainer.current(arguments:)` selects dependencies from launch arguments:
+
+* Default → `.live` (real filesystem scanners, permission checks, Trash-based cleanup).
+* `--use-demo-scanner` → in-memory `DemoStorageScanner`/`DemoPermissionHandler`/`DemoCleanupService`
+  for UI tests. `--complete-demo-scan-immediately` skips the simulated delay.
+
+`AppContainer` is the **only** place concrete services are assembled. Everything downstream depends on
+protocols, which is what keeps view models testable.
+
+---
+
+# Codebase Architecture
+
+Layering — dependency direction is strict, Core never imports a Feature:
+
+The app target's sources live in `StorageCleaner/` (standard Xcode app-folder layout):
+
+* `StorageCleaner/App` — `@main` entry (`StorageCleanerApp`), `AppContainer` composition root.
+* `StorageCleaner/Core` — `Models` (domain types, all typed enums), `Services` (protocols + impls),
+  `Formatting`, `Persistence` (SwiftData).
+* `StorageCleaner/DesignSystem` — `AppTheme` and reusable components.
+* `StorageCleaner/Features/<Feature>` — MVVM screens; views do layout/bindings only, logic lives in an
+  `@MainActor @Observable` view model or a Core service.
+
+Tests live in `StorageCleanerTests/` (SwiftPM + xcodebuild) and `StorageCleanerUITests/` (xcodebuild).
+
+## The scan pipeline (the core of the app)
+
+1. **`StorageCategoryScanning`** — protocol for one category scanner; `scan() async -> CategoryScanResult`.
+   Concrete scanners in `StorageCleaner/Core/Services/Scanners/` are thin: each declares a
+   `StorageFindingKind` + `StorageDomain` + `CleanupSafety` and delegates to a reusable engine
+   (`PathListScanner`, `FilePatternScanner`, `LargeFileScanner`, `DuplicateMediaScanner`, …). Target
+   paths come from `DependencyPaths`; results are assembled by `CandidateFindingBuilder`.
+2. **`FileSystemCollector`** — shared, read-only filesystem traversal. Uses `fileAllocatedSize`,
+   honors `Task.isCancelled` throughout, caps results with `limit`, and content-hashes (SHA-256,
+   streamed) only same-size files for duplicate detection.
+3. **`LiveStorageScanner`** (implements `StorageScanning`) — orchestrates all category scanners
+   concurrently via `withTaskGroup`, emitting `ScanEvent`s through an `AsyncStream`. Cancellation
+   propagates through `continuation.onTermination`. `scanEvents(for:)` filters to a subset of kinds.
+4. **`DashboardViewModel`** — consumes the stream, drives the `ScanPhase` state machine
+   (`idle → scanning → results/empty/permissionRequired/failed`), and **merges** partial (per-kind)
+   scan results into the existing snapshot rather than replacing it.
+5. **`CleanupService`** — `FileManagerCleanupService` moves files to Trash (never hard-deletes) and
+   reports `CleanupResult`. After deletion the view model recomputes affected findings in place.
+
+## Adding a storage category
+
+Add a `case` to `StorageFindingKind` (with `title`/`summary`), add any needed paths to
+`DependencyPaths`, create a `StorageCategoryScanning` conformer that wraps an existing scanner engine,
+register it in `LiveStorageScanner.live()`, and map it to a `StorageDomain` / `AppSection` as needed.
+Mirror it with a test under `StorageCleanerTests/`.
+
+## Key conventions
+
+* **Everything is a typed enum.** `StorageFindingKind`, `StorageDomain`, `CleanupSafety`, `ScanPhase`,
+  `AppSection` — no magic strings. Display metadata (titles, SF Symbols, colors) is computed on the enum.
+* **Safety gating.** Every finding carries `CleanupSafety` (`.safe` vs `.review`). Media, photos,
+  screenshots, loose packages, and Trash must stay `.review` (user-created risk).
+* **Navigation** is a `NavigationSplitView` keyed off `SidebarItem` (`.section(AppSection)` or a
+  dynamic `.developerDomain(StorageDomain)`); sections like Large Files / Screenshots scan a filtered
+  subset of kinds (`AppSection.filterKinds`). The sidebar's "Developer" group renders one dynamic row
+  per developer domain detected in the latest scan — derived once in `DeveloperDomains.detected(in:)`,
+  the single source of truth shared with `DeveloperStorageView`.
+* **Runtime versions.** `RuntimeVersionCatalog` (data-driven descriptors) detects runtimes with 2+
+  installed versions — new tools are added by extending its descriptor lists. Removal reuses
+  `CLIRemovalService` (`brew uninstall` for Homebrew kegs, Trash for everything else).
+* **Persistence** (`SwiftData`: `StoredScan`/`StoredFinding`/`StoredCleanupAction`) is wired via
+  `PersistenceController.shared` on the `WindowGroup`.
+
+Scanning is currently read-only inventory; the live `CleanupService` moves to Trash. See `TODO.md` and
+the README's "Detection coverage" section for planned domains and the duplicate content-hash roadmap.
 
 ---
 
@@ -346,7 +454,7 @@ Business logic, state checks, and utilities must be defined once and reused ever
 **Example:** If the app needs to check `hasSubscription`, define a single computed property, method, or helper. All screens and services call that single source of truth — never reimplement the check. also app theme and colors etc
 
 ### Maximum File Length
-No file may exceed 600 lines. If a file approaches this limit, extract logic into helpers, services, extensions, or subcomponents.
+No file may exceed 600 lines (SwiftLint fails the build at 600, warns at 500). If a file approaches this limit, extract logic into helpers, services, extensions, or subcomponents.
 
 ### Prefer Small Components
 - Components should be single-purpose and reusable

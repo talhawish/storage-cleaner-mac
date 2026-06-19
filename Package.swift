@@ -16,12 +16,12 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "StorageCleaner",
-            path: "Sources"
+            path: "StorageCleaner"
         ),
         .testTarget(
             name: "StorageCleanerTests",
             dependencies: ["StorageCleaner"],
-            path: "Tests"
+            path: "StorageCleanerTests"
         )
     ],
     swiftLanguageModes: [.v6]
