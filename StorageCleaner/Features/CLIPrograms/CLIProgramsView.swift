@@ -82,6 +82,7 @@ struct CLIProgramsView: View {
         }
         .navigationTitle("CLI Programs & Toolchains")
         .navigationSubtitle("\(allPrograms.count) programs · \(StorageFormatting.bytes(totalBytes))")
+        .accessibilityIdentifier("cli-programs-root")
         .toolbar { toolbarContent }
         .task(id: rootsKey) { await load() }
         .sheet(isPresented: $showDeleteConfirmation) {

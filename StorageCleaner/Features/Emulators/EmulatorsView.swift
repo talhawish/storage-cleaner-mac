@@ -47,6 +47,7 @@ struct EmulatorsView: View {
         }
         .navigationTitle("Simulators & Emulators")
         .navigationSubtitle("\(images.count) OS images · \(StorageFormatting.bytes(totalBytes))")
+        .accessibilityIdentifier("simulators-emulators-root")
         .toolbar { toolbarContent }
         .task { await load() }
         .sheet(isPresented: $showConfirmation) {

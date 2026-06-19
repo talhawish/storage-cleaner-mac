@@ -75,6 +75,13 @@ struct MediaCategoryView: View {
         allRecords.filter(\.isVideo).count
     }
 
+    private var titleAccessibilityID: String {
+        title
+            .lowercased()
+            .replacingOccurrences(of: " & ", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+    }
+
     var body: some View {
         Group {
             if allFilePaths.isEmpty {
@@ -85,6 +92,7 @@ struct MediaCategoryView: View {
         }
         .navigationTitle(title)
         .navigationSubtitle("\(allFilePaths.count) items · \(StorageFormatting.bytes(totalSize))")
+        .accessibilityIdentifier("media-category-\(titleAccessibilityID)")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {

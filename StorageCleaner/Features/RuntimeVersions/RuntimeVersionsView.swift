@@ -40,6 +40,7 @@ struct RuntimeVersionsView: View {
         }
         .navigationTitle("Runtime Versions")
         .navigationSubtitle(subtitle)
+        .accessibilityIdentifier("runtime-versions-root")
         .toolbar { toolbarContent }
         .task { await load() }
         .sheet(isPresented: $showDeleteConfirmation) {

@@ -3,6 +3,7 @@ import SwiftUI
 struct AppShellView: View {
     @Bindable var viewModel: DashboardViewModel
     @State private var selection: SidebarItem? = .section(.overview)
+    @State private var detailPath = NavigationPath()
 
     var body: some View {
         NavigationSplitView {
@@ -12,7 +13,7 @@ struct AppShellView: View {
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } detail: {
-            NavigationStack {
+            NavigationStack(path: $detailPath) {
                 Group {
                     switch selection {
                     case .section(.overview), .none:
@@ -60,56 +61,11 @@ struct AppShellView: View {
                         InAppSettingsView()
                     }
                 }
-                .navigationDestination(item: $viewModel.selectedFinding) { finding in
-                    if finding.kind == .duplicatePhotos
-                        || finding.kind == .duplicateVideos
-                        || finding.kind == .duplicateDocuments {
-                        DuplicatesView(
-                            findings: [finding],
-                            onScan: { viewModel.startScan(for: DuplicateMediaFilter.all.kinds) },
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
-                        )
-                    } else if finding.kind == .dockerArtifacts {
-                        DockerView(onDockerChanged: {
-                            viewModel.startScan(for: [.dockerArtifacts])
-                        })
-                    } else if finding.kind == .cliApps {
-                        // Reuse the exact same CLI Programs view/discovery as the
-                        // sidebar, so tapping the Overview card shows identical results.
-                        CLIProgramsView(
-                            findings: [finding],
-                            emptyStateMessage: "Homebrew, version managers, global npm packages, "
-                                + "and standalone CLI tools you've installed.",
-                            onScan: { viewModel.startScan(for: [.cliApps]) },
-                            onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
-                        )
-                    } else if finding.kind == .runtimeVersions {
-                        // Reuse the grouped Runtime Versions experience for the Overview card.
-                        RuntimeVersionsView(
-                            onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
-                        )
-                    } else if AppSection.leftovers.filterKinds.contains(finding.kind) {
-                        // Reuse the exact same Leftovers view as the sidebar, so tapping either the
-                        // installer or APK Overview card shows the unified results.
-                        LeftoversView(
-                            findings: filteredFindings(for: AppSection.leftovers.filterKinds),
-                            onScan: { viewModel.startScan(for: AppSection.leftovers.filterKinds) },
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
-                        )
-                    } else {
-                        CategoryDetailView(
-                            finding: finding,
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
-                        )
-                    }
+                .navigationDestination(for: StorageFinding.self) { finding in
+                    findingDestination(for: finding)
                 }
             }
+            .id(detailNavigationID)
             .background {
                 ZStack {
                     AppTheme.appBackground
@@ -129,6 +85,21 @@ struct AppShellView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .tint(AppTheme.accent)
+        .onChange(of: selection) { _, _ in
+            resetDetailNavigation()
+        }
+        .onChange(of: viewModel.selectedFinding) { _, finding in
+            guard let finding else {
+                detailPath = NavigationPath()
+                return
+            }
+            route(to: finding)
+        }
+        .onChange(of: viewModel.phase.navigationIdentity) { oldValue, newValue in
+            if oldValue == "scanning", newValue != "scanning" {
+                resetDetailNavigation()
+            }
+        }
     }
 }
 
@@ -136,6 +107,10 @@ struct AppShellView: View {
 
 extension AppShellView {
     private var section: AppSection? { selection?.section }
+
+    private var detailNavigationID: String {
+        "\(section?.rawValue ?? "none").\(viewModel.phase.navigationIdentity)"
+    }
 
     @ViewBuilder
     private func developerStorageView() -> some View {
@@ -161,13 +136,14 @@ extension AppShellView {
         case .idle, .results, .empty:
             DeveloperStorageView(
                 findings: viewModel.snapshot?.findings ?? [],
-                onScan: { viewModel.startScan(for: kinds) },
+                onScan: {
+                    resetDetailNavigation()
+                    viewModel.startScan(for: kinds)
+                },
                 onDelete: { urls in
                     Task { await viewModel.deleteFiles(urls) }
                 },
-                onDockerChanged: {
-                    viewModel.startScan(for: [.dockerArtifacts])
-                }
+                onOpenFinding: openFinding
             )
         }
     }
@@ -340,5 +316,84 @@ extension AppShellView {
     private func filteredFindings(for kinds: [StorageFindingKind]) -> [StorageFinding] {
         guard !kinds.isEmpty else { return [] }
         return (viewModel.snapshot?.findings ?? []).filter { kinds.contains($0.kind) }
+    }
+
+    private func openFinding(_ finding: StorageFinding) {
+        route(to: finding)
+        viewModel.selectedFinding = finding
+    }
+
+    private func route(to finding: StorageFinding) {
+        detailPath = NavigationPath()
+        detailPath.append(finding)
+    }
+
+    private func resetDetailNavigation() {
+        detailPath = NavigationPath()
+        viewModel.selectedFinding = nil
+    }
+
+    @ViewBuilder
+    private func findingDestination(for finding: StorageFinding) -> some View {
+        if finding.kind == .duplicatePhotos
+            || finding.kind == .duplicateVideos
+            || finding.kind == .duplicateDocuments {
+            DuplicatesView(
+                findings: [finding],
+                onScan: { viewModel.startScan(for: DuplicateMediaFilter.all.kinds) },
+                onDelete: { urls in
+                    Task { await viewModel.deleteFiles(urls) }
+                }
+            )
+        } else if finding.kind == .dockerArtifacts {
+            DockerView(onDockerChanged: {
+                viewModel.startScan(for: [.dockerArtifacts])
+            })
+        } else if finding.kind == .cliApps {
+            // Reuse the exact same CLI Programs view/discovery as the
+            // sidebar, so tapping the Overview card shows identical results.
+            CLIProgramsView(
+                findings: [finding],
+                emptyStateMessage: "Homebrew, version managers, global npm packages, "
+                    + "and standalone CLI tools you've installed.",
+                onScan: { viewModel.startScan(for: [.cliApps]) },
+                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
+            )
+        } else if finding.kind == .runtimeVersions {
+            // Reuse the grouped Runtime Versions experience for the Overview card.
+            RuntimeVersionsView(
+                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
+            )
+        } else if AppSection.leftovers.filterKinds.contains(finding.kind) {
+            // Reuse the exact same Leftovers view as the sidebar, so tapping either the
+            // installer or APK Overview card shows the unified results.
+            LeftoversView(
+                findings: filteredFindings(for: AppSection.leftovers.filterKinds),
+                onScan: { viewModel.startScan(for: AppSection.leftovers.filterKinds) },
+                onDelete: { urls in
+                    Task { await viewModel.deleteFiles(urls) }
+                }
+            )
+        } else {
+            CategoryDetailView(
+                finding: finding,
+                onDelete: { urls in
+                    Task { await viewModel.deleteFiles(urls) }
+                }
+            )
+        }
+    }
+}
+
+private extension ScanPhase {
+    var navigationIdentity: String {
+        switch self {
+        case .idle: "idle"
+        case .scanning: "scanning"
+        case .results: "results"
+        case .empty: "empty"
+        case .permissionRequired: "permissionRequired"
+        case .failed: "failed"
+        }
     }
 }

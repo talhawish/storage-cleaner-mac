@@ -55,6 +55,7 @@ struct AppsView: View {
         }
         .navigationTitle("Applications")
         .navigationSubtitle("\(apps.count) apps installed")
+        .accessibilityIdentifier("applications-root")
         .toolbar {
             toolbarContent
         }

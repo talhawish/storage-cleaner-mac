@@ -118,10 +118,12 @@ struct DeleteConfirmationSheet: View {
                 Text(url.lastPathComponent)
                     .font(.callout.weight(.medium))
                     .lineLimit(1)
-                Text(url.deletingLastPathComponent().lastPathComponent)
+                Text(url.standardizedFileURL.path)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .help(url.standardizedFileURL.path)
             }
 
             Spacer()

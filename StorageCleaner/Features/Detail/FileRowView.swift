@@ -68,6 +68,7 @@ struct FileRowView: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(pathDisplayMode == .fullPath ? 2 : 1)
                         .truncationMode(.middle)
+                        .help(pathDescription)
                 }
             }
 
@@ -174,21 +175,26 @@ struct FileRowView: View {
     }
 
     private var parentDirectoryName: String {
+        if pathDisplayMode == .fullPath {
+            return pathDescription
+        }
+
         if let parentDisplayName = currentMetadata.parentDisplayName {
             return parentDisplayName
         }
 
         let parent = url.deletingLastPathComponent()
-        if pathDisplayMode == .fullPath {
-            return parent.path
-        }
-
         let name = parent.lastPathComponent
         return name.isEmpty ? parent.path : name
     }
 
+    private var pathDescription: String {
+        url.standardizedFileURL.path
+    }
+
     private var accessibilityDescription: String {
         var parts = [displayName]
+        parts.append(pathDescription)
         if currentMetadata.exists {
             if let bytes = loadedBytes {
                 parts.append(StorageFormatting.bytes(bytes))

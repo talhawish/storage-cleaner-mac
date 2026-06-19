@@ -49,6 +49,7 @@ struct DuplicatesView: View {
             }
         }
         .navigationTitle("Duplicates")
+        .accessibilityIdentifier("duplicates-root")
         .sheet(isPresented: previewPresented) {
             if let previewURL {
                 MediaPreviewSheet(url: previewURL)

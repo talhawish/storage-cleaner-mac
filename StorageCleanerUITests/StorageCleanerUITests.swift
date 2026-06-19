@@ -46,6 +46,57 @@ final class StorageCleanerUITests: XCTestCase {
     }
 
     @MainActor
+    func testSidebarPagesOpenWithoutUnexpectedDetailPushes() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+        startScanAndWaitForResults(in: app)
+
+        let pages = [
+            ("overview", "dashboard-results"),
+            ("projectActivity", "project-activity-root"),
+            ("apps", "applications-root"),
+            ("developerStorage", "developer-storage-root"),
+            ("runtimeVersions", "runtime-versions-root"),
+            ("simulatorsEmulators", "simulators-emulators-root"),
+            ("cliPrograms", "cli-programs-root"),
+            ("largeFiles", "large-files-root"),
+            ("leftovers", "leftovers-root"),
+            ("screenshotsAndRecordings", "media-category-screenshots-recordings"),
+            ("duplicates", "duplicates-root"),
+            ("cleanupHistory", "cleanup-history-root"),
+            ("settings", "settings-root")
+        ]
+
+        for (sidebarID, rootID) in pages {
+            let row = app.descendants(matching: .any)["sidebar-\(sidebarID)"]
+            XCTAssertTrue(row.waitForExistence(timeout: 4), "Missing sidebar row \(sidebarID)")
+            row.click()
+
+            let root = app.descendants(matching: .any)[rootID]
+            XCTAssertTrue(root.waitForExistence(timeout: 4), "Expected root \(rootID) after opening \(sidebarID)")
+        }
+
+        app.descendants(matching: .any)["sidebar-developerStorage"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["developer-storage-root"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.descendants(matching: .any)["category-detail-xcodeArtifacts"].exists)
+    }
+
+    @MainActor
+    func testDeveloperStorageRescanFinishesOnRoot() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+        startScanAndWaitForResults(in: app)
+
+        app.descendants(matching: .any)["sidebar-developerStorage"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["developer-storage-root"].waitForExistence(timeout: 4))
+
+        let scanButton = app.buttons["developer-storage-scan-button"]
+        XCTAssertTrue(scanButton.waitForExistence(timeout: 4))
+        scanButton.click()
+
+        XCTAssertTrue(app.descendants(matching: .any)["developer-storage-root"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.descendants(matching: .any)["category-detail-xcodeArtifacts"].exists)
+    }
+
+    @MainActor
     private func launchApp(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--use-demo-scanner"] + extraArguments
@@ -66,5 +117,15 @@ final class StorageCleanerUITests: XCTestCase {
         }
 
         XCTAssertTrue(progressTitle.waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    private func startScanAndWaitForResults(in app: XCUIApplication) {
+        let scanButton = app.buttons["primary-scan-button"]
+        XCTAssertTrue(scanButton.waitForExistence(timeout: 3))
+        scanButton.click()
+
+        let results = app.descendants(matching: .any)["dashboard-results"]
+        XCTAssertTrue(results.waitForExistence(timeout: 12))
     }
 }

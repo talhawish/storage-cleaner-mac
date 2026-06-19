@@ -39,6 +39,7 @@ struct InAppSettingsView: View {
         }
         .background(AppTheme.appBackground)
         .navigationTitle("Settings")
+        .accessibilityIdentifier("settings-root")
     }
 
     private var appearanceSection: some View {

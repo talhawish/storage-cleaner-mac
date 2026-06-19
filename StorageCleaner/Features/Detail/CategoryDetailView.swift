@@ -77,6 +77,7 @@ struct CategoryDetailView: View {
         }
         .navigationTitle(finding.kind.title)
         .navigationSubtitle(finding.kind.summary)
+        .accessibilityIdentifier("category-detail-\(finding.kind.rawValue)")
         .toolbar {
             toolbarContent
         }
@@ -287,6 +288,7 @@ struct CategoryDetailView: View {
                 FileRowView(
                     url: url,
                     isSelected: selectedURLs.contains(url),
+                    pathDisplayMode: .fullPath,
                     metadata: fileMetadata[url],
                     canOpen: childLevels[url] != nil,
                     onToggle: { toggle(url) },

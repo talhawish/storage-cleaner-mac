@@ -21,6 +21,7 @@ struct CleanupHistoryView: View {
             }
         }
         .navigationTitle("Cleanup History")
+        .accessibilityIdentifier("cleanup-history-root")
     }
 
     private var historyList: some View {

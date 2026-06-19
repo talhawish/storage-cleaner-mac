@@ -4,7 +4,7 @@ struct DeveloperStorageView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
-    var onDockerChanged: () -> Void = {}
+    let onOpenFinding: (StorageFinding) -> Void
     @State private var selectedDomain: StorageDomain?
 
     private var allDeveloperFindings: [StorageFinding] {
@@ -55,10 +55,12 @@ struct DeveloperStorageView: View {
                 Button(action: onScan) {
                     Label("Scan Now", systemImage: "sparkle.magnifyingglass")
                 }
+                .accessibilityIdentifier("developer-storage-scan-button")
                 .keyboardShortcut("r", modifiers: [.command])
                 .help("Scan developer storage locations again")
             }
         }
+        .accessibilityIdentifier("developer-storage-root")
     }
 
     private var developerList: some View {
@@ -84,15 +86,13 @@ struct DeveloperStorageView: View {
 
             Section {
                 ForEach(developerFindings) { finding in
-                    NavigationLink {
-                        if finding.kind == .dockerArtifacts {
-                            DockerView(onDockerChanged: onDockerChanged)
-                        } else {
-                            CategoryDetailView(finding: finding, onDelete: onDelete)
-                        }
+                    Button {
+                        onOpenFinding(finding)
                     } label: {
                         DeveloperStorageRow(finding: finding)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(rowAccessibilityLabel(for: finding))
                 }
             } header: {
                 SectionHeader(
@@ -106,6 +106,11 @@ struct DeveloperStorageView: View {
             }
         }
         .listStyle(.inset(alternatesRowBackgrounds: true))
+    }
+
+    private func rowAccessibilityLabel(for finding: StorageFinding) -> String {
+        "\(finding.kind.title), \(StorageFormatting.bytes(finding.bytes)), "
+            + "\(StorageFormatting.items(finding.itemCount))"
     }
 }
 
@@ -260,5 +265,6 @@ struct DeveloperStorageRow: View {
                 .accessibilityHidden(true)
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }

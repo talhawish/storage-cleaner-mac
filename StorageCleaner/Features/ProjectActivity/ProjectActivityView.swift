@@ -24,6 +24,7 @@ struct ProjectActivityView: View {
         }
         .navigationTitle("Project Activity")
         .navigationSubtitle(subtitleText)
+        .accessibilityIdentifier("project-activity-root")
         .toolbar { scanToolbarItem }
         .onChange(of: inactivityThreshold, initial: true) { _, newValue in
             viewModel.inactivityThreshold = newValue

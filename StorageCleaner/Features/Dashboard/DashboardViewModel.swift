@@ -90,6 +90,7 @@ final class DashboardViewModel {
     private func startScan(kinds: [StorageFindingKind]?) {
         guard !isScanning else { return }
         pendingScanKinds = kinds.map(Set.init)
+        selectedFinding = nil
 
         permissionStatuses = permissionHandler.currentStatuses()
 

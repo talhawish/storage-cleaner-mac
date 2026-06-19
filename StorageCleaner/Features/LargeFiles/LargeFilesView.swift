@@ -66,6 +66,7 @@ struct LargeFilesView: View {
         }
         .navigationTitle("Large Files")
         .navigationSubtitle("\(largeFileRecords.count) items · \(StorageFormatting.bytes(totalBytes))")
+        .accessibilityIdentifier("large-files-root")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {

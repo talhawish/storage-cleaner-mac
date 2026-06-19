@@ -57,6 +57,7 @@ struct LeftoversView: View {
         }
         .navigationTitle("Leftovers")
         .navigationSubtitle("\(filteredRecords.count) items · \(StorageFormatting.bytes(totalBytes))")
+        .accessibilityIdentifier("leftovers-root")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {
