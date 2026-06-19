@@ -252,6 +252,12 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertEqual(finding?.itemCount, 1)
     }
 
+}
+
+/// Duplicate-group delete/prune behavior. Split into its own class so each test type stays under
+/// SwiftLint's `type_body_length` limit; the file-scoped stubs below are shared.
+@MainActor
+final class DashboardViewModelDuplicatePruneTests: XCTestCase {
     func testDeleteCollapsesDuplicateGroupWhenOnlyOneCopyRemains() async {
         let keep = URL(filePath: "/tmp/keep.png")
         let dupe = URL(filePath: "/tmp/dupe.png")

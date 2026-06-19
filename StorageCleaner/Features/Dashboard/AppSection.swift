@@ -24,6 +24,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case apps
     case developerStorage
     case runtimeVersions
+    case simulatorsEmulators
     case largeFiles
     case cliPrograms
     case screenshotsAndRecordings
@@ -40,6 +41,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .apps: "Applications"
         case .developerStorage: "Developer Storage"
         case .runtimeVersions: "Runtime Versions"
+        case .simulatorsEmulators: "Simulators & Emulators"
         case .largeFiles: "Large Files"
         case .cliPrograms: "CLI Programs & Toolchains"
         case .screenshotsAndRecordings: "Screenshots & Recordings"
@@ -56,6 +58,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .apps: "app.badge.fill"
         case .developerStorage: "chevron.left.forwardslash.chevron.right"
         case .runtimeVersions: "square.stack.3d.up.fill"
+        case .simulatorsEmulators: "iphone.gen3"
         case .largeFiles: "doc.badge.ellipsis"
         case .cliPrograms: "terminal.fill"
         case .screenshotsAndRecordings: "camera.viewfinder"

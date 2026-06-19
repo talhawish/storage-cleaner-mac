@@ -6,44 +6,42 @@ struct DashboardView: View {
     private var reduceMotion
     @State private var showQuickClean = false
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 260, maximum: 420), spacing: AppTheme.contentSpacing)
-    ]
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
-                header
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
+                    header
 
-                switch viewModel.phase {
-                case .idle:
-                    WelcomeHeroView(startScan: viewModel.startScan)
-                    quickCleanCard
-                    TrustStripView()
-                case .scanning:
-                    ScanProgressView(viewModel: viewModel)
-                case .results:
-                    results
-                case .empty:
-                    AnimatedEmptyState(
-                        title: "Your developer storage is tidy",
-                        message: "No re-creatable developer files were found in the selected locations.",
-                        actionTitle: "Scan Again",
-                        action: viewModel.startScan
-                    )
-                    .frame(minHeight: 430)
-                case .permissionRequired:
-                    PermissionRequiredView(
-                        blockedPermissions: viewModel.blockedPermissions,
-                        onOpenSettings: viewModel.openSystemSettings,
-                        onRetry: viewModel.retryAfterPermission
-                    )
-                case let .failed(message):
-                    ErrorStateView(message: message, retry: viewModel.startScan)
+                    switch viewModel.phase {
+                    case .idle:
+                        WelcomeHeroView(startScan: viewModel.startScan)
+                        quickCleanCard
+                        TrustStripView()
+                    case .scanning:
+                        ScanProgressView(viewModel: viewModel)
+                    case .results:
+                        results(scrollProxy: proxy)
+                    case .empty:
+                        AnimatedEmptyState(
+                            title: "Your developer storage is tidy",
+                            message: "No re-creatable developer files were found in the selected locations.",
+                            actionTitle: "Scan Again",
+                            action: viewModel.startScan
+                        )
+                        .frame(minHeight: 430)
+                    case .permissionRequired:
+                        PermissionRequiredView(
+                            blockedPermissions: viewModel.blockedPermissions,
+                            onOpenSettings: viewModel.openSystemSettings,
+                            onRetry: viewModel.retryAfterPermission
+                        )
+                    case let .failed(message):
+                        ErrorStateView(message: message, retry: viewModel.startScan)
+                    }
                 }
+                .padding(28)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.42), value: viewModel.phase)
             }
-            .padding(28)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.42), value: viewModel.phase)
         }
         .navigationTitle("Overview")
         .toolbar {
@@ -135,26 +133,44 @@ struct DashboardView: View {
         .accessibilityHint("Opens Quick Clean to scan and remove safe files")
     }
 
-    @ViewBuilder private var results: some View {
+    @ViewBuilder
+    private func results(scrollProxy: ScrollViewProxy) -> some View {
         if let snapshot = viewModel.snapshot {
-            ScanSummaryView(snapshot: snapshot, startScan: viewModel.startScan)
+            OverviewSummaryBar(
+                snapshot: snapshot,
+                safeBytes: viewModel.safeReclaimableBytes,
+                reviewBytes: viewModel.reviewReclaimableBytes,
+                startScan: viewModel.startScan,
+                quickClean: { showQuickClean = true }
+            )
 
-            HStack {
-                Text("Detected storage candidates")
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                Text("\(snapshot.findings.count) detection types")
-                    .foregroundStyle(.secondary)
-            }
-
-            LazyVGrid(columns: columns, spacing: AppTheme.contentSpacing) {
-                ForEach(snapshot.findings) { finding in
-                    StorageCategoryCard(
-                        finding: finding,
-                        onNavigate: { viewModel.selectedFinding = $0 }
-                    )
+            if !viewModel.domainTiles.isEmpty {
+                SpaceBreakdownGrid(tiles: viewModel.domainTiles) { domain in
+                    withAnimation(reduceMotion ? nil : .snappy) {
+                        scrollProxy.scrollTo(domain, anchor: .top)
+                    }
                 }
             }
+
+            OverviewTipsCarousel(tips: viewModel.overviewTips, onAction: handleTip)
+
+            VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
+                ForEach(viewModel.domainGroups) { usage in
+                    DetectionGroupSection(usage: usage) { viewModel.selectedFinding = $0 }
+                        .id(usage.domain)
+                }
+            }
+        }
+    }
+
+    private func handleTip(_ tip: OverviewTip) {
+        switch tip.action {
+        case .quickClean:
+            showQuickClean = true
+        case let .reveal(kind):
+            viewModel.selectedFinding = viewModel.finding(for: kind)
+        case .none:
+            break
         }
     }
 

@@ -18,6 +18,9 @@ screenshots, loose APKs, browser caches, Trash, local AI models, and other devel
 - Permission status service for common storage locations
 - Typed detection taxonomy for developer artifacts, media, photos, screenshots, packages, browser caches, and Trash
 - Per-category scanning loaders with pending, scanning, completed, and skipped states
+- Overview that opens with a "where your space is going" breakdown grid (storage rolled up by domain
+  with share bars), actionable tips (biggest quick win, safe-vs-review split, stale caches), and the
+  detection types as compact rows grouped by domain
 - Reusable design-system components
 - Loading, empty, error, and populated states
 - VoiceOver labels, keyboard shortcuts, reduced-motion support, and semantic controls
@@ -209,6 +212,10 @@ The live scanner currently inspects these storage candidate types:
 - Duplicate runtime versions: multiple installed versions of the same language runtime (Node via
   nvm/Volta/fnm, Python via pyenv, Ruby via rbenv/RVM, Rust via rustup, plus Homebrew versioned
   formulae like `php@8.1`/`php@8.2`, asdf, SDKMAN, and system JDKs) — keep the newest, reclaim the rest
+- Simulators & emulators: iOS/Apple simulator runtimes (often 8+ GB each) and Android system images by
+  API level — view every installed OS image with its size and remove the ones you don't need. Apple
+  runtimes are removed with `xcrun simctl runtime delete` (re-downloadable); Android images move to the
+  Trash (restorable)
 - Junk files: temporary files, logs, crash reports, disposable archives, and old disk images
 - Trash: files already moved to Trash but still occupying disk space
 

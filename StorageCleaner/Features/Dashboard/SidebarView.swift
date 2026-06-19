@@ -21,6 +21,7 @@ struct SidebarView: View {
                     SidebarDomainRow(domain: domain)
                 }
                 SidebarRow(section: .runtimeVersions)
+                SidebarRow(section: .simulatorsEmulators)
                 SidebarRow(section: .cliPrograms)
             }
 

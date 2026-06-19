@@ -5,6 +5,7 @@ struct DeveloperStorageView: View {
     /// When set, only findings in this domain are shown (used by the dynamic per-domain sidebar
     /// rows). `nil` shows the full developer overview.
     var domainFilter: StorageDomain?
+    let onScan: () -> Void
     let onDelete: ([URL]) -> Void
 
     private var developerFindings: [StorageFinding] {
@@ -30,7 +31,9 @@ struct DeveloperStorageView: View {
                 AnimatedEmptyState(
                     title: title,
                     message: "Run a scan to discover developer storage artifacts.",
-                    systemImage: symbolName
+                    actionTitle: "Scan Now",
+                    systemImage: symbolName,
+                    action: onScan
                 )
             } else {
                 developerList
@@ -38,6 +41,15 @@ struct DeveloperStorageView: View {
         }
         .navigationTitle(title)
         .navigationSubtitle("\(developerFindings.count) categories, \(StorageFormatting.bytes(totalSize))")
+        .toolbar {
+            ToolbarItem {
+                Button(action: onScan) {
+                    Label("Scan Now", systemImage: "sparkle.magnifyingglass")
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+                .help("Scan developer storage locations again")
+            }
+        }
     }
 
     private var developerList: some View {
@@ -103,6 +115,7 @@ struct DeveloperStorageRow: View {
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 4)
     }

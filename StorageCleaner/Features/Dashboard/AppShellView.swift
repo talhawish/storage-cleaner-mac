@@ -25,24 +25,15 @@ struct AppShellView: View {
                     case .section(.projectActivity):
                         ProjectActivityView()
                     case .section(.developerStorage):
-                        DeveloperStorageView(
-                            findings: viewModel.snapshot?.findings ?? [],
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
-                        )
+                        developerStorageView()
                     case let .developerDomain(domain):
-                        DeveloperStorageView(
-                            findings: viewModel.snapshot?.findings ?? [],
-                            domainFilter: domain,
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
-                        )
+                        developerStorageView(domainFilter: domain)
                     case .section(.runtimeVersions):
                         RuntimeVersionsView(
                             onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
                         )
+                    case .section(.simulatorsEmulators):
+                        EmulatorsView()
                     case .section(.largeFiles):
                         largeFilesView(
                             kinds: section?.filterKinds ?? []
@@ -131,8 +122,45 @@ struct AppShellView: View {
             InAppSettingsView()
         }
     }
+}
 
+// MARK: - Section view builders
+
+extension AppShellView {
     private var section: AppSection? { selection?.section }
+
+    @ViewBuilder
+    private func developerStorageView(domainFilter: StorageDomain? = nil) -> some View {
+        let kinds = DeveloperDomains.kinds
+        switch viewModel.phase {
+        case .scanning:
+            ScanProgressView(
+                viewModel: viewModel,
+                title: "Scanning Developer Storage",
+                subtitle: "Only developer storage locations are being scanned."
+            )
+            .padding(28)
+        case .permissionRequired:
+            PermissionRequiredView(
+                blockedPermissions: viewModel.blockedPermissions,
+                onOpenSettings: viewModel.openSystemSettings,
+                onRetry: viewModel.retryAfterPermission
+            )
+            .padding(28)
+        case let .failed(message):
+            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
+                .padding(28)
+        case .idle, .results, .empty:
+            DeveloperStorageView(
+                findings: viewModel.snapshot?.findings ?? [],
+                domainFilter: domainFilter,
+                onScan: { viewModel.startScan(for: kinds) },
+                onDelete: { urls in
+                    Task { await viewModel.deleteFiles(urls) }
+                }
+            )
+        }
+    }
 
     @ViewBuilder
     private func largeFilesView(kinds: [StorageFindingKind]) -> some View {

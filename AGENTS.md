@@ -106,6 +106,11 @@ Mirror it with a test under `StorageCleanerTests/`.
 * **Runtime versions.** `RuntimeVersionCatalog` (data-driven descriptors) detects runtimes with 2+
   installed versions — new tools are added by extending its descriptor lists. Removal reuses
   `CLIRemovalService` (`brew uninstall` for Homebrew kegs, Trash for everything else).
+* **Simulators & emulators.** `EmulatorManagementService` (injected side effects, like
+  `CLIRemovalService`) discovers iOS/Apple simulator runtimes via `xcrun simctl runtime list -j` and
+  Android system images on disk, and removes them per platform: `xcrun simctl runtime delete`
+  (re-downloadable) for Apple, Trash for Android. The screen (`Features/Emulators/`) is self-contained
+  with live discovery like `AppsView`; nothing is pre-selected for removal.
 * **Persistence** (`SwiftData`: `StoredScan`/`StoredFinding`/`StoredCleanupAction`) is wired via
   `PersistenceController.shared` on the `WindowGroup`.
 
