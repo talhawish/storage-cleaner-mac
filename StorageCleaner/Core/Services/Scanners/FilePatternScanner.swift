@@ -9,6 +9,7 @@ struct FilePatternScanner: StorageCategoryScanning {
     private let collector: FileSystemCollector
     private let matcher: @Sendable (URL) -> Bool
     private let builder: CandidateFindingBuilder
+    private let prioritizeLargest: Bool
 
     init(
         kind: StorageFindingKind,
@@ -16,6 +17,7 @@ struct FilePatternScanner: StorageCategoryScanning {
         roots: [URL],
         safety: CleanupSafety,
         collector: FileSystemCollector,
+        prioritizeLargest: Bool = false,
         matcher: @escaping @Sendable (URL) -> Bool,
         builder: CandidateFindingBuilder = CandidateFindingBuilder()
     ) {
@@ -25,12 +27,13 @@ struct FilePatternScanner: StorageCategoryScanning {
         self.roots = roots
         self.safety = safety
         self.collector = collector
+        self.prioritizeLargest = prioritizeLargest
         self.matcher = matcher
         self.builder = builder
     }
 
     func scan() async -> CategoryScanResult {
-        let result = collector.collectFiles(at: roots, matching: matcher)
+        let result = collector.collectFiles(at: roots, matching: matcher, prioritizeLargest: prioritizeLargest)
         let finding = builder.makeFinding(
             kind: kind,
             domain: domain,

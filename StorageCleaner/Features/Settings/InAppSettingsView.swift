@@ -5,14 +5,13 @@ struct InAppSettingsView: View {
     private var includeExternalVolumes = false
     @AppStorage("showReviewItems")
     private var showReviewItems = true
-    @AppStorage("largeFileThresholdMB")
-    private var largeFileThresholdMB = 100
+    @AppStorage(LargeFileThreshold.storageKey)
+    private var largeFileThresholdMB = LargeFileThreshold.defaultMegabytes
     @AppStorage("appearanceMode")
     private var appearanceMode: AppearanceMode = .system
     @AppStorage("inactivityThreshold")
     private var inactivityThreshold: InactivityThreshold = .oneMonth
 
-    private let thresholdOptions = [10, 50, 100, 500, 1000, 5000]
     private let columns = [
         GridItem(.adaptive(minimum: 340, maximum: 520), spacing: AppTheme.Spacing.large, alignment: .top)
     ]
@@ -145,10 +144,10 @@ struct InAppSettingsView: View {
                         .font(.subheadline.weight(.semibold))
 
                     Picker("Large file threshold", selection: $largeFileThresholdMB) {
-                        ForEach(thresholdOptions, id: \.self) { value in
-                            Text(StorageFormatting.bytes(Int64(value) * 1_000_000))
-                                .tag(value)
-                                .accessibilityIdentifier("large-file-threshold-\(value)")
+                        ForEach(LargeFileThreshold.allCases) { threshold in
+                            Text(threshold.label)
+                                .tag(threshold.megabytes)
+                                .accessibilityIdentifier("large-file-threshold-\(threshold.megabytes)")
                         }
                     }
                     .pickerStyle(.segmented)
@@ -232,7 +231,7 @@ struct InAppSettingsView: View {
     }
 
     private var thresholdLabel: String {
-        StorageFormatting.bytes(Int64(largeFileThresholdMB) * 1_000_000)
+        (LargeFileThreshold(rawValue: largeFileThresholdMB) ?? .hundredMB).label
     }
 }
 

@@ -8,6 +8,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
     case artificialIntelligence
     case media
     case photos
+    case documents
     case screenshots
     case browserData
     case trash
@@ -26,6 +27,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
         case .artificialIntelligence: "AI & Machine Learning"
         case .media: "Large Media"
         case .photos: "Photos"
+        case .documents: "Documents"
         case .screenshots: "Screenshots"
         case .browserData: "Browser Data"
         case .trash: "Trash"
@@ -44,6 +46,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
         case .artificialIntelligence: "sparkles"
         case .media: "video.fill"
         case .photos: "photo.stack.fill"
+        case .documents: "doc.on.doc.fill"
         case .screenshots: "camera.viewfinder"
         case .browserData: "safari.fill"
         case .trash: "trash.fill"
@@ -62,6 +65,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
         case .artificialIntelligence: .orange
         case .media: .pink
         case .photos: .rose
+        case .documents: .cyan
         case .screenshots: .indigo
         case .browserData: .teal
         case .trash: .gray

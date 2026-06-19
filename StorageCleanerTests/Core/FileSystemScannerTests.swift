@@ -184,6 +184,58 @@ final class FileSystemScannerTests: XCTestCase {
         XCTAssertEqual(paths, [installer.standardizedFileURL])
     }
 
+    func testLargeFileScannerDefaultFloorSurfacesDocumentsOverTenMegabytes() async throws {
+        let downloads = temporaryDirectory.appending(path: "Downloads", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+
+        let largeDocuments = [
+            downloads.appending(path: "report.pdf"),
+            downloads.appending(path: "export.csv"),
+            downloads.appending(path: "proposal.docx")
+        ]
+        let smallDocument = downloads.appending(path: "notes.pdf")
+
+        for url in largeDocuments {
+            try Data(repeating: 7, count: 10_500_000).write(to: url)
+        }
+        try Data(repeating: 7, count: 2_000_000).write(to: smallDocument)
+
+        // No explicit minimumBytes -> uses the 10 MB collection floor.
+        let scanner = LargeFileScanner(roots: [downloads], collector: FileSystemCollector())
+
+        let result = await scanner.scan()
+        let paths = result.finding?.filePaths.map(\.standardizedFileURL) ?? []
+
+        XCTAssertEqual(result.finding?.kind, .largeFiles)
+        XCTAssertEqual(Set(paths), Set(largeDocuments.map(\.standardizedFileURL)))
+        XCTAssertFalse(paths.contains(smallDocument.standardizedFileURL))
+    }
+
+    func testCollectFilesPrioritizingLargestRetainsBiggestWhenCapped() throws {
+        let root = temporaryDirectory.appending(path: "Bulk", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        // Distinct, block-aligned sizes so allocated-size ordering is unambiguous.
+        let bySize = try (1...5).reduce(into: [Int: URL]()) { result, multiple in
+            let url = root.appending(path: "file-\(multiple).bin")
+            try Data(repeating: UInt8(multiple), count: multiple * 40_000).write(to: url)
+            result[multiple] = url
+        }
+
+        let collected = FileSystemCollector().collectFiles(
+            at: [root],
+            matching: { _ in true },
+            limit: 2,
+            prioritizeLargest: true
+        )
+        let urls = Set(collected.candidates.map(\.url.standardizedFileURL))
+
+        XCTAssertEqual(collected.candidates.count, 2)
+        // The two largest (4x and 5x) must survive regardless of enumeration order.
+        XCTAssertEqual(urls, Set([bySize[4], bySize[5]].compactMap { $0?.standardizedFileURL }))
+        XCTAssertEqual(collected.inspectedItemCount, 5)
+    }
+
     func testCleanupServiceMovesItemsToTrash() async throws {
         let file = temporaryDirectory.appending(path: "delete-me.txt")
         try Data(repeating: 9, count: 4_096).write(to: file)

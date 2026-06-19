@@ -190,10 +190,30 @@ enum DependencyPaths {
     enum Media {
         static let imageExtensions: Set<String> = [
             "png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif",
-            "webp", "heic", "heif", "raw", "dng", "svg"
+            "webp", "heic", "heif", "raw", "dng"
         ]
         static let videoExtensions: Set<String> = [
             "mov", "mp4", "m4v", "avi", "mkv", "webm"
+        ]
+    }
+
+    // MARK: - Document & Archive Roots
+
+    /// File types surfaced by duplicate-document detection: office documents, spreadsheets,
+    /// presentations, vector/markup files, e-books, and the common compressed-archive formats.
+    /// `svg` lives here (not under `Media`) so vector exports are classified as documents.
+    enum Documents {
+        static let documentExtensions: Set<String> = [
+            // Documents
+            "pdf", "doc", "docx", "rtf", "rtfd", "pages", "odt", "epub", "txt", "md",
+            // Spreadsheets
+            "csv", "tsv", "xls", "xlsx", "numbers", "ods",
+            // Presentations
+            "ppt", "pptx", "key", "odp",
+            // Vector & markup
+            "svg",
+            // Compressed archives
+            "zip", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz", "zst", "7z", "rar"
         ]
     }
 

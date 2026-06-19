@@ -321,6 +321,32 @@ struct DuplicateVideoScanner: StorageCategoryScanning {
     }
 }
 
+struct DuplicateDocumentScanner: StorageCategoryScanning {
+    let kind: StorageFindingKind = .duplicateDocuments
+    let title = StorageFindingKind.duplicateDocuments.title
+    private let scanner: DuplicateMediaScanner
+
+    init(collector: FileSystemCollector) {
+        let documentRoots = [
+            DependencyPaths.home("Documents"),
+            DependencyPaths.home("Downloads"),
+            DependencyPaths.home("Desktop")
+        ]
+        scanner = DuplicateMediaScanner(
+            kind: .duplicateDocuments,
+            domain: .documents,
+            roots: documentRoots,
+            extensions: DependencyPaths.Documents.documentExtensions,
+            minimumBytes: 50_000,
+            collector: collector
+        )
+    }
+
+    func scan() async -> CategoryScanResult {
+        await scanner.scan()
+    }
+}
+
 struct JunkFileScanner: StorageCategoryScanning {
     let kind: StorageFindingKind = .junkFiles
     let title = StorageFindingKind.junkFiles.title

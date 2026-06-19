@@ -43,7 +43,7 @@ struct DuplicateGroupCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: AppTheme.Spacing.medium) {
-            Image(systemName: group.isVideo ? "film.stack.fill" : "photo.stack.fill")
+            Image(systemName: group.contentKind.stackSymbol)
                 .font(.system(size: AppTheme.IconSize.sub))
                 .foregroundStyle(AppTheme.indigo)
                 .accessibilityHidden(true)

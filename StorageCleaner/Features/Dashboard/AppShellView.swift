@@ -57,7 +57,9 @@ struct AppShellView: View {
                     }
                 }
                 .navigationDestination(item: $viewModel.selectedFinding) { finding in
-                    if finding.kind == .duplicatePhotos || finding.kind == .duplicateVideos {
+                    if finding.kind == .duplicatePhotos
+                        || finding.kind == .duplicateVideos
+                        || finding.kind == .duplicateDocuments {
                         DuplicatesView(
                             findings: [finding],
                             onScan: { viewModel.startScan(for: DuplicateMediaFilter.all.kinds) },

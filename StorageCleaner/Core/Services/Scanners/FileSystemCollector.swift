@@ -27,12 +27,20 @@ struct FileSystemCollector: Sendable {
         return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
     }
 
+    /// Collects regular files under `roots` that satisfy `matcher`, capping results at `limit`.
+    ///
+    /// When `prioritizeLargest` is `false` (the default) traversal stops at the first `limit`
+    /// matches. When `true`, traversal continues and retains the `limit` *largest* candidates by
+    /// byte size — so lowering a size floor can never silently drop the biggest files in favor of
+    /// whichever happened to be enumerated first.
     func collectFiles(
         at roots: [URL],
         matching matcher: @Sendable (URL) -> Bool,
-        limit: Int = 2_000
+        limit: Int = 2_000,
+        prioritizeLargest: Bool = false
     ) -> FileCollectionResult {
         let fileManager = FileManager.default
+        let policy = CollectionPolicy(limit: limit, prioritizeLargest: prioritizeLargest)
         var candidates: [FileCandidate] = []
         var inspectedItemCount = 0
 
@@ -43,13 +51,19 @@ struct FileSystemCollector: Sendable {
             collectFiles(
                 at: root,
                 matching: matcher,
-                limit: limit,
+                policy: policy,
                 into: &candidates,
                 inspectedItemCount: &inspectedItemCount
             )
         }
 
         return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
+    }
+
+    /// How `collectFiles` caps and prioritizes its results.
+    private struct CollectionPolicy {
+        let limit: Int
+        let prioritizeLargest: Bool
     }
 
     /// Collects byte-identical duplicate groups under `roots`. Each returned group has 2+ copies
@@ -77,12 +91,12 @@ struct FileSystemCollector: Sendable {
     private func collectFiles(
         at root: URL,
         matching matcher: @Sendable (URL) -> Bool,
-        limit: Int,
+        policy: CollectionPolicy,
         into candidates: inout [FileCandidate],
         inspectedItemCount: inout Int
     ) {
         let fileManager = FileManager.default
-        guard candidates.count < limit else { return }
+        guard policy.prioritizeLargest || candidates.count < policy.limit else { return }
 
         guard let enumerator = fileManager.enumerator(
             at: root,
@@ -93,15 +107,36 @@ struct FileSystemCollector: Sendable {
         }
 
         for case let url as URL in enumerator {
-            guard candidates.count < limit, !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return }
+            guard policy.prioritizeLargest || candidates.count < policy.limit else { return }
             let values = try? url.resourceValues(forKeys: Self.sizeKeys)
             guard values?.isRegularFile == true else { continue }
             inspectedItemCount += 1
 
             guard matcher(url) else { continue }
 
-            candidates.append(FileCandidate(url: url, bytes: allocatedSize(from: values)))
+            let candidate = FileCandidate(url: url, bytes: allocatedSize(from: values))
+            if policy.prioritizeLargest {
+                retainLargest(candidate, in: &candidates, limit: policy.limit)
+            } else {
+                candidates.append(candidate)
+            }
         }
+    }
+
+    /// Inserts `candidate` while keeping at most `limit` of the largest candidates by byte size.
+    private func retainLargest(_ candidate: FileCandidate, in candidates: inout [FileCandidate], limit: Int) {
+        guard candidates.count >= limit else {
+            candidates.append(candidate)
+            return
+        }
+
+        guard let smallestIndex = candidates.indices.min(by: { candidates[$0].bytes < candidates[$1].bytes }),
+              candidates[smallestIndex].bytes < candidate.bytes else {
+            return
+        }
+
+        candidates[smallestIndex] = candidate
     }
 
     private func duplicateGroups(from files: [FileCandidate], minimumBytes: Int64) -> [DuplicateGroup] {

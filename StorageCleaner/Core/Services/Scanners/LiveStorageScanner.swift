@@ -196,6 +196,7 @@ extension LiveStorageScanner {
                 LargePhotoScanner(collector: collector),
                 DuplicatePhotoScanner(collector: collector),
                 DuplicateVideoScanner(collector: collector),
+                DuplicateDocumentScanner(collector: collector),
                 ScreenshotStorageScanner(collector: collector),
                 JunkFileScanner(collector: collector),
                 LeftoversScanner(collector: collector),

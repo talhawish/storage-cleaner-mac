@@ -1,7 +1,7 @@
 # Storage Cleaner for Developers
 
 A native macOS application that helps developers understand and safely reclaim storage used by build
-artifacts, package caches, simulators, containers, large videos, large photos, duplicate photos,
+artifacts, package caches, simulators, containers, large videos, large photos, duplicate photos, duplicate documents,
 screenshots, loose APKs, browser caches, Trash, local AI models, and other development tools.
 
 > The current scanner performs read-only filesystem inspection. It estimates candidate sizes and counts,
@@ -201,11 +201,19 @@ The live scanner currently inspects these storage candidate types:
 - Leftover installers: loose DMG, PKG, IPA, ISO, and other installer/package files left in
   Downloads, Desktop, and Documents long after the app they installed (surfaced regardless of size)
 - AI model caches: Ollama, LM Studio, HuggingFace, Stable Diffusion, and generated assets
+- Large files: any oversized file in Desktop, Downloads, Documents, Pictures, and Movies regardless of
+  type — documents (PDF, DOCX, CSV, spreadsheets, slides), datasets, archives, disk images, and more.
+  The scanner collects from a 10 MB floor; a single configurable threshold (shared between Settings and
+  the Large Files screen, default 100 MB) filters which sizes are shown, and the largest files are always
+  retained when results are capped
 - Large videos: screen recordings, simulator captures, exports, demos, and other oversized media
 - Screen recordings: macOS recordings, meeting captures, simulator demos, and tutorials
 - Large photos: RAW files, oversized edited exports, design assets, and heavy image formats
 - Duplicate photos: likely repeated imports, edited copies, and duplicate exports
 - Duplicate videos: likely repeated recordings, captures, and exported copies
+- Duplicate documents: byte-identical PDFs, spreadsheets (CSV/XLSX/Numbers), presentations,
+  vector exports (SVG), e-books, and compressed archives (ZIP, TAR, 7z, RAR) across Documents,
+  Downloads, and Desktop
 - Screenshots: desktop screenshots, simulator screenshots, and stale review captures
 - Browser caches: Safari, Chrome, Edge, Firefox, Arc, code caches, and temporary profile data
 - Package artifacts: Gradle, Maven, Composer, pip, Poetry, conda, Cargo, Go, NuGet, and Flutter caches

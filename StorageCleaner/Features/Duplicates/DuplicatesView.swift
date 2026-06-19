@@ -112,7 +112,8 @@ struct DuplicatesView: View {
     private var emptyState: some View {
         AnimatedEmptyState(
             title: "No Duplicates Found",
-            message: "Run a scan to detect byte-identical photos and videos across your media folders.",
+            message: "Run a scan to detect byte-identical photos, videos, and documents "
+                + "across your media, Documents, Downloads, and Desktop folders.",
             actionTitle: "Scan for Duplicates",
             systemImage: "square.on.square",
             action: onScan

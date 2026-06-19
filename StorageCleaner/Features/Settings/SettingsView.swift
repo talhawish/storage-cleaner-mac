@@ -5,12 +5,10 @@ struct SettingsView: View {
     private var includeExternalVolumes = false
     @AppStorage("showReviewItems")
     private var showReviewItems = true
-    @AppStorage("largeFileThresholdMB")
-    private var largeFileThresholdMB = 100
+    @AppStorage(LargeFileThreshold.storageKey)
+    private var largeFileThresholdMB = LargeFileThreshold.defaultMegabytes
     @AppStorage("inactivityThreshold")
     private var inactivityThreshold: InactivityThreshold = .oneMonth
-
-    private let thresholdOptions = [10, 50, 100, 500, 1000, 5000]
 
     var body: some View {
         Form {
@@ -18,8 +16,8 @@ struct SettingsView: View {
                 Toggle("Include connected external volumes", isOn: $includeExternalVolumes)
                 Toggle("Show items that require review", isOn: $showReviewItems)
                 Picker("Large file threshold", selection: $largeFileThresholdMB) {
-                    ForEach(thresholdOptions, id: \.self) { value in
-                        Text(StorageFormatting.bytes(Int64(value) * 1_000_000)).tag(value)
+                    ForEach(LargeFileThreshold.allCases) { threshold in
+                        Text(threshold.label).tag(threshold.megabytes)
                     }
                 }
             }

@@ -14,7 +14,7 @@ struct LargeFileScanner: StorageCategoryScanning {
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Pictures")
         ],
-        minimumBytes: Int64 = 100_000_000,
+        minimumBytes: Int64 = LargeFileThreshold.collectionFloor.bytes,
         safetyPolicy: LargeFileSafetyPolicy = LargeFileSafetyPolicy(),
         collector: FileSystemCollector
     ) {
@@ -24,7 +24,8 @@ struct LargeFileScanner: StorageCategoryScanning {
             domain: .otherCaches,
             roots: roots,
             safety: .review,
-            collector: collector
+            collector: collector,
+            prioritizeLargest: true
         ) { url in
             safetyPolicy.isReviewSafeCandidate(url)
                 && StorageFormatting.fileSize(at: url) >= minimumBytes

@@ -5,20 +5,14 @@ struct LargeFilesView: View {
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
 
-    @State private var thresholdBytes: Int64 = 100_000_000
+    @AppStorage(LargeFileThreshold.storageKey)
+    private var largeFileThresholdMB = LargeFileThreshold.defaultMegabytes
     @State private var locationFilter: LargeFileLocationFilter = .all
     @State private var selectedURLs: Set<URL> = []
     @State private var showDeleteConfirmation = false
     @State private var previewURL: URL?
 
-    private let thresholdOptions: [(String, Int64)] = [
-        ("10 MB", 10_000_000),
-        ("50 MB", 50_000_000),
-        ("100 MB", 100_000_000),
-        ("500 MB", 500_000_000),
-        ("1 GB", 1_000_000_000),
-        ("5 GB", 5_000_000_000)
-    ]
+    private var thresholdBytes: Int64 { Int64(largeFileThresholdMB) * 1_000_000 }
 
     private var largeFileRecords: [LargeFileRecord] {
         locationFilteredRecords
@@ -150,12 +144,15 @@ struct LargeFilesView: View {
 
     private var thresholdSection: some View {
         Section {
-            Picker("Minimum size", selection: $thresholdBytes) {
-                ForEach(thresholdOptions, id: \.1) { option in
-                    Text(option.0).tag(option.1)
+            Picker("Minimum size", selection: $largeFileThresholdMB) {
+                ForEach(LargeFileThreshold.allCases) { threshold in
+                    Text(threshold.label)
+                        .tag(threshold.megabytes)
+                        .accessibilityIdentifier("large-file-threshold-\(threshold.megabytes)")
                 }
             }
             .pickerStyle(.segmented)
+            .accessibilityIdentifier("large-file-threshold-picker")
         } header: {
             Text("Minimum size")
         }

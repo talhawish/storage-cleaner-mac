@@ -66,6 +66,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case largePhotos
     case duplicatePhotos
     case duplicateVideos
+    case duplicateDocuments
     case screenshots
     case browserCaches
     case pythonDependencies
@@ -96,6 +97,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .largePhotos: "Large photos"
         case .duplicatePhotos: "Duplicate photos"
         case .duplicateVideos: "Duplicate videos"
+        case .duplicateDocuments: "Duplicate documents"
         case .screenshots: "Screenshots"
         case .browserCaches: "Browser caches"
         case .pythonDependencies: "Python dependencies"
@@ -128,6 +130,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .largePhotos: "RAW photos, large edited exports, and oversized image assets"
         case .duplicatePhotos: "Likely duplicate photos and repeated edited exports"
         case .duplicateVideos: "Likely duplicate video exports, recordings, and repeated captures"
+        case .duplicateDocuments: "Likely duplicate PDFs, spreadsheets, archives, and repeated downloads"
         case .screenshots: "Desktop screenshots, simulator screenshots, and old review captures"
         case .browserCaches: "Safari, Chrome, Edge, Firefox, and Arc cache folders"
         case .pythonDependencies: "pip, Poetry, conda, pyenv, and virtual environment caches"

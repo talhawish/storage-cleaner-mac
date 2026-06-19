@@ -33,6 +33,7 @@
 * [ ] Duplicate image detection
 * [x] Duplicate photo detection
 * [x] Duplicate video detection
+* [x] Duplicate document & archive detection (PDF, CSV/XLSX, SVG, ZIP/TAR/7z, …)
 * [x] Screenshot detection
 * [x] Screen recording detection
 * [ ] Storage visualization

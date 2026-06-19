@@ -1,5 +1,32 @@
 import Foundation
 
+/// What a duplicate copy *is*, derived from its file extension. Drives the per-group header icon
+/// and the play badge shown on video thumbnails. Anything that isn't a known image or video
+/// extension is treated as a document (PDFs, spreadsheets, archives, vector exports, …).
+enum DuplicateContentKind: Sendable {
+    case image
+    case video
+    case document
+
+    /// Classifies a file extension. Order matters only in that video/image win over the
+    /// document fallback; the extension sets in `DependencyPaths` are mutually exclusive.
+    static func forExtension(_ pathExtension: String) -> DuplicateContentKind {
+        let ext = pathExtension.lowercased()
+        if DependencyPaths.Media.videoExtensions.contains(ext) { return .video }
+        if DependencyPaths.Media.imageExtensions.contains(ext) { return .image }
+        return .document
+    }
+
+    /// SF Symbol used for the "N identical copies" group header.
+    var stackSymbol: String {
+        switch self {
+        case .image: "photo.stack.fill"
+        case .video: "film.stack.fill"
+        case .document: "doc.on.doc.fill"
+        }
+    }
+}
+
 /// A single file that belongs to a duplicate group. Files in a group are byte-identical
 /// (same size and same SHA-256 content hash), so `bytes` is the same across the group.
 struct DuplicateFile: Identifiable, Equatable, Hashable, Sendable, Codable {
@@ -11,7 +38,8 @@ struct DuplicateFile: Identifiable, Equatable, Hashable, Sendable, Codable {
 
     var displayName: String { url.lastPathComponent }
     var parentName: String { url.deletingLastPathComponent().lastPathComponent }
-    var isVideo: Bool { DependencyPaths.Media.videoExtensions.contains(url.pathExtension.lowercased()) }
+    var contentKind: DuplicateContentKind { DuplicateContentKind.forExtension(url.pathExtension) }
+    var isVideo: Bool { contentKind == .video }
 }
 
 /// A set of two or more byte-identical files. Exactly one file is the recommended copy to
@@ -38,7 +66,10 @@ struct DuplicateGroup: Identifiable, Equatable, Hashable, Sendable, Codable {
     /// URLs of the copies that are safe to remove (everything except the kept one).
     var removableURLs: [URL] { files.map(\.url).filter { $0 != keepURL } }
 
-    var isVideo: Bool { files.first?.isVideo ?? false }
+    /// The kind of content in the group (all copies share an extension family in practice).
+    var contentKind: DuplicateContentKind { files.first?.contentKind ?? .document }
+
+    var isVideo: Bool { contentKind == .video }
 }
 
 /// Chooses which copy of a byte-identical duplicate group to keep. Because the files are
