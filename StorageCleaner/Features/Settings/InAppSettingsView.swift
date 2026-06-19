@@ -141,23 +141,25 @@ struct InAppSettingsView: View {
                 .toggleStyle(.switch)
 
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
-                    SettingToggleLabel(
-                        title: "Large file threshold",
-                        subtitle: "Only files at or above this size appear in Large Files.",
-                        icon: "doc.badge.ellipsis",
-                        color: AppTheme.orange
-                    )
+                    Text("Large file threshold")
+                        .font(.subheadline.weight(.semibold))
 
                     Picker("Large file threshold", selection: $largeFileThresholdMB) {
                         ForEach(thresholdOptions, id: \.self) { value in
-                            Text(StorageFormatting.bytes(Int64(value) * 1_000_000)).tag(value)
+                            Text(StorageFormatting.bytes(Int64(value) * 1_000_000))
+                                .tag(value)
+                                .accessibilityIdentifier("large-file-threshold-\(value)")
                         }
                     }
                     .pickerStyle(.segmented)
+                    .labelsHidden()
                     .accessibilityIdentifier("large-file-threshold-picker")
+
+                    Text("Only files at or above this size appear in Large Files.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(AppTheme.Spacing.medium)
-                .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 10))
                 .accessibilityElement(children: .contain)
             }
         }

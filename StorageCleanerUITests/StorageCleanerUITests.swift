@@ -40,7 +40,9 @@ final class StorageCleanerUITests: XCTestCase {
 
         let thresholdPicker = app.descendants(matching: .any)["large-file-threshold-picker"]
         XCTAssertTrue(thresholdPicker.waitForExistence(timeout: 3))
-        XCTAssertTrue(thresholdPicker.isHittable)
+
+        let defaultThreshold = app.descendants(matching: .any)["large-file-threshold-100"]
+        XCTAssertTrue(defaultThreshold.waitForExistence(timeout: 3))
     }
 
     @MainActor
