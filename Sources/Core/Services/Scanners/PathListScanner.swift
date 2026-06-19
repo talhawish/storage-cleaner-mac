@@ -27,18 +27,18 @@ struct PathListScanner: StorageCategoryScanning {
     }
 
     func scan() async -> CategoryScanResult {
-        let candidates = collector.collectExistingItems(at: paths)
+        let result = collector.collectExistingItems(at: paths)
         let finding = builder.makeFinding(
             kind: kind,
             domain: domain,
-            candidates: candidates,
+            candidates: result.candidates,
             safety: safety
         )
 
         return CategoryScanResult(
             finding: finding,
-            inspectedItemCount: candidates.count,
-            message: finding == nil ? "No matching folders found" : "Measured \(candidates.count) locations"
+            inspectedItemCount: result.inspectedItemCount,
+            message: finding == nil ? "No matching folders found" : "Measured \(result.candidates.count) locations"
         )
     }
 }

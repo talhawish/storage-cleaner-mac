@@ -33,11 +33,11 @@ struct DeveloperStorageView: View {
     var body: some View {
         Group {
             if developerFindings.isEmpty {
-                ContentUnavailableView {
-                    Label("Developer Storage", systemImage: "chevron.left.forwardslash.chevron.right")
-                } description: {
-                    Text("Run a scan to discover developer storage artifacts.")
-                }
+                AnimatedEmptyState(
+                    title: "Developer Storage",
+                    message: "Run a scan to discover developer storage artifacts.",
+                    systemImage: "chevron.left.forwardslash.chevron.right"
+                )
             } else {
                 developerList
             }

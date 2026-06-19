@@ -10,6 +10,8 @@ final class DashboardViewModel {
     private let cleanupService: CleanupService
     private var scanTask: Task<Void, Never>?
     private var scanStartTime: Date?
+    private var pendingScanKinds: Set<StorageFindingKind>?
+    private var activeScanKinds: Set<StorageFindingKind>?
 
     private(set) var phase: ScanPhase = .idle
     private(set) var progress = 0.0
@@ -68,7 +70,16 @@ final class DashboardViewModel {
     }
 
     func startScan() {
+        startScan(kinds: nil)
+    }
+
+    func startScan(for kinds: [StorageFindingKind]) {
+        startScan(kinds: kinds)
+    }
+
+    private func startScan(kinds: [StorageFindingKind]?) {
         guard !isScanning else { return }
+        pendingScanKinds = kinds.map(Set.init)
 
         permissionStatuses = permissionHandler.currentStatuses()
 
@@ -77,7 +88,7 @@ final class DashboardViewModel {
             return
         }
 
-        beginScanning()
+        beginScanning(for: pendingScanKinds)
     }
 
     func retryAfterPermission() {
@@ -87,7 +98,7 @@ final class DashboardViewModel {
             return
         }
 
-        beginScanning()
+        beginScanning(for: pendingScanKinds)
     }
 
     func openSystemSettings() {
@@ -140,21 +151,24 @@ final class DashboardViewModel {
         return result
     }
 
-    private func beginScanning() {
+    private func beginScanning(for kinds: Set<StorageFindingKind>?) {
         scanTask?.cancel()
         progress = 0
         currentLocation = "Preparing scanner…"
         scannedItemCount = 0
         scannerProgress = []
-        snapshot = nil
-        selectedDomain = nil
-        selectedFinding = nil
+        activeScanKinds = kinds
+        if kinds == nil {
+            snapshot = nil
+            selectedDomain = nil
+            selectedFinding = nil
+        }
         phase = .scanning
         scanStartTime = .now
 
         let scanner = scanner
         scanTask = Task { [weak self] in
-            for await event in scanner.scanEvents() {
+            for await event in scanner.scanEvents(for: kinds) {
                 guard !Task.isCancelled else { return }
                 self?.consume(event)
             }
@@ -175,8 +189,9 @@ final class DashboardViewModel {
             } else {
                 duration = snapshot.duration
             }
+            let mergedFindings = mergeFindings(from: snapshot)
             let adjustedSnapshot = ScanSnapshot(
-                findings: snapshot.findings,
+                findings: mergedFindings,
                 scannedItemCount: snapshot.scannedItemCount,
                 duration: duration
             )
@@ -185,6 +200,16 @@ final class DashboardViewModel {
             progress = 1
             phase = adjustedSnapshot.findings.isEmpty ? .empty : .results
             scanTask = nil
+            activeScanKinds = nil
         }
+    }
+
+    private func mergeFindings(from completedSnapshot: ScanSnapshot) -> [StorageFinding] {
+        guard let activeScanKinds, let existingSnapshot = snapshot else {
+            return completedSnapshot.findings
+        }
+
+        let preservedFindings = existingSnapshot.findings.filter { !activeScanKinds.contains($0.kind) }
+        return preservedFindings + completedSnapshot.findings
     }
 }

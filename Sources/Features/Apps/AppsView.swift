@@ -108,11 +108,11 @@ struct AppsView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Applications", systemImage: "app.badge")
-        } description: {
-            Text("No applications were found in /Applications or ~/Applications.")
-        }
+        AnimatedEmptyState(
+            title: "No Applications",
+            message: "No applications were found in /Applications or ~/Applications.",
+            systemImage: "app.badge"
+        )
     }
 
     private var appList: some View {

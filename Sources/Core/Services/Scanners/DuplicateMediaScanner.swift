@@ -30,7 +30,7 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
     }
 
     func scan() async -> CategoryScanResult {
-        let candidates = collector.collectLikelyDuplicates(
+        let result = collector.collectLikelyDuplicates(
             at: roots,
             extensions: extensions,
             minimumBytes: minimumBytes
@@ -38,13 +38,13 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
         let finding = builder.makeFinding(
             kind: kind,
             domain: domain,
-            candidates: candidates,
+            candidates: result.candidates,
             safety: .review
         )
 
         return CategoryScanResult(
             finding: finding,
-            inspectedItemCount: candidates.count,
+            inspectedItemCount: result.inspectedItemCount,
             message: finding == nil ? "No likely duplicate groups found" : "Found likely duplicates"
         )
     }

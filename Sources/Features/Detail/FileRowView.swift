@@ -1,8 +1,14 @@
 import SwiftUI
 
 struct FileRowView: View {
+    enum PathDisplayMode {
+        case parentName
+        case fullPath
+    }
+
     let url: URL
     let isSelected: Bool
+    let pathDisplayMode: PathDisplayMode
     let onToggle: () -> Void
 
     @State private var fileExists = true
@@ -11,6 +17,18 @@ struct FileRowView: View {
     @State private var isHovering = false
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
+
+    init(
+        url: URL,
+        isSelected: Bool,
+        pathDisplayMode: PathDisplayMode = .parentName,
+        onToggle: @escaping () -> Void
+    ) {
+        self.url = url
+        self.isSelected = isSelected
+        self.pathDisplayMode = pathDisplayMode
+        self.onToggle = onToggle
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -38,7 +56,8 @@ struct FileRowView: View {
                     Text(parentDirectoryName)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                        .lineLimit(pathDisplayMode == .fullPath ? 2 : 1)
+                        .truncationMode(.middle)
                 }
             }
 
@@ -87,6 +106,10 @@ struct FileRowView: View {
 
     private var parentDirectoryName: String {
         let parent = url.deletingLastPathComponent()
+        if pathDisplayMode == .fullPath {
+            return parent.path
+        }
+
         let name = parent.lastPathComponent
         return name.isEmpty ? parent.path : name
     }

@@ -7,10 +7,10 @@ struct LiveStorageScanner: StorageScanning {
         self.scanners = scanners
     }
 
-    func scanEvents() -> AsyncStream<ScanEvent> {
+    func scanEvents(for kinds: Set<StorageFindingKind>? = nil) -> AsyncStream<ScanEvent> {
         AsyncStream { continuation in
             let task = Task {
-                await scan(to: continuation)
+                await scan(scanners: scanners(matching: kinds), to: continuation)
                 continuation.finish()
             }
 
@@ -20,26 +20,33 @@ struct LiveStorageScanner: StorageScanning {
         }
     }
 
-    private func scan(to continuation: AsyncStream<ScanEvent>.Continuation) async {
+    private func scan(
+        scanners activeScanners: [any StorageCategoryScanning],
+        to continuation: AsyncStream<ScanEvent>.Continuation
+    ) async {
         let scanStart = Date()
-        let count = scanners.count
+        let count = activeScanners.count
         guard count > 0 else {
             yieldEmptyCompleted(to: continuation)
             return
         }
 
-        var progress = initialProgress()
+        var progress = initialProgress(for: activeScanners)
         var findings: [StorageFinding?] = Array(repeating: nil, count: count)
         var inspectedCounts: [Int] = Array(repeating: 0, count: count)
         var completedCount = 0
 
         for index in 0..<count {
-            progress[index] = progressItem(for: scanners[index], state: .scanning, message: "Scanning…")
+            progress[index] = progressItem(
+                for: activeScanners[index],
+                state: .scanning,
+                message: "Scanning…"
+            )
         }
-        yieldProgress(0, 0, progress, continuation)
+        yieldProgress(0, count, 0, progress, continuation)
 
         await withTaskGroup(of: (Int, CategoryScanResult).self) { group in
-            for (index, scanner) in scanners.enumerated() {
+            for (index, scanner) in activeScanners.enumerated() {
                 group.addTask { [scanner] in
                     let result = await scanner.scan()
                     return (index, result)
@@ -57,31 +64,24 @@ struct LiveStorageScanner: StorageScanning {
                 inspectedCounts[index] = result.inspectedItemCount
 
                 progress[index] = progressItem(
-                    for: scanners[index],
+                    for: activeScanners[index],
                     state: result.finding == nil ? .skipped : .completed,
                     inspectedItemCount: result.inspectedItemCount,
                     message: result.message
                 )
 
                 let totalInspected = inspectedCounts.reduce(0, +)
-                yieldProgress(completedCount, totalInspected, progress, continuation)
+                yieldProgress(completedCount, count, totalInspected, progress, continuation)
             }
         }
 
         guard !Task.isCancelled else { return }
 
-        let completedFindings = findings.compactMap { $0 }
-        let totalInspected = inspectedCounts.reduce(0, +)
-        let elapsed = scanStart.timeIntervalSinceNow
-
-        continuation.yield(
-            .completed(
-                ScanSnapshot(
-                    findings: completedFindings,
-                    scannedItemCount: totalInspected,
-                    duration: .seconds(abs(elapsed))
-                )
-            )
+        yieldCompleted(
+            findings: findings.compactMap { $0 },
+            scannedItemCount: inspectedCounts.reduce(0, +),
+            startedAt: scanStart,
+            to: continuation
         )
     }
 
@@ -93,10 +93,15 @@ struct LiveStorageScanner: StorageScanning {
         )
     }
 
-    private func initialProgress() -> [ScannerProgress] {
-        scanners.map { scanner in
+    private func initialProgress(for activeScanners: [any StorageCategoryScanning]) -> [ScannerProgress] {
+        activeScanners.map { scanner in
             progressItem(for: scanner, state: .pending, message: "Waiting")
         }
+    }
+
+    private func scanners(matching kinds: Set<StorageFindingKind>?) -> [any StorageCategoryScanning] {
+        guard let kinds, !kinds.isEmpty else { return scanners }
+        return scanners.filter { kinds.contains($0.kind) }
     }
 
     private func progressItem(
@@ -116,13 +121,17 @@ struct LiveStorageScanner: StorageScanning {
 
     private func yieldProgress(
         _ completedScannerCount: Int,
+        _ totalScannerCount: Int,
         _ inspectedItemCount: Int,
         _ scannerProgress: [ScannerProgress],
         _ continuation: AsyncStream<ScanEvent>.Continuation
     ) {
         continuation.yield(
             .progress(
-                fraction: fraction(for: completedScannerCount),
+                fraction: fraction(
+                    completedScannerCount: completedScannerCount,
+                    totalScannerCount: totalScannerCount
+                ),
                 currentLocation: currentLocation(from: scannerProgress),
                 scannedItemCount: inspectedItemCount,
                 scannerProgress: scannerProgress
@@ -130,9 +139,26 @@ struct LiveStorageScanner: StorageScanning {
         )
     }
 
-    private func fraction(for completedScannerCount: Int) -> Double {
-        guard !scanners.isEmpty else { return 1 }
-        return Double(completedScannerCount) / Double(scanners.count)
+    private func yieldCompleted(
+        findings: [StorageFinding],
+        scannedItemCount: Int,
+        startedAt scanStart: Date,
+        to continuation: AsyncStream<ScanEvent>.Continuation
+    ) {
+        continuation.yield(
+            .completed(
+                ScanSnapshot(
+                    findings: findings,
+                    scannedItemCount: scannedItemCount,
+                    duration: .seconds(abs(scanStart.timeIntervalSinceNow))
+                )
+            )
+        )
+    }
+
+    private func fraction(completedScannerCount: Int, totalScannerCount: Int) -> Double {
+        guard totalScannerCount > 0 else { return 1 }
+        return Double(completedScannerCount) / Double(totalScannerCount)
     }
 
     private func currentLocation(from progress: [ScannerProgress]) -> String {
@@ -164,6 +190,7 @@ extension LiveStorageScanner {
                 DotNetCacheScanner(collector: collector),
                 GradleCacheScanner(collector: collector),
                 AIModelCacheScanner(collector: collector),
+                LargeFileScanner(collector: collector),
                 LargeVideoScanner(collector: collector),
                 ScreenRecordingScanner(collector: collector),
                 LargePhotoScanner(collector: collector),

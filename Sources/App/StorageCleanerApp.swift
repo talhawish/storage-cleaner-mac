@@ -6,7 +6,7 @@ struct StorageCleanerApp: App {
     @State private var viewModel: DashboardViewModel
 
     init() {
-        let container = AppContainer.live
+        let container = AppContainer.current()
         _viewModel = State(
             initialValue: DashboardViewModel(
                 scanner: container.storageScanner,

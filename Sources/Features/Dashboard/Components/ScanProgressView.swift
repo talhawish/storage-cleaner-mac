@@ -2,8 +2,20 @@ import SwiftUI
 
 struct ScanProgressView: View {
     @Bindable var viewModel: DashboardViewModel
+    let title: String
+    let subtitle: String
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
+
+    init(
+        viewModel: DashboardViewModel,
+        title: String = "Scanning storage categories",
+        subtitle: String = "This can take a moment on large folders."
+    ) {
+        self.viewModel = viewModel
+        self.title = title
+        self.subtitle = subtitle
+    }
 
     var body: some View {
         VStack(spacing: 26) {
@@ -23,12 +35,18 @@ struct ScanProgressView: View {
                     .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: viewModel.progress)
 
                 VStack(spacing: 3) {
-                    Text(viewModel.progress, format: .percent.precision(.fractionLength(0)))
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .contentTransition(.numericText())
-                    Text("complete")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if isPreparing {
+                        ProgressView()
+                            .controlSize(.large)
+                            .accessibilityLabel("Preparing scan")
+                    } else {
+                        Text(viewModel.progress, format: .percent.precision(.fractionLength(0)))
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .contentTransition(.numericText())
+                        Text("complete")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .frame(width: 170, height: 170)
@@ -37,9 +55,12 @@ struct ScanProgressView: View {
             .accessibilityValue(viewModel.progress.formatted(.percent.precision(.fractionLength(0))))
 
             VStack(spacing: 8) {
-                Text("Scanning storage categories")
+                Text(title)
                     .font(.title2.weight(.semibold))
                     .accessibilityIdentifier("scan-progress-title")
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 Text(viewModel.currentLocation)
                     .font(.body.monospaced())
                     .foregroundStyle(.secondary)
@@ -60,6 +81,12 @@ struct ScanProgressView: View {
         .padding(44)
         .frame(maxWidth: .infinity, minHeight: 440)
         .cardSurface()
+        .navigationTitle(title)
+        .navigationSubtitle("\(StorageFormatting.items(viewModel.scannedItemCount)) inspected")
+    }
+
+    private var isPreparing: Bool {
+        viewModel.isScanning && viewModel.progress == 0
     }
 
     @ViewBuilder private var scannerProgressList: some View {

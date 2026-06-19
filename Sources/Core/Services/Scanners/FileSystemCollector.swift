@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct FileSystemCollector: Sendable {
@@ -7,10 +8,12 @@ struct FileSystemCollector: Sendable {
         .fileSizeKey
     ]
 
-    func collectExistingItems(at urls: [URL]) -> [FileCandidate] {
+    func collectExistingItems(at urls: [URL]) -> FileCollectionResult {
         let fileManager = FileManager.default
+        var inspectedItemCount = 0
 
-        return urls.compactMap { url in
+        let candidates: [FileCandidate] = urls.compactMap { url -> FileCandidate? in
+            inspectedItemCount += 1
             guard fileManager.fileExists(atPath: url.path) else {
                 return nil
             }
@@ -20,22 +23,33 @@ struct FileSystemCollector: Sendable {
                 bytes: sizeOfItem(at: url)
             )
         }
+
+        return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
     }
 
     func collectFiles(
         at roots: [URL],
         matching matcher: @Sendable (URL) -> Bool,
         limit: Int = 2_000
-    ) -> [FileCandidate] {
+    ) -> FileCollectionResult {
         let fileManager = FileManager.default
         var candidates: [FileCandidate] = []
+        var inspectedItemCount = 0
 
         for root in roots where fileManager.fileExists(atPath: root.path) {
-            guard !Task.isCancelled else { return candidates }
-            collectFiles(at: root, matching: matcher, limit: limit, into: &candidates)
+            guard !Task.isCancelled else {
+                return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
+            }
+            collectFiles(
+                at: root,
+                matching: matcher,
+                limit: limit,
+                into: &candidates,
+                inspectedItemCount: &inspectedItemCount
+            )
         }
 
-        return candidates
+        return FileCollectionResult(candidates: candidates, inspectedItemCount: inspectedItemCount)
     }
 
     func collectLikelyDuplicates(
@@ -43,8 +57,8 @@ struct FileSystemCollector: Sendable {
         extensions allowedExtensions: Set<String>,
         minimumBytes: Int64,
         limit: Int = 2_000
-    ) -> [FileCandidate] {
-        let files = collectFiles(
+    ) -> FileCollectionResult {
+        let result = collectFiles(
             at: roots,
             matching: { url in
                 allowedExtensions.contains(url.pathExtension.lowercased())
@@ -52,14 +66,18 @@ struct FileSystemCollector: Sendable {
             limit: limit
         )
 
-        return duplicateCandidates(from: files, minimumBytes: minimumBytes)
+        return FileCollectionResult(
+            candidates: duplicateCandidates(from: result.candidates, minimumBytes: minimumBytes),
+            inspectedItemCount: result.inspectedItemCount
+        )
     }
 
     private func collectFiles(
         at root: URL,
         matching matcher: @Sendable (URL) -> Bool,
         limit: Int,
-        into candidates: inout [FileCandidate]
+        into candidates: inout [FileCandidate],
+        inspectedItemCount: inout Int
     ) {
         let fileManager = FileManager.default
         guard candidates.count < limit else { return }
@@ -74,33 +92,52 @@ struct FileSystemCollector: Sendable {
 
         for case let url as URL in enumerator {
             guard candidates.count < limit, !Task.isCancelled else { return }
-            guard matcher(url) else { continue }
-
             let values = try? url.resourceValues(forKeys: Self.sizeKeys)
             guard values?.isRegularFile == true else { continue }
+            inspectedItemCount += 1
+
+            guard matcher(url) else { continue }
 
             candidates.append(FileCandidate(url: url, bytes: allocatedSize(from: values)))
         }
     }
 
     private func duplicateCandidates(from files: [FileCandidate], minimumBytes: Int64) -> [FileCandidate] {
-        let grouped = Dictionary(grouping: files) { candidate in
-            duplicateKey(for: candidate)
+        let candidatesBySize = Dictionary(grouping: files.filter { $0.bytes >= minimumBytes }, by: \.bytes)
+        var duplicates: [FileCandidate] = []
+
+        for sameSizeCandidates in candidatesBySize.values where sameSizeCandidates.count > 1 {
+            let groupedByHash = Dictionary(grouping: sameSizeCandidates) { candidate in
+                contentHash(for: candidate.url)
+            }
+
+            let matchedDuplicates = groupedByHash.values.flatMap { group in
+                group.count > 1 ? group.dropFirst() : []
+            }
+            duplicates.append(contentsOf: matchedDuplicates)
         }
 
-        return grouped.values.flatMap { group in
-            group.count > 1 ? group.dropFirst() : []
-        }
-        .filter { $0.bytes >= minimumBytes }
+        return duplicates.sorted { $0.bytes > $1.bytes }
     }
 
-    private func duplicateKey(for candidate: FileCandidate) -> String {
-        let name = candidate.url.deletingPathExtension().lastPathComponent
-            .lowercased()
-            .replacingOccurrences(of: #" copy( \d+)?$"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"\(\d+\)$"#, with: "", options: .regularExpression)
+    private func contentHash(for url: URL) -> String {
+        guard let stream = InputStream(url: url) else { return url.path }
 
-        return "\(name)-\(candidate.bytes)"
+        stream.open()
+        defer { stream.close() }
+
+        var hasher = SHA256()
+        let bufferSize = 1024 * 1024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let readCount = stream.read(buffer, maxLength: bufferSize)
+            guard readCount > 0 else { break }
+            hasher.update(bufferPointer: UnsafeRawBufferPointer(start: buffer, count: readCount))
+        }
+
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private func sizeOfItem(at url: URL) -> Int64 {

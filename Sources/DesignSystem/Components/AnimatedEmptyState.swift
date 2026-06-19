@@ -3,12 +3,27 @@ import SwiftUI
 struct AnimatedEmptyState: View {
     let title: String
     let message: String
-    let actionTitle: String
-    let action: () -> Void
+    let actionTitle: String?
+    let systemImage: String
+    let action: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
     @State private var isFloating = false
+
+    init(
+        title: String,
+        message: String,
+        actionTitle: String? = nil,
+        systemImage: String = "checkmark.seal.fill",
+        action: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.message = message
+        self.actionTitle = actionTitle
+        self.systemImage = systemImage
+        self.action = action
+    }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -17,7 +32,7 @@ struct AnimatedEmptyState: View {
                     .fill(AppTheme.mint.opacity(0.12))
                     .frame(width: 104, height: 104)
 
-                Image(systemName: "checkmark.seal.fill")
+                Image(systemName: systemImage)
                     .font(.system(size: 46, weight: .medium))
                     .foregroundStyle(AppTheme.mint)
                     .offset(y: isFloating ? -3 : 3)
@@ -34,9 +49,11 @@ struct AnimatedEmptyState: View {
                     .frame(maxWidth: 420)
             }
 
-            Button(actionTitle, action: action)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

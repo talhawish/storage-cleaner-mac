@@ -121,10 +121,63 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertNotNil(URL(string: urlString))
         _ = viewModel
     }
+
+    func testTargetedScanPassesRequestedKindsToScanner() async {
+        let scanner = RecordingScanner()
+        let viewModel = DashboardViewModel(
+            scanner: scanner,
+            permissionHandler: StubPermissionHandler(statuses: allAccessibleStatuses)
+        )
+
+        viewModel.startScan(for: [.screenshots, .screenRecordings])
+
+        for _ in 0..<20 where viewModel.phase != .results {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(scanner.requestedKinds, [.screenshots, .screenRecordings])
+    }
+
+    func testTargetedScanPreservesUnrelatedExistingFindings() async {
+        let scanner = RecordingScanner()
+        let viewModel = DashboardViewModel(
+            scanner: scanner,
+            permissionHandler: StubPermissionHandler(statuses: allAccessibleStatuses)
+        )
+
+        viewModel.startScan()
+        for _ in 0..<20 where viewModel.phase != .results {
+            await Task.yield()
+        }
+
+        scanner.snapshot = ScanSnapshot(
+            findings: [
+                StorageFinding(
+                    kind: .screenRecordings,
+                    domain: .media,
+                    bytes: 20,
+                    itemCount: 1,
+                    safety: .review,
+                    examples: [],
+                    filePaths: []
+                )
+            ],
+            scannedItemCount: 1,
+            duration: .seconds(1)
+        )
+        viewModel.startScan(for: [.screenRecordings])
+        for _ in 0..<20 where viewModel.phase != .results {
+            await Task.yield()
+        }
+
+        let kinds = viewModel.snapshot?.findings.map(\.kind) ?? []
+        XCTAssertTrue(kinds.contains(.screenshots))
+        XCTAssertTrue(kinds.contains(.screenRecordings))
+    }
 }
 
 private struct ImmediateScanner: StorageScanning {
-    func scanEvents() -> AsyncStream<ScanEvent> {
+    func scanEvents(for kinds: Set<StorageFindingKind>? = nil) -> AsyncStream<ScanEvent> {
         AsyncStream { continuation in
             continuation.yield(.completed(snapshot))
             continuation.finish()
@@ -172,7 +225,7 @@ private let allAccessibleStatuses: [StoragePermissionStatus] =
     }
 
 private struct DelayedScanner: StorageScanning {
-    func scanEvents() -> AsyncStream<ScanEvent> {
+    func scanEvents(for kinds: Set<StorageFindingKind>? = nil) -> AsyncStream<ScanEvent> {
         AsyncStream { continuation in
             let task = Task {
                 try? await Task.sleep(for: .seconds(10))
@@ -202,5 +255,32 @@ private struct DelayedScanner: StorageScanning {
             scannedItemCount: 1,
             duration: .seconds(10)
         )
+    }
+}
+
+private final class RecordingScanner: @unchecked Sendable, StorageScanning {
+    var requestedKinds: Set<StorageFindingKind>?
+    var snapshot = ScanSnapshot(
+        findings: [
+            StorageFinding(
+                kind: .screenshots,
+                domain: .screenshots,
+                bytes: 10,
+                itemCount: 1,
+                safety: .review,
+                examples: [],
+                filePaths: []
+            )
+        ],
+        scannedItemCount: 1,
+        duration: .seconds(1)
+    )
+
+    func scanEvents(for kinds: Set<StorageFindingKind>? = nil) -> AsyncStream<ScanEvent> {
+        requestedKinds = kinds
+        return AsyncStream { continuation in
+            continuation.yield(.completed(snapshot))
+            continuation.finish()
+        }
     }
 }

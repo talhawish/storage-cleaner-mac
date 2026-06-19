@@ -362,7 +362,8 @@ struct QuickCleanView: View {
                 NSString(string: pathString).expandingTildeInPath
             }.map { URL(fileURLWithPath: $0) }
 
-            let candidates = collector.collectExistingItems(at: urls)
+            let collection = collector.collectExistingItems(at: urls)
+            let candidates = collection.candidates
             let totalBytes = candidates.reduce(Int64(0)) { $0 + $1.bytes }
 
             guard totalBytes > 0 else { continue }

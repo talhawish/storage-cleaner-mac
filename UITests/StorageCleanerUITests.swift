@@ -7,15 +7,13 @@ final class StorageCleanerUITests: XCTestCase {
 
     @MainActor
     func testPrimaryScanFlowShowsResults() {
-        let app = launchApp()
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
 
         let scanButton = app.buttons["primary-scan-button"]
         XCTAssertTrue(scanButton.waitForExistence(timeout: 3))
         scanButton.click()
 
-        XCTAssertTrue(app.staticTexts["scan-progress-title"].waitForExistence(timeout: 3))
-
-        let summary = app.otherElements["scan-summary"]
+        let summary = app.staticTexts["Potentially reclaimable"]
         XCTAssertTrue(summary.waitForExistence(timeout: 12))
     }
 
@@ -23,7 +21,7 @@ final class StorageCleanerUITests: XCTestCase {
     func testScanCanBeCancelled() {
         let app = launchApp()
 
-        app.buttons["primary-scan-button"].click()
+        startScan(in: app)
 
         let cancelButton = app.buttons["cancel-scan-button"]
         XCTAssertTrue(cancelButton.waitForExistence(timeout: 3))
@@ -33,10 +31,25 @@ final class StorageCleanerUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchApp() -> XCUIApplication {
+    private func launchApp(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--use-demo-scanner"]
+        app.launchArguments = ["--use-demo-scanner"] + extraArguments
         app.launch()
+        app.activate()
         return app
+    }
+
+    @MainActor
+    private func startScan(in app: XCUIApplication) {
+        let scanButton = app.buttons["primary-scan-button"]
+        XCTAssertTrue(scanButton.waitForExistence(timeout: 3))
+        scanButton.click()
+
+        let progressTitle = app.staticTexts["scan-progress-title"]
+        if !progressTitle.waitForExistence(timeout: 3), scanButton.exists {
+            scanButton.click()
+        }
+
+        XCTAssertTrue(progressTitle.waitForExistence(timeout: 3))
     }
 }

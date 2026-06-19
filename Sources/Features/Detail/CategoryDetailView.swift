@@ -278,11 +278,11 @@ struct CategoryDetailView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(finding.kind.title, systemImage: finding.domain.symbolName)
-        } description: {
-            Text("No individual file paths were captured for this category during the scan.")
-        }
+        AnimatedEmptyState(
+            title: finding.kind.title,
+            message: "No individual file paths were captured for this category during the scan.",
+            systemImage: finding.domain.symbolName
+        )
         .navigationTitle(finding.kind.title)
     }
 

@@ -25,11 +25,11 @@ struct DuplicatesView: View {
     var body: some View {
         Group {
             if duplicateFindings.isEmpty {
-                ContentUnavailableView {
-                    Label("No Duplicates Found", systemImage: "square.on.square")
-                } description: {
-                    Text("Run a scan to detect duplicate photos and videos.")
-                }
+                AnimatedEmptyState(
+                    title: "No Duplicates Found",
+                    message: "Run a scan to detect duplicate photos and videos.",
+                    systemImage: "square.on.square"
+                )
             } else {
                 duplicatesList
             }

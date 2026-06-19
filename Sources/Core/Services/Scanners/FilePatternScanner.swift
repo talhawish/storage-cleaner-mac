@@ -30,18 +30,18 @@ struct FilePatternScanner: StorageCategoryScanning {
     }
 
     func scan() async -> CategoryScanResult {
-        let candidates = collector.collectFiles(at: roots, matching: matcher)
+        let result = collector.collectFiles(at: roots, matching: matcher)
         let finding = builder.makeFinding(
             kind: kind,
             domain: domain,
-            candidates: candidates,
+            candidates: result.candidates,
             safety: safety
         )
 
         return CategoryScanResult(
             finding: finding,
-            inspectedItemCount: candidates.count,
-            message: finding == nil ? "No matching files found" : "Found \(candidates.count) candidates"
+            inspectedItemCount: result.inspectedItemCount,
+            message: finding == nil ? "No matching files found" : "Found \(result.candidates.count) candidates"
         )
     }
 }

@@ -34,20 +34,26 @@ protocol CleanupService: Sendable {
 struct FileManagerCleanupService: CleanupService {
     func delete(urls: [URL]) async -> CleanupResult {
         let fileManager = FileManager.default
-        var deleted: [URL] = []
+        var trashed: [URL] = []
         var failed: [(URL, Error)] = []
         var totalBytes: Int64 = 0
 
+        guard !urls.isEmpty else {
+            return CleanupResult(deletedURLs: [], failedURLs: [], totalBytesReclaimed: 0)
+        }
+
         for url in urls {
             guard fileManager.fileExists(atPath: url.path) else {
+                failed.append((url, CleanupError.fileNotFound(url)))
                 continue
             }
 
             let size = sizeOfItem(at: url, fileManager: fileManager)
 
             do {
-                try fileManager.removeItem(at: url)
-                deleted.append(url)
+                var resultingURL: NSURL?
+                try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
+                trashed.append(resultingURL as? URL ?? url)
                 totalBytes += size
             } catch {
                 failed.append((url, error))
@@ -55,7 +61,7 @@ struct FileManagerCleanupService: CleanupService {
         }
 
         return CleanupResult(
-            deletedURLs: deleted,
+            deletedURLs: trashed,
             failedURLs: failed,
             totalBytesReclaimed: totalBytes
         )

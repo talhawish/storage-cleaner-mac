@@ -6,7 +6,6 @@ struct MediaGridItem: View {
     let onToggle: () -> Void
     let onPreview: () -> Void
 
-    @State private var thumbnail: NSImage?
     @State private var isHovering = false
 
     private var isVideo: Bool {
@@ -21,15 +20,12 @@ struct MediaGridItem: View {
                         .fill(.quaternary.opacity(0.4))
                         .aspectRatio(1, contentMode: .fit)
 
-                    if let thumbnail {
-                        Image(nsImage: thumbnail)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    } else {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
+                    MediaThumbnailView(
+                        url: url,
+                        sideLength: 180,
+                        cornerRadius: 10,
+                        contentMode: .fill
+                    )
 
                     if isVideo {
                         VStack {
@@ -38,6 +34,7 @@ struct MediaGridItem: View {
                                 Image(systemName: "play.circle.fill")
                                     .font(.system(size: 24))
                                     .foregroundStyle(.white.shadow(.drop(radius: 2)))
+                                    .accessibilityHidden(true)
                                 Spacer()
                             }
                             .padding(8)
@@ -50,6 +47,7 @@ struct MediaGridItem: View {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 18))
                                     .foregroundStyle(AppTheme.accent, .white)
+                                    .accessibilityHidden(true)
                             }
                             Spacer()
                         }
@@ -59,7 +57,10 @@ struct MediaGridItem: View {
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(isSelected ? AppTheme.accent : (isHovering ? Color.secondary : .clear), lineWidth: isSelected ? 2 : 1)
+                        .stroke(
+                            isSelected ? AppTheme.accent : (isHovering ? Color.secondary : .clear),
+                            lineWidth: isSelected ? 2 : 1
+                        )
                 }
                 .onHover { isHovering = $0 }
 
@@ -83,16 +84,6 @@ struct MediaGridItem: View {
             }
             Divider()
             Button("Select") { onToggle() }
-        }
-        .onAppear { loadThumbnail() }
-    }
-
-    private func loadThumbnail() {
-        Task.detached(priority: .utility) {
-            let img = NSWorkspace.shared.icon(forFile: url.path)
-            let size = NSSize(width: 256, height: 256)
-            img.size = size
-            await MainActor.run { self.thumbnail = img }
         }
     }
 }

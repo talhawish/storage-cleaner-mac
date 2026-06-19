@@ -117,12 +117,14 @@ struct ScreenshotStorageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.screenshots.title
     private let scanner: FilePatternScanner
 
-    init(collector: FileSystemCollector) {
-        let roots = [
+    init(
+        roots: [URL] = [
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Pictures"),
             DependencyPaths.home("Downloads")
-        ]
+        ],
+        collector: FileSystemCollector
+    ) {
         scanner = FilePatternScanner(
             kind: .screenshots,
             domain: .screenshots,

@@ -4,42 +4,58 @@ import AppKit
 struct MediaCategoryView: View {
     let title: String
     let findings: [StorageFinding]
+    let emptyStateMessage: String
+    let onScan: () -> Void
     let onDelete: ([URL]) -> Void
 
     @State private var selectedURLs: Set<URL> = []
     @State private var searchText = ""
-    @State private var sortOption: SortOption = .sizeDesc
-    @State private var viewMode: ViewMode = .grid
+    @State private var sortOption: MediaSortOption = .sizeDesc
+    @State private var viewMode: MediaViewMode = .grid
+    @State private var mediaFilter: MediaFilter = .all
     @State private var showDeleteConfirmation = false
     @State private var previewURL: URL?
+    @State private var visibleRecordLimit = MediaPagination.initialLimit
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
-
-    enum SortOption: String, CaseIterable {
-        case sizeDesc = "Largest First"
-        case sizeAsc = "Smallest First"
-        case nameAsc = "Name A–Z"
-        case nameDesc = "Name Z–A"
-        case dateDesc = "Newest First"
-        case dateAsc = "Oldest First"
-    }
-
-    enum ViewMode: String, CaseIterable {
-        case grid = "Grid"
-        case list = "List"
-    }
 
     private var allFilePaths: [URL] {
         findings.flatMap(\.filePaths)
     }
 
-    private var filteredURLs: [URL] {
-        let urls = allFilePaths
-        guard !searchText.isEmpty else { return sortedURLs(from: urls) }
-        let filtered = urls.filter { url in
-            url.lastPathComponent.localizedCaseInsensitiveContains(searchText)
+    private var allRecords: [MediaFileRecord] {
+        allFilePaths.map { url in
+            MediaFileRecord(
+                url: url,
+                size: StorageFormatting.fileSize(at: url),
+                modificationDate: StorageFormatting.modificationDate(at: url),
+                isVideo: DependencyPaths.Media.videoExtensions.contains(url.pathExtension.lowercased())
+            )
         }
-        return sortedURLs(from: filtered)
+    }
+
+    private var filteredRecords: [MediaFileRecord] {
+        allRecords
+            .filter { record in
+                let matchesSearch = searchText.isEmpty ||
+                    record.url.lastPathComponent.localizedCaseInsensitiveContains(searchText)
+                let matchesFilter: Bool
+                switch mediaFilter {
+                case .all: matchesFilter = true
+                case .images: matchesFilter = !record.isVideo
+                case .videos: matchesFilter = record.isVideo
+                }
+                return matchesSearch && matchesFilter
+            }
+            .sorted(by: sortOption)
+    }
+
+    private var visibleRecords: ArraySlice<MediaFileRecord> {
+        filteredRecords.prefix(visibleRecordLimit)
+    }
+
+    private var hasMoreRecords: Bool {
+        visibleRecordLimit < filteredRecords.count
     }
 
     private var totalSize: Int64 {
@@ -47,15 +63,16 @@ struct MediaCategoryView: View {
     }
 
     private var selectedTotalSize: Int64 {
-        selectedURLs.reduce(Int64(0)) { $0 + StorageFormatting.fileSize(at: $1) }
+        let sizesByURL = Dictionary(uniqueKeysWithValues: allRecords.map { ($0.url, $0.size) })
+        return selectedURLs.reduce(Int64(0)) { $0 + (sizesByURL[$1] ?? 0) }
     }
 
-    private var imageURLs: [URL] {
-        filteredURLs.filter { DependencyPaths.Media.imageExtensions.contains($0.pathExtension.lowercased()) }
+    private var imageCount: Int {
+        allRecords.filter { !$0.isVideo }.count
     }
 
-    private var videoURLs: [URL] {
-        filteredURLs.filter { DependencyPaths.Media.videoExtensions.contains($0.pathExtension.lowercased()) }
+    private var videoCount: Int {
+        allRecords.filter(\.isVideo).count
     }
 
     var body: some View {
@@ -81,8 +98,18 @@ struct MediaCategoryView: View {
             }
 
             ToolbarItem {
+                Button {
+                    onScan()
+                } label: {
+                    Label("Scan Now", systemImage: "sparkle.magnifyingglass")
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+                .help("Scan storage locations again")
+            }
+
+            ToolbarItem {
                 Picker("View", selection: $viewMode) {
-                    ForEach(ViewMode.allCases, id: \.self) { mode in
+                    ForEach(MediaViewMode.allCases, id: \.self) { mode in
                         Label(mode.rawValue, systemImage: mode == .grid ? "square.grid.2x2" : "list.bullet").tag(mode)
                     }
                 }
@@ -93,12 +120,13 @@ struct MediaCategoryView: View {
             ToolbarItem {
                 Menu {
                     Picker("Sort by", selection: $sortOption) {
-                        ForEach(SortOption.allCases, id: \.self) { option in
+                        ForEach(MediaSortOption.allCases, id: \.self) { option in
                             Text(option.rawValue).tag(option)
                         }
                     }
                 } label: {
                     Image(systemName: "arrow.up.arrow.down")
+                        .accessibilityLabel("Sort")
                 }
             }
         }
@@ -131,20 +159,40 @@ struct MediaCategoryView: View {
                 MediaPreviewSheet(url: url)
             }
         }
+        .onChange(of: searchText) { _, _ in resetPagination() }
+        .onChange(of: sortOption) { _, _ in resetPagination() }
+        .onChange(of: mediaFilter) { _, _ in resetPagination() }
+        .onChange(of: viewMode) { _, _ in resetPagination() }
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: "photo.on.rectangle.angled")
-        } description: {
-            Text("No items found for this category. Run a scan first.")
-        }
+        AnimatedEmptyState(
+            title: title,
+            message: emptyStateMessage,
+            actionTitle: "Scan Now",
+            systemImage: "photo.on.rectangle.angled",
+            action: onScan
+        )
+        .frame(minHeight: 430)
     }
 
     private var mediaContent: some View {
         VStack(spacing: 0) {
-            searchBar
-            selectionBar
+            MediaSummaryHeader(
+                title: title,
+                itemCount: allFilePaths.count,
+                totalSize: totalSize,
+                imageCount: imageCount,
+                videoCount: videoCount
+            )
+            MediaFilterBar(searchText: $searchText, mediaFilter: $mediaFilter)
+            MediaSelectionBar(
+                selectedCount: selectedURLs.count,
+                selectedTotalSize: selectedTotalSize,
+                filteredCount: filteredRecords.count,
+                isSelectionEmpty: selectedURLs.isEmpty,
+                onToggleAll: toggleAll
+            )
 
             if viewMode == .grid {
                 gridContent
@@ -159,13 +207,22 @@ struct MediaCategoryView: View {
             LazyVGrid(columns: [
                 GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 16)
             ], spacing: 16) {
-                ForEach(filteredURLs, id: \.self) { url in
+                ForEach(visibleRecords) { record in
                     MediaGridItem(
-                        url: url,
-                        isSelected: selectedURLs.contains(url),
-                        onToggle: { toggle(url) },
-                        onPreview: { previewURL = url }
+                        url: record.url,
+                        isSelected: selectedURLs.contains(record.url),
+                        onToggle: { toggle(record.url) },
+                        onPreview: { previewURL = record.url }
                     )
+                }
+
+                if hasMoreRecords {
+                    MediaPaginationFooter(
+                        visibleCount: visibleRecords.count,
+                        totalCount: filteredRecords.count,
+                        onLoadMore: loadMoreRecords
+                    )
+                    .gridCellColumns(2)
                 }
             }
             .padding(20)
@@ -174,95 +231,42 @@ struct MediaCategoryView: View {
 
     private var listContent: some View {
         List {
-            ForEach(findings) { finding in
-                Section {
-                    ForEach(finding.filePaths, id: \.self) { url in
-                        MediaListRow(
-                            url: url,
-                            isSelected: selectedURLs.contains(url),
-                            onToggle: { toggle(url) },
-                            onPreview: { previewURL = url }
-                        )
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 20, bottom: 2, trailing: 20))
-                    }
-                } header: {
-                    HStack {
-                        Image(systemName: finding.kind == .screenshots ? "camera.viewfinder" : "film.fill")
-                            .foregroundStyle(AppTheme.color(for: finding.domain))
-                        Text(finding.kind.title)
-                        Spacer()
-                        Text(StorageFormatting.bytes(finding.bytes))
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.subheadline.weight(.medium))
-                }
+            ForEach(visibleRecords) { record in
+                MediaListRow(
+                    url: record.url,
+                    isSelected: selectedURLs.contains(record.url),
+                    onToggle: { toggle(record.url) },
+                    onPreview: { previewURL = record.url }
+                )
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 2, leading: 20, bottom: 2, trailing: 20))
+            }
+
+            if hasMoreRecords {
+                MediaPaginationFooter(
+                    visibleCount: visibleRecords.count,
+                    totalCount: filteredRecords.count,
+                    onLoadMore: loadMoreRecords
+                )
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
             }
         }
         .listStyle(.plain)
     }
 
-    private var searchBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.tertiary)
-            TextField("Search files…", text: $searchText)
-                .textFieldStyle(.plain)
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-            }
+}
+
+private extension MediaCategoryView {
+    func toggleAll() {
+        if selectedURLs.isEmpty {
+            selectedURLs = Set(filteredRecords.map(\.url))
+        } else {
+            selectedURLs.removeAll()
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
     }
 
-    private var selectionBar: some View {
-        HStack(spacing: 12) {
-            Button {
-                if !selectedURLs.isEmpty {
-                    selectedURLs.removeAll()
-                } else {
-                    selectedURLs = Set(allFilePaths)
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: selectedURLs.isEmpty ? "checkmark.circle" : "xmark.circle")
-                    Text(selectedURLs.isEmpty ? "Select All" : "Deselect All")
-                        .font(.subheadline.weight(.medium))
-                }
-            }
-            .buttonStyle(.plain)
-
-            if !selectedURLs.isEmpty {
-                Divider().frame(height: 16)
-                Text("\(selectedURLs.count) selected")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppTheme.accent)
-                Text(StorageFormatting.bytes(selectedTotalSize))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Text("\(filteredURLs.count) items")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
-    }
-
-    private func toggle(_ url: URL) {
+    func toggle(_ url: URL) {
         if selectedURLs.contains(url) {
             selectedURLs.remove(url)
         } else {
@@ -270,14 +274,17 @@ struct MediaCategoryView: View {
         }
     }
 
-    private func sortedURLs(from urls: [URL]) -> [URL] {
-        switch sortOption {
-        case .sizeDesc: urls.sorted { StorageFormatting.fileSize(at: $0) > StorageFormatting.fileSize(at: $1) }
-        case .sizeAsc: urls.sorted { StorageFormatting.fileSize(at: $0) < StorageFormatting.fileSize(at: $1) }
-        case .nameAsc: urls.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-        case .nameDesc: urls.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedDescending }
-        case .dateDesc: urls.sorted { StorageFormatting.modificationDate(at: $0) > StorageFormatting.modificationDate(at: $1) }
-        case .dateAsc: urls.sorted { StorageFormatting.modificationDate(at: $0) < StorageFormatting.modificationDate(at: $1) }
-        }
+    func resetPagination() {
+        visibleRecordLimit = MediaPagination.initialLimit
     }
+
+    func loadMoreRecords() {
+        guard hasMoreRecords else { return }
+        visibleRecordLimit = min(visibleRecordLimit + MediaPagination.pageSize, filteredRecords.count)
+    }
+}
+
+private enum MediaPagination {
+    static let initialLimit = 60
+    static let pageSize = 60
 }

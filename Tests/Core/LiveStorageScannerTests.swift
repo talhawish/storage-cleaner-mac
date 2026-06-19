@@ -61,6 +61,31 @@ final class LiveStorageScannerTests: XCTestCase {
         XCTAssertEqual(snapshot?.scannedItemCount, 3)
     }
 
+    func testTargetedScanRunsOnlyRequestedCategories() async {
+        let scanner = LiveStorageScanner(
+            scanners: [
+                StubCategoryScanner(kind: .screenshots, result: screenshotsResult),
+                StubCategoryScanner(kind: .screenRecordings, result: screenRecordingResult),
+                StubCategoryScanner(kind: .trash, result: trashResult)
+            ]
+        )
+        var progressKinds: Set<StorageFindingKind> = []
+        var snapshot: ScanSnapshot?
+
+        for await event in scanner.scanEvents(for: [.screenshots, .screenRecordings]) {
+            switch event {
+            case let .progress(_, _, _, progress):
+                progressKinds.formUnion(progress.map(\.kind))
+            case let .completed(result):
+                snapshot = result
+            }
+        }
+
+        XCTAssertEqual(progressKinds, [.screenshots, .screenRecordings])
+        XCTAssertEqual(Set(snapshot?.findings.map(\.kind) ?? []), [.screenshots, .screenRecordings])
+        XCTAssertEqual(snapshot?.scannedItemCount, 2)
+    }
+
     private var screenshotsResult: CategoryScanResult {
         CategoryScanResult(
             finding: StorageFinding(
@@ -90,6 +115,22 @@ final class LiveStorageScannerTests: XCTestCase {
             ),
             inspectedItemCount: 1,
             message: "Measured"
+        )
+    }
+
+    private var screenRecordingResult: CategoryScanResult {
+        CategoryScanResult(
+            finding: StorageFinding(
+                kind: .screenRecordings,
+                domain: .media,
+                bytes: 150,
+                itemCount: 1,
+                safety: .review,
+                examples: ["Screen Recording.mov"],
+                filePaths: []
+            ),
+            inspectedItemCount: 1,
+            message: "Found"
         )
     }
 

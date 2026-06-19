@@ -6,7 +6,7 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
     case kotlin = "Kotlin"
     case python = "Python"
     case rust = "Rust"
-    case go = "Go"
+    case golang = "Go"
     case php = "PHP"
     case ruby = "Ruby"
     case dotNet = ".NET"
@@ -22,7 +22,7 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .kotlin: return "kotlin"
         case .python: return "python"
         case .rust: return "rust"
-        case .go: return "golang"
+        case .golang: return "golang"
         case .php: return "php"
         case .ruby: return "ruby"
         case .dotNet: return "dotnet"
@@ -38,7 +38,7 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .kotlin: return "7F52FF"
         case .python: return "3776AB"
         case .rust: return "CE412B"
-        case .go: return "00ADD8"
+        case .golang: return "00ADD8"
         case .php: return "777BB4"
         case .ruby: return "CC342D"
         case .dotNet: return "512BD4"
@@ -54,7 +54,7 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .kotlin: return ["build.gradle.kts", "build.gradle"]
         case .python: return ["requirements.txt", "pyproject.toml", "setup.py", "Pipfile"]
         case .rust: return ["Cargo.toml"]
-        case .go: return ["go.mod"]
+        case .golang: return ["go.mod"]
         case .php: return ["composer.json"]
         case .ruby: return ["Gemfile"]
         case .dotNet: return ["*.csproj", "*.sln"]
@@ -168,13 +168,15 @@ struct ProjectActivitySnapshot: Sendable {
 
 actor ProjectActivityScanner {
     private let fileManager = FileManager.default
-    private let maxSize: Int64 = 500_000_000
+    private let searchPaths: [URL]
+    private let maxDepth: Int
 
-    func scan() async -> ProjectActivitySnapshot {
-        let startTime = Date()
+    init(
+        searchPaths: [URL]? = nil,
+        maxDepth: Int = 3
+    ) {
         let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
-
-        let searchPaths: [URL] = [
+        self.searchPaths = searchPaths ?? [
             homeDirectory.appendingPathComponent("Developer"),
             homeDirectory.appendingPathComponent("Documents"),
             homeDirectory.appendingPathComponent("Desktop"),
@@ -182,19 +184,24 @@ actor ProjectActivityScanner {
             homeDirectory.appendingPathComponent("Code"),
             homeDirectory.appendingPathComponent("Work"),
             homeDirectory.appendingPathComponent("dev"),
-            homeDirectory.appendingPathComponent("src"),
+            homeDirectory.appendingPathComponent("src")
         ]
+        self.maxDepth = maxDepth
+    }
 
+    func scan() async -> ProjectActivitySnapshot {
+        let startTime = Date()
         var projects: [ProjectInfo] = []
-        let seenPaths = Set<String>()
+        var seenPaths = Set<String>()
 
         for searchPath in searchPaths {
+            guard !Task.isCancelled else { break }
             guard fileManager.fileExists(atPath: searchPath.path) else { continue }
 
-            let foundProjects = await scanDirectory(searchPath, depth: 0, seenPaths: &projects)
+            let foundProjects = scanDirectory(searchPath)
             for project in foundProjects {
-                let key = project.path.path
-                if !seenPaths.contains(key) {
+                let key = project.path.standardizedFileURL.path
+                if seenPaths.insert(key).inserted {
                     projects.append(project)
                 }
             }
@@ -208,13 +215,23 @@ actor ProjectActivityScanner {
         )
     }
 
-    private func scanDirectory(_ directory: URL, depth: Int, seenPaths: inout [ProjectInfo]) async -> [ProjectInfo] {
-        guard depth < 3 else { return [] }
-
+    private func scanDirectory(_ directory: URL) -> [ProjectInfo] {
         var projects: [ProjectInfo] = []
-        let enumerator = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+        let rootDepth = directory.pathComponents.count
+        let enumerator = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )
 
         while let item = enumerator?.nextObject() as? URL {
+            guard !Task.isCancelled else { break }
+            let relativeDepth = item.pathComponents.count - rootDepth
+            if relativeDepth > maxDepth {
+                enumerator?.skipDescendants()
+                continue
+            }
+
             guard let isDirectory = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory,
                   isDirectory else { continue }
 
@@ -249,7 +266,8 @@ actor ProjectActivityScanner {
 
     private func buildProjectInfo(at directory: URL, technology: ProjectTechnology) -> ProjectInfo? {
         let name = directory.lastPathComponent
-        let modDate = (try? fileManager.attributesOfItem(atPath: directory.path)[.modificationDate] as? Date) ?? .distantPast
+        let attributes = try? fileManager.attributesOfItem(atPath: directory.path)
+        let modDate = attributes?[.modificationDate] as? Date ?? .distantPast
         let size = calculateSize(at: directory)
         let depSize = calculateDependencySize(at: directory, technology: technology)
         let childCount = countSubProjects(at: directory, technology: technology)
@@ -285,22 +303,8 @@ actor ProjectActivityScanner {
     }
 
     private func calculateDependencySize(at directory: URL, technology: ProjectTechnology) -> Int64 {
-        let depDirNames: [String]
-        switch technology {
-        case .nodeJS: depDirNames = ["node_modules", ".next", "dist", "build"]
-        case .swift: depDirNames = [".build", "DerivedData", "Pods"]
-        case .kotlin, .java: depDirNames = ["build", ".gradle", "Pods"]
-        case .python: depDirNames = ["venv", ".venv", "__pycache__", "dist", "build"]
-        case .rust: depDirNames = ["target"]
-        case .go: depDirNames = []
-        case .php: depDirNames = ["vendor"]
-        case .ruby: depDirNames = ["vendor", ".bundle"]
-        case .dotNet: depDirNames = ["bin", "obj", "packages"]
-        case .flutter: depDirNames = [".dart_tool", "build"]
-        }
-
         var depSize: Int64 = 0
-        for depDir in depDirNames {
+        for depDir in technology.dependencyDirectoryNames {
             let depPath = directory.appendingPathComponent(depDir)
             if fileManager.fileExists(atPath: depPath.path) {
                 depSize += calculateSize(at: depPath)
@@ -311,6 +315,27 @@ actor ProjectActivityScanner {
 
     private func countSubProjects(at directory: URL, technology: ProjectTechnology) -> Int {
         guard let contents = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return 0 }
-        return contents.filter { $0.hasPrefix(".") == false }.count
+        return contents.filter { name in
+            guard !name.hasPrefix(".") else { return false }
+            let childURL = directory.appendingPathComponent(name)
+            return detectProject(at: childURL) != nil
+        }.count
+    }
+}
+
+private extension ProjectTechnology {
+    var dependencyDirectoryNames: [String] {
+        switch self {
+        case .nodeJS: ["node_modules", ".next", "dist", "build"]
+        case .swift: [".build", "DerivedData", "Pods"]
+        case .kotlin, .java: ["build", ".gradle", "Pods"]
+        case .python: ["venv", ".venv", "__pycache__", "dist", "build"]
+        case .rust: ["target"]
+        case .golang: []
+        case .php: ["vendor"]
+        case .ruby: ["vendor", ".bundle"]
+        case .dotNet: ["bin", "obj", "packages"]
+        case .flutter: [".dart_tool", "build"]
+        }
     }
 }

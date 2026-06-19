@@ -41,6 +41,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case androidStudioArtifacts
     case androidPackages
     case aiModelCaches
+    case largeFiles
     case largeVideos
     case screenRecordings
     case largePhotos
@@ -68,6 +69,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .androidStudioArtifacts: "Android Studio artifacts"
         case .androidPackages: "Leftover APKs"
         case .aiModelCaches: "AI model caches"
+        case .largeFiles: "Large files"
         case .largeVideos: "Large videos"
         case .screenRecordings: "Screen recordings"
         case .largePhotos: "Large photos"
@@ -97,6 +99,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .androidStudioArtifacts: "Android Studio system data, emulator files, SDK caches, and Gradle outputs"
         case .androidPackages: "Loose APK and AAB build outputs"
         case .aiModelCaches: "Local model downloads, embeddings, and generated cache files"
+        case .largeFiles: "Large archives, installers, datasets, disk images, and exports"
         case .largeVideos: "Large movie files, exports, captures, and old demos"
         case .screenRecordings: "macOS recordings, meeting captures, simulator demos, and tutorials"
         case .largePhotos: "RAW photos, large edited exports, and oversized image assets"

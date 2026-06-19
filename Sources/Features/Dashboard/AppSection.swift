@@ -41,6 +41,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var filterKinds: [StorageFindingKind] {
         switch self {
+        case .largeFiles: [.largeFiles, .largeVideos, .largePhotos]
         case .cliPrograms: [.cliApps]
         case .screenshotsAndRecordings: [.screenshots, .screenRecordings]
         default: []

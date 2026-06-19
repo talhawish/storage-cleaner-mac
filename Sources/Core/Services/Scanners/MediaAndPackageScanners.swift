@@ -185,16 +185,18 @@ struct LargeVideoScanner: StorageCategoryScanning {
     let title = StorageFindingKind.largeVideos.title
     private let scanner: FilePatternScanner
 
-    init(collector: FileSystemCollector) {
-        let mediaRoots = [
+    init(
+        roots: [URL] = [
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
-        ]
+        ],
+        collector: FileSystemCollector
+    ) {
         scanner = FilePatternScanner(
             kind: .largeVideos,
             domain: .media,
-            roots: mediaRoots,
+            roots: roots,
             safety: .review,
             collector: collector
         ) { url in
@@ -212,16 +214,18 @@ struct ScreenRecordingScanner: StorageCategoryScanning {
     let title = StorageFindingKind.screenRecordings.title
     private let scanner: FilePatternScanner
 
-    init(collector: FileSystemCollector) {
-        let mediaRoots = [
+    init(
+        roots: [URL] = [
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Downloads")
-        ]
+        ],
+        collector: FileSystemCollector
+    ) {
         scanner = FilePatternScanner(
             kind: .screenRecordings,
             domain: .media,
-            roots: mediaRoots,
+            roots: roots,
             safety: .review,
             collector: collector
         ) { url in
@@ -241,16 +245,18 @@ struct LargePhotoScanner: StorageCategoryScanning {
     let title = StorageFindingKind.largePhotos.title
     private let scanner: FilePatternScanner
 
-    init(collector: FileSystemCollector) {
-        let mediaRoots = [
+    init(
+        roots: [URL] = [
             DependencyPaths.home("Pictures"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
-        ]
+        ],
+        collector: FileSystemCollector
+    ) {
         scanner = FilePatternScanner(
             kind: .largePhotos,
             domain: .photos,
-            roots: mediaRoots,
+            roots: roots,
             safety: .review,
             collector: collector
         ) { url in

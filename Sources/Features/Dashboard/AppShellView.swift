@@ -31,27 +31,22 @@ struct AppShellView: View {
                             }
                         )
                     case .largeFiles:
-                        LargeFilesView(
-                            findings: viewModel.snapshot?.findings ?? [],
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
+                        largeFilesView(
+                            kinds: section?.filterKinds ?? []
                         )
                     case .cliPrograms:
-                        MediaCategoryView(
+                        mediaCategoryView(
                             title: "CLI Programs",
-                            findings: filteredFindings(for: section?.filterKinds ?? []),
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
+                            kinds: section?.filterKinds ?? [],
+                            emptyStateMessage: "Run a scan to find Homebrew caches, version managers, "
+                                + "and installed CLI toolchains."
                         )
                     case .screenshotsAndRecordings:
-                        MediaCategoryView(
+                        mediaCategoryView(
                             title: "Screenshots & Recordings",
-                            findings: filteredFindings(for: section?.filterKinds ?? []),
-                            onDelete: { urls in
-                                Task { await viewModel.deleteFiles(urls) }
-                            }
+                            kinds: section?.filterKinds ?? [],
+                            emptyStateMessage: "Run a scan to find screenshots and screen recordings "
+                                + "in common media locations."
                         )
                     case .duplicates:
                         DuplicatesView(
@@ -94,6 +89,74 @@ struct AppShellView: View {
     }
 
     private var section: AppSection? { selection }
+
+    @ViewBuilder
+    private func largeFilesView(kinds: [StorageFindingKind]) -> some View {
+        switch viewModel.phase {
+        case .scanning:
+            ScanProgressView(
+                viewModel: viewModel,
+                title: "Scanning Large Files",
+                subtitle: "Only large-file locations are being scanned."
+            )
+            .padding(28)
+        case .permissionRequired:
+            PermissionRequiredView(
+                blockedPermissions: viewModel.blockedPermissions,
+                onOpenSettings: viewModel.openSystemSettings,
+                onRetry: viewModel.retryAfterPermission
+            )
+            .padding(28)
+        case let .failed(message):
+            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
+                .padding(28)
+        case .idle, .results, .empty:
+            LargeFilesView(
+                findings: filteredFindings(for: kinds),
+                onScan: { viewModel.startScan(for: kinds) },
+                onDelete: { urls in
+                    Task { await viewModel.deleteFiles(urls) }
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func mediaCategoryView(
+        title: String,
+        kinds: [StorageFindingKind],
+        emptyStateMessage: String
+    ) -> some View {
+        switch viewModel.phase {
+        case .scanning:
+            ScanProgressView(
+                viewModel: viewModel,
+                title: "Scanning \(title)",
+                subtitle: "Only this category is being scanned."
+            )
+                .padding(28)
+        case .permissionRequired:
+            PermissionRequiredView(
+                blockedPermissions: viewModel.blockedPermissions,
+                onOpenSettings: viewModel.openSystemSettings,
+                onRetry: viewModel.retryAfterPermission
+            )
+            .padding(28)
+        case let .failed(message):
+            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
+                .padding(28)
+        case .idle, .results, .empty:
+            MediaCategoryView(
+                title: title,
+                findings: filteredFindings(for: kinds),
+                emptyStateMessage: emptyStateMessage,
+                onScan: { viewModel.startScan(for: kinds) },
+                onDelete: { urls in
+                    Task { await viewModel.deleteFiles(urls) }
+                }
+            )
+        }
+    }
 
     private func filteredFindings(for kinds: [StorageFindingKind]) -> [StorageFinding] {
         guard !kinds.isEmpty else { return [] }
