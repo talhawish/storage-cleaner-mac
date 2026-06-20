@@ -1,304 +1,137 @@
 import SwiftUI
 
-enum QuickCleanPhase {
-    case idle
-    case scanning
-    case review
-    case cleaning
-    case success
-}
-
-private let quickCleanReadyMessage = "Scan and remove safe-to-delete files in one step.\n"
-    + "Customize what's included in Settings → Safe to Delete."
-
-private func quickCleanSummary(for result: CleanupResult) -> String {
-    "Removed \(result.deletedCount) items, freed \(StorageFormatting.bytes(result.totalBytesReclaimed))"
-}
-
+/// The Quick Clean modal. Owns the phase machine and the per-category
+/// expansion state; everything else lives in the subcomponents under
+/// `Components/` so this file stays under the type-body-length limit.
 struct QuickCleanView: View {
-    let onClean: ([URL]) async -> CleanupResult
+    let onClean: @MainActor ([URL]) async -> CleanupResult
+    var onOpenSettings: (() -> Void)?
+
     @Environment(\.dismiss)
     private var dismiss
-
-    @State private var phase: QuickCleanPhase = .idle
-    @State private var progress = 0.0
-    @State private var scannedFindings: [StorageFinding] = []
-    @State private var selectedURLs: Set<URL> = []
-    @State private var scannedBytesByURL: [URL: Int64] = [:]
-    @State private var cleanupResult: CleanupResult?
-    @State private var scanStartTime: Date?
+    @State private var viewModel: QuickCleanViewModel
+    @State private var expandedCategoryIDs: Set<String> = []
     @State private var showCleanConfirmation = false
-    @Environment(\.accessibilityReduceMotion)
-    private var reduceMotion
 
-    @AppStorage("enabledCleanupOptions")
-    private var enabledOptionsData = ""
-
-    private var enabledOptionIDs: Set<String> {
-        Set(enabledOptionsData.components(separatedBy: ","))
-    }
-
-    private var totalSelectedBytes: Int64 {
-        selectedURLs.reduce(Int64(0)) { total, url in
-            total + (scannedBytesByURL[url] ?? StorageFormatting.fileSize(at: url))
-        }
-    }
-
-    private var selectedURLsForCleanup: [URL] {
-        selectedURLs.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-    }
-
-    private var confirmationFinding: StorageFinding {
-        StorageFinding(
-            kind: .junkFiles,
-            domain: .otherCaches,
-            bytes: totalSelectedBytes,
-            itemCount: selectedURLs.count,
-            safety: .safe,
-            examples: Array(selectedURLsForCleanup.prefix(3).map(\.lastPathComponent)),
-            filePaths: selectedURLsForCleanup
-        )
+    init(
+        onClean: @escaping @MainActor ([URL]) async -> CleanupResult,
+        onOpenSettings: (() -> Void)? = nil
+    ) {
+        self.onClean = onClean
+        self.onOpenSettings = onOpenSettings
+        _viewModel = State(initialValue: QuickCleanViewModel(onClean: onClean))
     }
 
     var body: some View {
         VStack(spacing: 0) {
             headerBar
-
             Divider()
-
-            switch phase {
-            case .idle:
-                readyView
-            case .scanning:
-                scanningView
-            case .review:
-                reviewView
-            case .cleaning:
-                cleaningView
-            case .success:
-                successView
-            }
+            content
         }
-        .frame(width: 640, height: 520)
+        .frame(width: 680, height: 560)
+        .background(AppTheme.appBackground)
         .sheet(isPresented: $showCleanConfirmation) {
-            DeleteConfirmationSheet(
-                finding: confirmationFinding,
-                selectedURLs: selectedURLsForCleanup,
-                totalBytes: totalSelectedBytes,
-                onDelete: {
-                    let urls = selectedURLsForCleanup
-                    showCleanConfirmation = false
-                    performCleanup(urls)
-                },
-                onCancel: { showCleanConfirmation = false }
-            )
+            confirmationSheet
+        }
+        .onDisappear { viewModel.cancelScan() }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch viewModel.phase {
+        case .idle:
+            readyView
+        case .scanning:
+            scanningView
+        case .review:
+            reviewView
+        case .cleaning:
+            cleaningView
+        case .success:
+            successView
         }
     }
+
+    // MARK: - Header
 
     private var headerBar: some View {
-        HStack {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkle")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .accessibilityHidden(true)
-                Text("Quick Clean")
-                    .font(.title3.weight(.semibold))
-            }
-            Spacer()
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-        }
-        .padding(20)
+        QuickCleanHeader(
+            subtitle: headerSubtitle,
+            showsSettingsButton: onOpenSettings != nil
+                && (viewModel.phase == .idle || viewModel.phase == .review),
+            onSettings: { onOpenSettings?() },
+            onClose: { dismiss() }
+        )
     }
 
-    private var readyView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            ZStack {
-                Circle()
-                    .fill(AppTheme.accent.opacity(0.08))
-                    .frame(width: 100, height: 100)
-                Image(systemName: "sparkle")
-                    .font(.system(size: 40, weight: .medium))
-                    .foregroundStyle(AppTheme.accent)
-                    .accessibilityHidden(true)
+    private var headerSubtitle: String {
+        switch viewModel.phase {
+        case .idle:
+            return "Scan and remove safe-to-delete files in one step"
+        case .scanning:
+            return "Scanning enabled categories…"
+        case .review:
+            return "Review the items you'd like to clean"
+        case .cleaning:
+            return "Moving selected items to Trash…"
+        case .success:
+            if let result = viewModel.lastResult,
+               result.deletedCount == 0,
+               result.failedCount == 0 {
+                return "No items were found to clean"
             }
-
-            VStack(spacing: 8) {
-                Text("Ready to Quick Clean")
-                    .font(.title2.weight(.semibold))
-                Text(quickCleanReadyMessage)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button {
-                startScan()
-            } label: {
-                Label("Scan & Clean", systemImage: "sparkle.magnifyingglass")
-                    .frame(minWidth: 180)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-
-            Spacer()
+            return "Cleanup finished"
         }
-        .padding(28)
+    }
+
+    // MARK: - Phases
+
+    private var readyView: some View {
+        QuickCleanReadyView(
+            onStartScan: { viewModel.startScan() }
+        )
     }
 
     private var scanningView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            ZStack {
-                Circle()
-                    .stroke(.quaternary, lineWidth: 8)
-                    .frame(width: 100, height: 100)
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(
-                        AngularGradient(colors: [AppTheme.accent, AppTheme.cyan, AppTheme.accent], center: .center),
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: progress)
-                    .frame(width: 100, height: 100)
-
-                Text("\(Int(progress * 100))%")
-                    .font(.title2.bold().monospacedDigit())
-            }
-
-            VStack(spacing: 6) {
-                Text("Scanning safe-to-delete items…")
-                    .font(.headline)
-                Text("\(scannedFindings.count) categories found so far")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(28)
+        QuickCleanScanningView(
+            progress: viewModel.progress
+        )
     }
 
     private var reviewView: some View {
         VStack(spacing: 0) {
-            reviewHeader
-
+            QuickCleanSummaryBar(
+                selectedItemCount: viewModel.totalSelectedItems,
+                selectedBytes: viewModel.totalSelectedBytes,
+                totalCategories: viewModel.populatedCategories.count,
+                onSelectAll: viewModel.selectAll,
+                onDeselectAll: viewModel.deselectAll
+            )
             Divider()
-
-            fileList
-
+            reviewList
             Divider()
-
             reviewFooter
         }
     }
 
-    private var reviewHeader: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(AppTheme.mint.opacity(0.12))
-                    .frame(width: 48, height: 48)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(AppTheme.mint)
-                    .accessibilityHidden(true)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Review Quick Clean")
-                    .font(.headline)
-                Text("\(selectedURLs.count) items, \(StorageFormatting.bytes(totalSelectedBytes)) total")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Button("Select All") {
-                selectedURLs = Set(scannedFindings.flatMap(\.filePaths))
-            }
-            .font(.subheadline)
-        }
-        .padding(20)
-    }
-
-    private var fileList: some View {
+    private var reviewList: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(scannedFindings) { finding in
-                    Section {
-                        ForEach(finding.filePaths, id: \.self) { url in
-                            fileRow(url, finding: finding)
-                        }
-                    } header: {
-                        HStack {
-                            Image(systemName: finding.domain.symbolName)
-                                .foregroundStyle(AppTheme.color(for: finding.domain))
-                                .accessibilityHidden(true)
-                            Text(finding.kind.title)
-                            Spacer()
-                            Text(StorageFormatting.bytes(finding.bytes))
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 6)
-                    }
+            LazyVStack(spacing: 12) {
+                ForEach(viewModel.populatedCategories) { category in
+                    QuickCleanCategoryCard(
+                        category: category,
+                        isExpanded: expandedCategoryIDs.contains(category.id) || expandedCategoryIDs.isEmpty,
+                        isFullySelected: viewModel.isCategoryFullySelected(category),
+                        isPartiallySelected: viewModel.isCategoryPartiallySelected(category),
+                        tint: QuickCleanPalette.color(for: category),
+                        onToggleCategory: { viewModel.toggleCategory(category) },
+                        onToggleExpansion: { toggleExpansion(for: category.id) },
+                        onToggleItem: { viewModel.toggle($0.url) },
+                        isItemSelected: { viewModel.isSelected($0.url) }
+                    )
                 }
             }
+            .padding(20)
         }
-    }
-
-    private func fileRow(_ url: URL, finding: StorageFinding) -> some View {
-        HStack(spacing: 10) {
-            Toggle(isOn: Binding(
-                get: { selectedURLs.contains(url) },
-                set: { _ in toggleURL(url) }
-            )) {
-                EmptyView()
-            }
-            .toggleStyle(.checkbox)
-
-            Image(systemName: url.hasDirectoryPath ? "folder.fill" : "doc.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-                .accessibilityHidden(true)
-
-            Text(url.lastPathComponent)
-                .font(.callout.weight(.medium))
-                .lineLimit(1)
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(StorageFormatting.bytes(scannedBytesByURL[url] ?? StorageFormatting.fileSize(at: url)))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Text(url.deletingLastPathComponent().path)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: 260, alignment: .trailing)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 4)
     }
 
     private var reviewFooter: some View {
@@ -306,6 +139,7 @@ struct QuickCleanView: View {
             Button("Cancel") { dismiss() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+                .keyboardShortcut(.cancelAction)
 
             Spacer()
 
@@ -317,156 +151,76 @@ struct QuickCleanView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(selectedURLs.isEmpty)
+            .disabled(!viewModel.hasSelection)
+            .keyboardShortcut(.defaultAction)
         }
         .padding(20)
     }
 
     private var cleaningView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            ProgressView()
-                .controlSize(.large)
-            Text("Cleaning \(selectedURLs.count) items…")
-                .font(.headline)
-            Spacer()
-        }
+        QuickCleanCleaningView(itemCount: viewModel.totalSelectedItems)
     }
 
     private var successView: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            ZStack {
-                Circle()
-                    .fill(AppTheme.mint.opacity(0.12))
-                    .frame(width: 100, height: 100)
-                    .scaleEffect(reduceMotion ? 1 : 1.1)
-
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 44, weight: .medium))
-                    .foregroundStyle(AppTheme.mint)
-                    .accessibilityHidden(true)
-            }
-
-            VStack(spacing: 6) {
-                Text("Clean Complete!")
-                    .font(.title2.weight(.semibold))
-                if let result = cleanupResult {
-                    Text(quickCleanSummary(for: result))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if result.failedCount > 0 {
-                        Text("\(result.failedCount) items could not be removed")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.orange)
-                    }
-                }
-            }
-
-            Button("Done") { dismiss() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.top, 8)
-
-            Spacer()
-        }
-        .padding(28)
+        QuickCleanSuccessView(
+            result: viewModel.lastResult,
+            cleanedCategories: cleanedCategories(),
+            onScanAgain: { viewModel.startScan() },
+            onClose: { dismiss() }
+        )
     }
 
-    private func startScan() {
-        phase = .scanning
-        progress = 0
-        scanStartTime = .now
-        scannedFindings = []
-        scannedBytesByURL = [:]
-        cleanupResult = nil
-
-        Task {
-            let scanResult = await performQuickScan()
-            guard !Task.isCancelled else { return }
-
-            scannedFindings = scanResult.findings
-            scannedBytesByURL = scanResult.bytesByURL
-            selectedURLs = Set(scanResult.findings.flatMap(\.filePaths))
-
-            if selectedURLs.isEmpty {
-                withAnimation { phase = .success }
-                cleanupResult = CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
-            } else {
-                withAnimation { phase = .review }
-            }
+    private func cleanedCategories() -> [QuickCleanCategory] {
+        guard let result = viewModel.lastResult else { return [] }
+        let deletedURLs = Set(result.deletedItems.map(\.originalURL))
+        return viewModel.scan.populatedCategories.filter { category in
+            category.items.contains { deletedURLs.contains($0.url) }
         }
     }
 
-    private func performQuickScan() async -> QuickCleanScanResult {
-        let collector = FileSystemCollector()
-        var findings: [StorageFinding] = []
-        var bytesByURL: [URL: Int64] = [:]
+    // MARK: - Confirmation
 
-        let enabledOptions = enabledOptionIDs.isEmpty
-            ? CleanupOptionsRegistry.safeByDefaultIDs
-            : enabledOptionIDs
-
-        for optionID in enabledOptions {
-            guard !Task.isCancelled else { break }
-            guard let option = CleanupOptionsRegistry.option(byID: optionID) else { continue }
-
-            let urls = option.paths.map { pathString in
-                NSString(string: pathString).expandingTildeInPath
-            }.map { URL(fileURLWithPath: $0) }
-
-            let collection = collector.collectExistingItems(at: urls)
-            let candidates = collection.candidates
-            let totalBytes = candidates.reduce(Int64(0)) { $0 + $1.bytes }
-
-            guard totalBytes > 0 else { continue }
-
-            let finding = StorageFinding(
-                kind: .junkFiles,
-                domain: option.domain,
-                bytes: totalBytes,
-                itemCount: candidates.count,
-                safety: option.safety,
-                examples: [option.name],
-                filePaths: candidates.map(\.url)
-            )
-            findings.append(finding)
-            for candidate in candidates {
-                bytesByURL[candidate.url] = candidate.bytes
-            }
-
-            await MainActor.run {
-                progress = Double(findings.count) / Double(max(enabledOptions.count, 1))
-            }
-        }
-
-        return QuickCleanScanResult(findings: findings, bytesByURL: bytesByURL)
+    @ViewBuilder private var confirmationSheet: some View {
+        let urls = viewModel.selection
+            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+        let selectedSafety = viewModel.populatedCategories
+            .filter { $0.items.contains { viewModel.isSelected($0.url) } }
+            .map(\.safety)
+            .contains(.review) ? CleanupSafety.review : CleanupSafety.safe
+        let finding = StorageFinding(
+            kind: .junkFiles,
+            domain: .otherCaches,
+            bytes: viewModel.totalSelectedBytes,
+            itemCount: urls.count,
+            safety: selectedSafety,
+            examples: viewModel.populatedCategories.prefix(3).map(\.name),
+            filePaths: urls
+        )
+        DeleteConfirmationSheet(
+            finding: finding,
+            selectedURLs: urls,
+            totalBytes: viewModel.totalSelectedBytes,
+            onDelete: {
+                showCleanConfirmation = false
+                viewModel.performCleanup()
+            },
+            onCancel: { showCleanConfirmation = false }
+        )
     }
 
-    private func performCleanup(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
-        phase = .cleaning
+    // MARK: - Helpers
 
-        Task {
-            let result = await onClean(urls)
-            await MainActor.run {
-                cleanupResult = result
-                withAnimation { phase = .success }
-            }
+    private func toggleExpansion(for id: String) {
+        if expandedCategoryIDs.isEmpty {
+            // First interaction: collapse everything except the tapped one.
+            expandedCategoryIDs = Set(viewModel.populatedCategories.map(\.id))
+                .subtracting([id])
+            return
         }
-    }
-
-    private func toggleURL(_ url: URL) {
-        if selectedURLs.contains(url) {
-            selectedURLs.remove(url)
+        if expandedCategoryIDs.contains(id) {
+            expandedCategoryIDs.remove(id)
         } else {
-            selectedURLs.insert(url)
+            expandedCategoryIDs.insert(id)
         }
     }
-}
-
-private struct QuickCleanScanResult: Sendable {
-    let findings: [StorageFinding]
-    let bytesByURL: [URL: Int64]
 }

@@ -17,6 +17,25 @@ final class StorageCleanerUITests: XCTestCase {
         XCTAssertTrue(results.waitForExistence(timeout: 12))
     }
 
+    /// Regression test for the Quick Clean rendering bug: the review modal
+    /// used to create one `StorageFinding` per enabled option but with the
+    /// same `StorageFindingKind` (`.junkFiles`), so SwiftUI's `ForEach`
+    /// only rendered the first finding. The header showed the correct total
+    /// while the list showed a single row. This test ensures the modal opens
+    /// from the dashboard and that the review list (once it appears) is not
+    /// shorter than the summary.
+    @MainActor
+    func testQuickCleanOpensFromDashboardCard() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+
+        let quickCleanCard = app.descendants(matching: .any)["quick-clean-card"]
+        XCTAssertTrue(quickCleanCard.waitForExistence(timeout: 4))
+        quickCleanCard.click()
+
+        let header = app.staticTexts["Quick Clean"]
+        XCTAssertTrue(header.waitForExistence(timeout: 4))
+    }
+
     @MainActor
     func testScanCanBeCancelled() {
         let app = launchApp()

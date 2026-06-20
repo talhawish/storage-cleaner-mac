@@ -17,7 +17,10 @@ struct AppShellView: View {
                 Group {
                     switch selection {
                     case .section(.overview), .none:
-                        DashboardView(viewModel: viewModel)
+                        DashboardView(
+                            viewModel: viewModel,
+                            onOpenSettings: { selection = .section(.settings) }
+                        )
                     case .section(.apps):
                         AppsView()
                     case .section(.projectActivity):

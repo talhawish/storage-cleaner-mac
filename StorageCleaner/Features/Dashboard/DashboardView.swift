@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @Bindable var viewModel: DashboardViewModel
+    var onOpenSettings: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
     @State private var showQuickClean = false
@@ -58,9 +59,17 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showQuickClean) {
-            QuickCleanView(onClean: { urls in
-                await viewModel.deleteFiles(urls)
-            })
+            QuickCleanView(
+                onClean: { urls in
+                    await viewModel.deleteFiles(urls)
+                },
+                onOpenSettings: {
+                    showQuickClean = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        onOpenSettings?()
+                    }
+                }
+            )
         }
     }
 
@@ -82,55 +91,62 @@ struct DashboardView: View {
         Button {
             showQuickClean = true
         } label: {
-            HStack(spacing: 18) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [AppTheme.accent, AppTheme.cyan],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 56, height: 56)
-
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Quick Clean")
-                        .font(.headline)
-                    Text("Scan and remove safe-to-delete files in one tap")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(AppTheme.accent)
-            }
-            .padding(22)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [AppTheme.accent.opacity(0.3), AppTheme.cyan.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.5
-                    )
-            }
+            quickCleanCardContent
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("quick-clean-card")
         .accessibilityHint("Opens Quick Clean to scan and remove safe files")
+    }
+
+    private var quickCleanCardContent: some View {
+        HStack(spacing: 18) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [AppTheme.accent, AppTheme.cyan],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 56, height: 56)
+
+                Image(systemName: "sparkle")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Quick Clean")
+                    .font(.headline)
+                Text("Scan and remove safe-to-delete files in one tap")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right.circle.fill")
+                .font(.title2)
+                .foregroundStyle(AppTheme.accent)
+                .accessibilityHidden(true)
+        }
+        .padding(22)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [AppTheme.accent.opacity(0.3), AppTheme.cyan.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
+        }
     }
 
     @ViewBuilder

@@ -1,10 +1,19 @@
 import SwiftUI
 
+/// "Safe to Delete" settings screen. Lists every `CleanupOption` grouped by
+/// category, with a search field, per-category "Enable all" toggle, and a
+/// safety summary at the top so the user can see at a glance how many
+/// safe-only vs review-required options are enabled.
+///
+/// The screen intentionally distinguishes safe-to-clean options (recoverable
+/// data, safe to remove without review) from review-first options
+/// (user-created content or toolchains that the user might still need).
 struct SafeToDeleteView: View {
     @AppStorage("enabledCleanupOptions")
     private var enabledOptionsData = ""
     @State private var enabledOptions: Set<String> = []
     @State private var showResetConfirmation = false
+    @State private var searchText = ""
 
     private let optionColorPalette: [String: Color] = [
         "blue": AppTheme.accent,
@@ -19,24 +28,60 @@ struct SafeToDeleteView: View {
         "yellow": .yellow,
         "red": .red,
         "green": .green,
-        "gray": .gray
+        "gray": .gray,
+        "purple": AppTheme.violet
     ]
 
     private var allOptions: [CleanupOption] {
         CleanupOptionsRegistry.allOptions
     }
 
+    private var visibleOptions: [CleanupOption] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return allOptions }
+        return allOptions.filter { option in
+            option.name.lowercased().contains(query)
+                || option.description.lowercased().contains(query)
+        }
+    }
+
+    private var safeCount: Int {
+        enabledOptions.filter { id in
+            CleanupOptionsRegistry.option(byID: id)?.safety == .safe
+        }.count
+    }
+
+    private var reviewCount: Int {
+        enabledOptions.filter { id in
+            CleanupOptionsRegistry.option(byID: id)?.safety == .review
+        }.count
+    }
+
+    private var groupedByCategory: [(CleanupOption.Category, [CleanupOption])] {
+        let categories = CleanupOptionsRegistry.categories
+        return categories.compactMap { category in
+            let options = visibleOptions.filter { $0.category == category }
+            return options.isEmpty ? nil : (category, options)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 header
-
-                ForEach(CleanupOptionsRegistry.categories, id: \.self) { category in
-                    categorySection(category)
+                safetySummary
+                searchField
+                if groupedByCategory.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(groupedByCategory, id: \.0) { category, options in
+                        categorySection(category: category, options: options)
+                    }
                 }
             }
             .padding(28)
         }
+        .background(AppTheme.appBackground)
         .navigationTitle("Safe to Delete")
         .onAppear { loadEnabled() }
         .onChange(of: enabledOptions) { saveEnabled() }
@@ -70,52 +115,161 @@ struct SafeToDeleteView: View {
         }
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("Safe to Delete")
                 .font(.largeTitle.bold())
             Text(
                 "Choose which categories are included in Quick Clean. "
-                    + "Items marked as safe can be removed without risk."
+                    + "Items marked as safe can be removed without risk. "
+                    + "Items marked as review may include user-created files."
             )
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 8) {
-                let safeCount = enabledOptions.filter { id in
-                    CleanupOptionsRegistry.option(byID: id)?.safety == .safe
-                }.count
-                Label("\(safeCount) safe items enabled", systemImage: "checkmark.shield.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(AppTheme.mint)
-            }
-            .padding(.top, 4)
+            .font(.title3)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func categorySection(_ category: CleanupOption.Category) -> some View {
-        let options = CleanupOptionsRegistry.options(for: category)
+    // MARK: - Safety summary
+
+    private var safetySummary: some View {
+        HStack(spacing: 14) {
+            summaryCard(
+                title: "Safe",
+                count: safeCount,
+                tint: AppTheme.mint,
+                systemImage: "checkmark.shield.fill",
+                subtitle: "Recoverable caches & build outputs"
+            )
+            summaryCard(
+                title: "Review",
+                count: reviewCount,
+                tint: AppTheme.orange,
+                systemImage: "eye.fill",
+                subtitle: "May include user-created content"
+            )
+        }
+    }
+
+    private func summaryCard(
+        title: String,
+        count: Int,
+        tint: Color,
+        systemImage: String,
+        subtitle: String
+    ) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(tint.opacity(0.14))
+                    .frame(width: 44, height: 44)
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(count) \(title) enabled")
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .cardSurface()
+    }
+
+    // MARK: - Search
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField("Filter categories…", text: $searchText)
+                .textFieldStyle(.plain)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    // MARK: - Empty state
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 36, weight: .medium))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("No matching categories")
+                .font(.headline)
+            Text("Try a different search term or clear the filter to see all categories.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+    }
+
+    // MARK: - Category section
+
+    private func categorySection(category: CleanupOption.Category, options: [CleanupOption]) -> some View {
+        let enabledInCategory = options.filter { enabledOptions.contains($0.id) }.count
 
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: iconForCategory(category))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(colorForCategory(category))
+                    .frame(width: 28, height: 28)
+                    .background(colorForCategory(category).opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
                     .accessibilityHidden(true)
+
                 Text(category.rawValue)
                     .font(.headline)
+
+                Spacer()
+
+                Text("\(enabledInCategory) of \(options.count)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+
+                Button(allInCategoryEnabled(options) ? "Disable all" : "Enable all") {
+                    toggleAllInCategory(options)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.accent)
+                .buttonStyle(.plain)
             }
 
             VStack(spacing: 0) {
                 ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
                     optionRow(option)
                     if index < options.count - 1 {
-                        Divider().padding(.leading, 52)
+                        Divider().padding(.leading, 60)
                     }
                 }
             }
-            .background(.regularMaterial)
+            .background(AppTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -145,23 +299,45 @@ struct SafeToDeleteView: View {
             }
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(option.name)
                         .font(.body.weight(.medium))
                     StatusBadge(safety: option.safety)
+                    if option.isSafeByDefault {
+                        Text("Default")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppTheme.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppTheme.accent.opacity(0.12), in: Capsule())
+                    }
                 }
                 Text(option.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Mutations
+
+    private func allInCategoryEnabled(_ options: [CleanupOption]) -> Bool {
+        options.allSatisfy { enabledOptions.contains($0.id) }
+    }
+
+    private func toggleAllInCategory(_ options: [CleanupOption]) {
+        if allInCategoryEnabled(options) {
+            options.forEach { enabledOptions.remove($0.id) }
+        } else {
+            options.forEach { enabledOptions.insert($0.id) }
+        }
     }
 
     private func toggleOption(_ id: String) {
@@ -183,6 +359,8 @@ struct SafeToDeleteView: View {
     private func saveEnabled() {
         enabledOptionsData = enabledOptions.sorted().joined(separator: ",")
     }
+
+    // MARK: - Styling
 
     private func iconForCategory(_ category: CleanupOption.Category) -> String {
         switch category {
