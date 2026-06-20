@@ -46,7 +46,8 @@ final class ProjectActivityViewModelTests: XCTestCase {
 
         viewModel = ProjectActivityViewModel(
             scanner: ProjectActivityScanner(searchPaths: [projectsRoot], maxDepth: 2),
-            hibernationService: ProjectHibernationService(removal: .delete)
+            hibernationService: ProjectHibernationService(removal: .delete),
+            compressionService: StubCompressionService()
         )
     }
 
@@ -189,6 +190,43 @@ final class ProjectActivityViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isScanning)
     }
 
+    // MARK: - Compression
+
+    func testCompressRemovesProjectFromSnapshotOnSuccess() async throws {
+        await viewModel.performScan()
+        let target = try XCTUnwrap(viewModel.snapshot?.projects.first { $0.name == "abandoned-swift" })
+        let preCount = viewModel.snapshot?.projects.count ?? 0
+
+        let outcome = await viewModel.compress(target)
+
+        XCTAssertTrue(outcome.succeeded, "got failure: \(outcome.failureReason ?? "nil")")
+        XCTAssertEqual(viewModel.lastCompression?.project.id, target.id)
+        XCTAssertEqual(viewModel.snapshot?.projects.count, preCount - 1, "successful compress removes the project")
+        XCTAssertNil(viewModel.snapshot?.projects.first { $0.name == "abandoned-swift" })
+    }
+
+    func testCompressKeepsProjectOnFailure() async throws {
+        viewModel = ProjectActivityViewModel(
+            scanner: ProjectActivityScanner(searchPaths: [projectsRoot], maxDepth: 2),
+            hibernationService: ProjectHibernationService(removal: .delete),
+            compressionService: FailingCompressionService()
+        )
+        await viewModel.performScan()
+        let target = try XCTUnwrap(viewModel.snapshot?.projects.first { $0.name == "abandoned-swift" })
+        let preCount = viewModel.snapshot?.projects.count
+
+        let outcome = await viewModel.compress(target)
+
+        XCTAssertFalse(outcome.succeeded)
+        XCTAssertNotNil(outcome.failureReason)
+        XCTAssertEqual(
+            viewModel.snapshot?.projects.count,
+            preCount,
+            "failed compress leaves the snapshot intact"
+        )
+        XCTAssertNotNil(viewModel.snapshot?.projects.first { $0.name == "abandoned-swift" })
+    }
+
     // MARK: - Helpers
 
     private func makeAgedProject(
@@ -211,5 +249,48 @@ final class ProjectActivityViewModelTests: XCTestCase {
         // Activity follows the source marker, so age only that file.
         let age = Date(timeIntervalSinceNow: -Double(days) * 86_400)
         try FileManager.default.setAttributes([.modificationDate: age], ofItemAtPath: markerURL.path)
+    }
+}
+
+/// Compression service that records calls and writes a stub zip file to disk
+/// so the view-model tests can drive the happy path without spawning real
+/// subprocesses.
+private actor StubCompressionService: ProjectCompressionServicing {
+    private(set) var compressCalls: [ProjectInfo] = []
+
+    func compress(_ project: ProjectInfo) async -> CompressionOutcome {
+        compressCalls.append(project)
+        let zipURL = project.path
+            .deletingLastPathComponent()
+            .appending(path: "\(project.path.lastPathComponent).zip")
+        try? Data(repeating: 0, count: 256).write(to: zipURL)
+        try? FileManager.default.removeItem(at: project.path)
+        return CompressionOutcome(
+            project: project,
+            zipURL: zipURL,
+            originalSize: project.totalSize,
+            reclaimedDependencyBytes: project.dependencySize,
+            removedDirectoryCount: 1,
+            archiveSize: 256,
+            totalReclaimedBytes: project.dependencySize,
+            failureReason: nil
+        )
+    }
+}
+
+/// Compression service that always fails. Used to drive the failure path
+/// through the view model without depending on the real `ditto` subprocess.
+private actor FailingCompressionService: ProjectCompressionServicing {
+    func compress(_ project: ProjectInfo) async -> CompressionOutcome {
+        CompressionOutcome(
+            project: project,
+            zipURL: ProjectCompressionService.zipURL(for: project),
+            originalSize: project.totalSize,
+            reclaimedDependencyBytes: 0,
+            removedDirectoryCount: 0,
+            archiveSize: 0,
+            totalReclaimedBytes: 0,
+            failureReason: "Stub failure for tests."
+        )
     }
 }

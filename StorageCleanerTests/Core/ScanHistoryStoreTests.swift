@@ -135,4 +135,117 @@ final class ScanHistoryStoreTests: XCTestCase {
 
         XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>()).isEmpty)
     }
+
+    func testSamplePathsArePersistedOnCleanupActions() throws {
+        let fixture = makeStore()
+        fixture.store.recordCompletedScan(
+            ScanSnapshot(
+                findings: [
+                    StorageFinding(
+                        kind: .xcodeArtifacts,
+                        domain: .appleDevelopment,
+                        bytes: 1_024,
+                        itemCount: 1,
+                        safety: .safe,
+                        examples: [],
+                        filePaths: [URL(filePath: "/tmp/DerivedData")]
+                    )
+                ],
+                scannedItemCount: 1,
+                duration: .seconds(1)
+            )
+        )
+
+        let paths = [
+            URL(filePath: "/tmp/DerivedData/ProjectA"),
+            URL(filePath: "/tmp/DerivedData/ProjectB")
+        ]
+        fixture.store.recordCleanupActions([
+            CleanupAuditEntry(
+                kind: .xcodeArtifacts,
+                bytesReclaimed: 1_024,
+                itemCount: 2,
+                samplePaths: paths
+            )
+        ])
+
+        let action = try XCTUnwrap(
+            try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>()).first
+        )
+        XCTAssertEqual(action.samplePaths, paths)
+    }
+
+    func testCleanupActionsUpdateScanCleanedBytes() throws {
+        let fixture = makeStore()
+        fixture.store.recordCompletedScan(
+            ScanSnapshot(
+                findings: [
+                    StorageFinding(
+                        kind: .nodeDependencies,
+                        domain: .webDevelopment,
+                        bytes: 5_000,
+                        itemCount: 2,
+                        safety: .safe,
+                        examples: [],
+                        filePaths: [URL(filePath: "/tmp/node_modules")]
+                    ),
+                    StorageFinding(
+                        kind: .junkFiles,
+                        domain: .otherCaches,
+                        bytes: 2_500,
+                        itemCount: 1,
+                        safety: .safe,
+                        examples: [],
+                        filePaths: [URL(filePath: "/tmp/junk")]
+                    )
+                ],
+                scannedItemCount: 3,
+                duration: .seconds(2)
+            )
+        )
+
+        fixture.store.recordCleanupActions([
+            CleanupAuditEntry(
+                kind: .nodeDependencies,
+                bytesReclaimed: 4_000,
+                itemCount: 1,
+                samplePaths: [URL(filePath: "/tmp/node_modules")]
+            )
+        ])
+        fixture.store.recordCleanupActions([
+            CleanupAuditEntry(
+                kind: .junkFiles,
+                bytesReclaimed: 1_000,
+                itemCount: 1,
+                samplePaths: [URL(filePath: "/tmp/junk")]
+            )
+        ])
+
+        let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
+        XCTAssertEqual(scan.cleanedBytes, 5_000)
+    }
+
+    func testCleanedBytesRemainZeroWhenNoActionsRecorded() throws {
+        let fixture = makeStore()
+        fixture.store.recordCompletedScan(
+            ScanSnapshot(
+                findings: [
+                    StorageFinding(
+                        kind: .xcodeArtifacts,
+                        domain: .appleDevelopment,
+                        bytes: 1_000,
+                        itemCount: 1,
+                        safety: .safe,
+                        examples: [],
+                        filePaths: [URL(filePath: "/tmp/DerivedData")]
+                    )
+                ],
+                scannedItemCount: 1,
+                duration: .seconds(1)
+            )
+        )
+
+        let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
+        XCTAssertEqual(scan.cleanedBytes, 0)
+    }
 }

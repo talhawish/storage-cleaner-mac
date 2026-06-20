@@ -48,13 +48,25 @@ struct SafeToDeleteView: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .confirmationDialog("Reset to defaults?", isPresented: $showResetConfirmation, titleVisibility: .visible) {
-            Button("Reset", role: .destructive) {
-                enabledOptions = CleanupOptionsRegistry.safeByDefaultIDs
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will restore the default selection of safe-to-delete items.")
+        .sheet(isPresented: $showResetConfirmation) {
+            ConfirmationModal(
+                variant: .warning,
+                title: "Reset to defaults?",
+                message: "This will restore the default selection of safe-to-delete items.",
+                iconSystemName: "arrow.uturn.backward.circle.fill",
+                iconTint: AppTheme.orange,
+                showsCloseButton: true,
+                confirm: AppModalActionBar.Action(
+                    title: "Reset",
+                    systemImage: "arrow.uturn.backward",
+                    isProminent: true,
+                    isDefault: true,
+                    action: {
+                        enabledOptions = CleanupOptionsRegistry.safeByDefaultIDs
+                    }
+                ),
+                cancel: AppModalActionBar.CancelAction(title: "Cancel")
+            )
         }
     }
 

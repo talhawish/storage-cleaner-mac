@@ -7,6 +7,10 @@ final class StoredScan {
     var durationSeconds: Double
     var scannedItemCount: Int
     var reclaimableBytes: Int64
+    /// Sum of bytes reclaimed by every `cleanupActions` entry attached to this scan. Computed at
+    /// write time so the Cleanup History totals stay cheap and don't drift if action ordering or
+    /// re-runs leave stale rows behind. Defaults to 0 so existing stores migrate cleanly.
+    var cleanedBytes: Int64
 
     @Relationship(deleteRule: .cascade)
     var findings: [StoredFinding]
@@ -19,6 +23,7 @@ final class StoredScan {
         durationSeconds: Double = 0,
         scannedItemCount: Int = 0,
         reclaimableBytes: Int64 = 0,
+        cleanedBytes: Int64 = 0,
         findings: [StoredFinding] = [],
         cleanupActions: [StoredCleanupAction] = []
     ) {
@@ -26,6 +31,7 @@ final class StoredScan {
         self.durationSeconds = durationSeconds
         self.scannedItemCount = scannedItemCount
         self.reclaimableBytes = reclaimableBytes
+        self.cleanedBytes = cleanedBytes
         self.findings = findings
         self.cleanupActions = cleanupActions
     }
@@ -95,6 +101,9 @@ final class StoredCleanupAction {
     var kindRaw: String
     var bytesReclaimed: Int64
     var itemCount: Int
+    /// A handful of representative original paths that were moved to Trash. Persisted as URLs so
+    /// the Cleanup History detail sheet can offer "Show in Finder" without re-scanning disk.
+    var samplePaths: [URL]
 
     var scan: StoredScan?
 
@@ -102,11 +111,13 @@ final class StoredCleanupAction {
         date: Date = .now,
         kindRaw: String = "",
         bytesReclaimed: Int64 = 0,
-        itemCount: Int = 0
+        itemCount: Int = 0,
+        samplePaths: [URL] = []
     ) {
         self.date = date
         self.kindRaw = kindRaw
         self.bytesReclaimed = bytesReclaimed
         self.itemCount = itemCount
+        self.samplePaths = samplePaths
     }
 }

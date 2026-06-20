@@ -1,6 +1,24 @@
 import Foundation
 
 enum ProjectDependencyRules {
+    /// `true` if `directory/package.json` exists and its contents contain `dependency` as a
+    /// substring. Reading the whole file keeps the marker simple; detection runs once per
+    /// project root so the cost is bounded. Linear scan is intentional — avoiding a JSON
+    /// dependency keeps this file Foundation-only.
+    static func packageJSONContains(
+        _ dependency: String,
+        at directory: URL,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        let packageJSON = directory.appending(path: "package.json")
+        guard fileManager.fileExists(atPath: packageJSON.path),
+              let data = fileManager.contents(atPath: packageJSON.path),
+              let text = String(data: data, encoding: .utf8) else {
+            return false
+        }
+        return text.contains(dependency)
+    }
+
     static func isComposerProject(at directory: URL, fileManager: FileManager = .default) -> Bool {
         fileManager.fileExists(atPath: directory.appending(path: "composer.json").path)
             || isComposerVendorDirectory(directory.appending(path: "vendor", directoryHint: .isDirectory))

@@ -35,8 +35,8 @@ settings live in the committed `project.pbxproj` (edit them in Xcode). User-spec
 Run a single unit test: `swift test --filter DashboardViewModelTests/<methodName>`.
 
 CI (`.github/workflows/ci.yml`) runs the equivalent of `make verify` with `-warnings-as-errors`.
-Treat warnings as errors locally too. SwiftLint enforces a **500-line file-length error** (warn at
-400) and bans `force_unwrapping`.
+Treat warnings as errors locally too. SwiftLint enforces a **600-line file-length error** (warn at
+500) and bans `force_unwrapping`.
 
 ## Two run modes
 

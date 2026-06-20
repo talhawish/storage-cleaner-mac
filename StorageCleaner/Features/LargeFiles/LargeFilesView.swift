@@ -89,21 +89,27 @@ struct LargeFilesView: View {
                 .help("Scan large-file locations again")
             }
         }
-        .confirmationDialog(
-            "Move \(selectedURLs.count) items to Trash?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Move to Trash", role: .destructive) {
-                let urls = Array(selectedURLs)
-                selectedURLs.removeAll()
-                onDelete(urls)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This will move \(selectedURLs.count) items "
-                    + "(\(StorageFormatting.bytes(totalSelectedBytes))) to Trash."
+        .sheet(isPresented: $showDeleteConfirmation) {
+            ConfirmationModal(
+                variant: .destructive,
+                title: "Move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") to Trash?",
+                message: "This will move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") "
+                    + "(\(StorageFormatting.bytes(totalSelectedBytes))) to Trash.",
+                iconSystemName: "trash.fill",
+                showsCloseButton: true,
+                confirm: AppModalActionBar.Action(
+                    title: "Move to Trash",
+                    systemImage: "trash.fill",
+                    isProminent: true,
+                    isDestructive: true,
+                    isDefault: true,
+                    action: {
+                        let urls = Array(selectedURLs)
+                        selectedURLs.removeAll()
+                        onDelete(urls)
+                    }
+                ),
+                cancel: AppModalActionBar.CancelAction(title: "Cancel")
             )
         }
         .sheet(isPresented: Binding(

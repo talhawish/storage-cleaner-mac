@@ -8,11 +8,13 @@ import Observation
 final class ProjectActivityViewModel {
     private let scanner: ProjectActivityScanner
     private let hibernationService: ProjectHibernationService
+    private let compressionService: any ProjectCompressionServicing
     private var scanTask: Task<Void, Never>?
 
     private(set) var snapshot: ProjectActivitySnapshot?
     private(set) var isScanning = false
     private(set) var lastHibernation: HibernationSummary?
+    private(set) var lastCompression: CompressionOutcome?
     var selectedTechnology: ProjectTechnology?
     var selectedStatus: ProjectActivityStatus?
 
@@ -22,10 +24,12 @@ final class ProjectActivityViewModel {
 
     init(
         scanner: ProjectActivityScanner = ProjectActivityScanner(),
-        hibernationService: ProjectHibernationService = ProjectHibernationService()
+        hibernationService: ProjectHibernationService = ProjectHibernationService(),
+        compressionService: any ProjectCompressionServicing = ProjectCompressionService()
     ) {
         self.scanner = scanner
         self.hibernationService = hibernationService
+        self.compressionService = compressionService
     }
 
     // MARK: - Derived state
@@ -130,6 +134,37 @@ final class ProjectActivityViewModel {
         let updated = snapshot.projects
             .map { reclaimed.contains($0.id) ? $0.withDependenciesReclaimed : $0 }
             .sorted { $0.totalSize > $1.totalSize }
+        self.snapshot = ProjectActivitySnapshot(
+            projects: updated,
+            scannedAt: snapshot.scannedAt,
+            scanDuration: snapshot.scanDuration
+        )
+    }
+
+    // MARK: - Compression
+
+    /// Hibernates a single project and, on success, compresses it into a zip
+    /// archive next to the original folder. The original folder is removed
+    /// only after the archive is verified, so a partial or invalid zip never
+    /// destroys the project.
+    ///
+    /// On success the project is removed from the snapshot entirely (its
+    /// folder is gone). On failure the snapshot is left untouched so the user
+    /// can retry.
+    @discardableResult
+    func compress(_ project: ProjectInfo) async -> CompressionOutcome {
+        let outcome = await compressionService.compress(project)
+        lastCompression = outcome
+        if outcome.succeeded {
+            removeProjectFromSnapshot(id: project.id)
+        }
+        return outcome
+    }
+
+    private func removeProjectFromSnapshot(id: UUID) {
+        guard let snapshot else { return }
+        let updated = snapshot.projects.filter { $0.id != id }
+        guard updated.count != snapshot.projects.count else { return }
         self.snapshot = ProjectActivitySnapshot(
             projects: updated,
             scannedAt: snapshot.scannedAt,

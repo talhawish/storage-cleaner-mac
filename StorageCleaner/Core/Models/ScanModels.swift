@@ -57,6 +57,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case nodeDependencies
     case dockerArtifacts
     case flutterArtifacts
+    case reactNativeArtifacts
     case androidStudioArtifacts
     case androidPackages
     case aiModelCaches
@@ -88,6 +89,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .nodeDependencies: "Node.js dependencies"
         case .dockerArtifacts: "Docker artifacts"
         case .flutterArtifacts: "Flutter artifacts"
+        case .reactNativeArtifacts: "React Native artifacts"
         case .androidStudioArtifacts: "Android Studio artifacts"
         case .androidPackages: "Leftover APKs"
         case .aiModelCaches: "AI model caches"
@@ -121,6 +123,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .nodeDependencies: "npm, pnpm, yarn, and Bun caches and installed packages"
         case .dockerArtifacts: "Images, volumes, builder layers, and local container runtimes"
         case .flutterArtifacts: "Flutter build folders, pub cache files, and generated app bundles"
+        case .reactNativeArtifacts: "Per-project iOS Pods, iOS/Android build, and Gradle outputs from React Native"
         case .androidStudioArtifacts: "Android Studio system data, emulator files, SDK caches, and Gradle outputs"
         case .androidPackages: "Loose APK and AAB build outputs"
         case .aiModelCaches: "Local model downloads, embeddings, and generated cache files"

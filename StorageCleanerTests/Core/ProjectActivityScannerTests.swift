@@ -37,6 +37,46 @@ final class ProjectActivityScannerTests: XCTestCase {
         }
     }
 
+    func testDetectsReactNativeFromPackageJSONDependency() throws {
+        let root = try makeProject(named: "rn_app", marker: "package.json")
+        try #"{"dependencies":{"react-native":"^0.73.0"}}"#.write(
+            to: root.appending(path: "package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(ProjectDetector.detect(at: root), .reactNative)
+    }
+
+    func testReactNativeTakesPriorityOverPlainNodeJS() throws {
+        let root = try makeProject(named: "rn_prio", marker: "package.json")
+        try #"{"dependencies":{"react-native":"0.73.0","react":"18.2.0"}}"#.write(
+            to: root.appending(path: "package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(ProjectDetector.detect(at: root), .reactNative, "react-native wins over plain node")
+    }
+
+    func testPackageJSONWithoutReactNativeFallsBackToNodeJS() throws {
+        let root = try makeProject(named: "plain_node", marker: "package.json")
+        try #"{"dependencies":{"react":"18.2.0","next":"14.0.0"}}"#.write(
+            to: root.appending(path: "package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        XCTAssertEqual(ProjectDetector.detect(at: root), .nodeJS)
+    }
+
+    func testEmptyPackageJSONIsNotReactNative() throws {
+        let root = try makeProject(named: "empty_pkg", marker: "package.json")
+        try "{}".write(to: root.appending(path: "package.json"), atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(ProjectDetector.detect(at: root), .nodeJS, "a package.json with no react-native is plain Node")
+    }
+
     func testDetectsExtensionBasedMarkers() throws {
         let dotNet = try makeProject(named: "Api", marker: "Api.csproj")
         XCTAssertEqual(ProjectDetector.detect(at: dotNet), .dotNet)

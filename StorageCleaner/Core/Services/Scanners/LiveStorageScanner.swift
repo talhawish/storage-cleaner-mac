@@ -179,6 +179,7 @@ extension LiveStorageScanner {
                 XcodeStorageScanner(collector: collector),
                 DockerStorageScanner(collector: collector),
                 FlutterStorageScanner(collector: collector),
+                ReactNativeStorageScanner(collector: collector),
                 AndroidStudioStorageScanner(collector: collector),
                 AndroidPackageScanner(collector: collector),
                 NodeDependencyScanner(collector: collector),

@@ -7,103 +7,56 @@ struct DeleteConfirmationSheet: View {
     let onDelete: () -> Void
     let onCancel: () -> Void
 
-    @Environment(\.accessibilityReduceMotion)
-    private var reduceMotion
-    @State private var isPulsing = false
     @State private var confirmed = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-
-            Divider()
-
-            warningBanner
-
-            fileList
-
-            Divider()
-
-            footer
-        }
-        .frame(width: 520, height: 480)
-    }
-
-    private var header: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(AppTheme.rose.opacity(0.12))
-                    .frame(width: 52, height: 52)
-                    .scaleEffect(isPulsing ? 1.08 : 1.0)
-
-                Image(systemName: "trash.fill")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(AppTheme.rose)
-            }
-            .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Move \(selectedURLs.count) items to Trash")
-                    .font(.title3.weight(.semibold))
-                Text("Review the selected files before cleanup")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Text(StorageFormatting.bytes(totalBytes))
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(AppTheme.rose)
-        }
-        .padding(24)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
-        }
-    }
-
-    private var warningBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppTheme.orange)
-                .font(.system(size: 14))
-                .accessibilityHidden(true)
-
-            Text("These files will be moved to Trash and can be restored until the Trash is emptied.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-        }
-        .padding(14)
-        .background(AppTheme.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-    }
-
-    private var fileList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(selectedURLs.prefix(50), id: \.self) { url in
-                    fileRow(url)
-                    if url != selectedURLs.prefix(50).last {
-                        Divider().padding(.leading, 52)
+        ConfirmationModal(
+            variant: .destructive,
+            title: "Move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") to Trash",
+            subtitle: "Review the selected files before cleanup",
+            trailing: .sizeBadge(value: StorageFormatting.bytes(totalBytes), tint: AppTheme.rose),
+            showsCloseButton: false,
+            confirm: AppModalActionBar.Action(
+                title: "Move to Trash",
+                systemImage: "trash.fill",
+                isProminent: true,
+                isDestructive: true,
+                isDisabled: confirmed,
+                isDefault: true,
+                action: {
+                    confirmed = true
+                    onDelete()
+                }
+            ),
+            cancel: AppModalActionBar.CancelAction(title: "Cancel", action: onCancel),
+            isProcessing: confirmed
+        ) {
+            AppModalSection(
+                title: "Selected items",
+                subtitle: "Up to 50 are shown",
+                systemImage: "doc.on.doc.fill",
+                tint: AppTheme.rose
+            ) {
+                VStack(spacing: 0) {
+                    ForEach(Array(selectedURLs.prefix(50).enumerated()), id: \.element) { index, url in
+                        fileRow(url)
+                        if index < min(selectedURLs.count, 50) - 1 {
+                            Divider().padding(.leading, 44)
+                        }
                     }
                 }
+                .padding(.vertical, 4)
+                .cardSurface()
 
                 if selectedURLs.count > 50 {
                     Text("… and \(selectedURLs.count - 50) more items")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 4)
                 }
             }
         }
-        .background(.regularMaterial)
     }
 
     private func fileRow(_ url: URL) -> some View {
@@ -128,36 +81,8 @@ struct DeleteConfirmationSheet: View {
 
             Spacer()
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
-    }
-
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Button(action: onCancel) {
-                Text("Cancel")
-                    .frame(minWidth: 80)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .keyboardShortcut(.cancelAction)
-
-            Spacer()
-
-            Button {
-                confirmed = true
-                onDelete()
-            } label: {
-                Label("Move to Trash", systemImage: "trash.fill")
-                    .frame(minWidth: 160)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-            .disabled(confirmed)
-        }
-        .padding(24)
     }
 
     private func iconForURL(_ url: URL) -> String {
@@ -189,72 +114,87 @@ struct DeleteConfirmationSheet: View {
 
 struct CategoryInfoSheet: View {
     let finding: StorageFinding
+
     @Environment(\.dismiss)
     private var dismiss
 
     var body: some View {
-        VStack(spacing: 24) {
-            HStack {
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
+        AppModal(
+            idealWidth: 540,
+            minHeight: 460,
+            idealHeight: 500,
+            maxHeight: 620
+        ) {
+            VStack(spacing: 0) {
+                AppModalHeader(
+                    iconSystemName: finding.domain.symbolName,
+                    iconTint: AppTheme.color(for: finding.domain),
+                    title: finding.kind.title,
+                    subtitle: finding.kind.summary,
+                    trailing: nil,
+                    showsCloseButton: true
+                )
+
+                Divider()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.large) {
+                        AppModalSection(
+                            title: "Overview",
+                            systemImage: "info.circle.fill",
+                            tint: AppTheme.color(for: finding.domain)
+                        ) {
+                            AppModalCard {
+                                VStack(spacing: 0) {
+                                    infoRow("Domain", finding.domain.title)
+                                    Divider()
+                                    infoRow("Total Size", StorageFormatting.bytes(finding.bytes))
+                                    Divider()
+                                    infoRow("Items", "\(finding.itemCount)")
+                                    Divider()
+                                    infoRow("Safety", finding.safety.title)
+                                    if !finding.examples.isEmpty {
+                                        Divider()
+                                        infoRow("Includes", finding.examples.joined(separator: ", "))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(AppTheme.Spacing.extraLarge)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
+
+                Divider()
+
+                AppModalActionBar(
+                    cancel: nil,
+                    actions: [
+                        AppModalActionBar.Action(
+                            title: "Done",
+                            systemImage: "checkmark",
+                            tint: AppTheme.accent,
+                            isDefault: true,
+                            action: { dismiss() }
+                        )
+                    ],
+                    style: .compact
+                )
             }
-
-            ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(AppTheme.color(for: finding.domain).opacity(0.12))
-                    .frame(width: 80, height: 80)
-
-                Image(systemName: finding.domain.symbolName)
-                    .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(AppTheme.color(for: finding.domain))
-            }
-            .accessibilityHidden(true)
-
-            VStack(spacing: 8) {
-                Text(finding.kind.title)
-                    .font(.title2.weight(.semibold))
-                Text(finding.kind.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Divider()
-
-            VStack(spacing: 16) {
-                infoRow("Domain", finding.domain.title)
-                infoRow("Total Size", StorageFormatting.bytes(finding.bytes))
-                infoRow("Items", "\(finding.itemCount)")
-                infoRow("Safety", finding.safety.title)
-                if !finding.examples.isEmpty {
-                    infoRow("Includes", finding.examples.joined(separator: ", "))
-                }
-            }
-
-            Spacer()
         }
-        .padding(28)
-        .frame(width: 440, height: 460)
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
-        HStack {
+        HStack(alignment: .top, spacing: 12) {
             Text(label)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 90, alignment: .trailing)
+                .frame(width: 100, alignment: .leading)
             Text(value)
                 .font(.subheadline)
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }

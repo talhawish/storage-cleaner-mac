@@ -30,9 +30,15 @@ struct ProjectActivityView: View {
             viewModel.inactivityThreshold = newValue
         }
         .sheet(item: $selectedProject) { project in
-            ProjectDetailView(project: project) { project in
-                await viewModel.hibernate(project)
-            }
+            ProjectDetailView(
+                project: project,
+                onHibernate: { project in
+                    await viewModel.hibernate(project)
+                },
+                onCompress: { project in
+                    await viewModel.compress(project)
+                }
+            )
         }
         .sheet(isPresented: $showHibernateSheet) {
             HibernateSheet(

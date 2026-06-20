@@ -3,55 +3,60 @@ import SwiftUI
 
 struct MediaPreviewSheet: View {
     let url: URL
+
     @Environment(\.dismiss)
     private var dismiss
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(url.lastPathComponent)
-                    .font(.headline)
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(16)
-
-            Divider()
-
-            MediaPreviewContent(url: url)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .textBackgroundColor))
-
-            Divider()
-
-            HStack(spacing: 16) {
-                Label(StorageFormatting.bytes(StorageFormatting.fileSize(at: url)), systemImage: "doc")
-                Label(dateString, systemImage: "clock")
-                Spacer()
-                Button("Show in Finder") {
-                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(16)
-        }
-        .frame(
-            minWidth: 640,
+        AppModal(
             idealWidth: 880,
-            maxWidth: 1_040,
-            minHeight: 520,
+            minHeight: 560,
             idealHeight: 700,
             maxHeight: 820
-        )
-    }
+        ) {
+            VStack(spacing: 0) {
+                AppModalHeader(
+                    iconSystemName: DependencyPaths.Media.imageExtensions.contains(url.pathExtension.lowercased())
+                        ? "photo.fill"
+                        : "film.fill",
+                    iconTint: AppTheme.pink,
+                    title: url.lastPathComponent,
+                    subtitle: "Preview",
+                    trailing: .sizeBadge(
+                        value: StorageFormatting.bytes(StorageFormatting.fileSize(at: url)),
+                        tint: AppTheme.pink
+                    ),
+                    showsCloseButton: true
+                )
 
-    private var dateString: String {
-        let date = StorageFormatting.modificationDate(at: url)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+                Divider()
+
+                MediaPreviewContent(url: url)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(nsColor: .textBackgroundColor))
+
+                Divider()
+
+                AppModalActionBar(
+                    cancel: nil,
+                    actions: [
+                        AppModalActionBar.Action(
+                            title: "Show in Finder",
+                            systemImage: "folder",
+                            tint: AppTheme.accent,
+                            isDefault: true,
+                            action: {
+                                NSWorkspace.shared.selectFile(
+                                    nil,
+                                    inFileViewerRootedAtPath: url.deletingLastPathComponent().path
+                                )
+                            }
+                        )
+                    ],
+                    style: .compact
+                )
+            }
+        }
     }
 }
 

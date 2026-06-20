@@ -6,6 +6,22 @@ struct CleanupAuditEntry: Sendable, Equatable {
     let kind: StorageFindingKind
     let bytesReclaimed: Int64
     let itemCount: Int
+    /// Up to a small number of representative original paths that were removed, so the Cleanup
+    /// History row can show *what* was deleted and offer "Show in Finder". Truncated at the call
+    /// site to avoid bloating the audit log.
+    let samplePaths: [URL]
+
+    init(
+        kind: StorageFindingKind,
+        bytesReclaimed: Int64,
+        itemCount: Int,
+        samplePaths: [URL] = []
+    ) {
+        self.kind = kind
+        self.bytesReclaimed = bytesReclaimed
+        self.itemCount = itemCount
+        self.samplePaths = samplePaths
+    }
 }
 
 /// Persists scan results and cleanup audit records so the Cleanup History screen has data and
@@ -46,14 +62,21 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         guard !entries.isEmpty else { return }
 
         let scan = mostRecentScan()
+        let newBytes = entries.reduce(Int64(0)) { $0 + $1.bytesReclaimed }
         for entry in entries {
             let action = StoredCleanupAction(
                 kindRaw: entry.kind.rawValue,
                 bytesReclaimed: entry.bytesReclaimed,
-                itemCount: entry.itemCount
+                itemCount: entry.itemCount,
+                samplePaths: entry.samplePaths
             )
             action.scan = scan
             context.insert(action)
+        }
+        // Update the scan's running total in-place so the Cleanup History row can read a
+        // single field for the "storage recovered" call-out without re-summing actions.
+        if let scan {
+            scan.cleanedBytes += newBytes
         }
         save()
     }

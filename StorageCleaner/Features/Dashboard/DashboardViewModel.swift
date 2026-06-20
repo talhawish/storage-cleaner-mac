@@ -168,7 +168,10 @@ final class DashboardViewModel {
             CleanupAuditEntry(
                 kind: .cliApps,
                 bytesReclaimed: result.totalBytesReclaimed,
-                itemCount: result.deletedCount
+                itemCount: result.deletedCount,
+                samplePaths: Self.samplePaths(
+                    from: result.deletedItems.map(\.originalURL)
+                )
             )
         ])
 
@@ -242,9 +245,23 @@ final class DashboardViewModel {
             let deletedPaths = reclaimedBytesByURL.keys.filter { finding.contains($0) }
             guard !deletedPaths.isEmpty else { return nil }
             let bytes = deletedPaths.reduce(Int64(0)) { $0 + (reclaimedBytesByURL[$1] ?? 0) }
-            return CleanupAuditEntry(kind: finding.kind, bytesReclaimed: bytes, itemCount: deletedPaths.count)
+            return CleanupAuditEntry(
+                kind: finding.kind,
+                bytesReclaimed: bytes,
+                itemCount: deletedPaths.count,
+                samplePaths: Self.samplePaths(from: deletedPaths)
+            )
         }
         historyStore.recordCleanupActions(entries)
+    }
+
+    /// Cap the number of sample paths persisted per audit entry. The full list is in the
+    /// live `DeletedItem` records (and ultimately Trash); the audit just needs enough
+    /// representative paths to be useful in the Cleanup History detail sheet.
+    private static let samplePathLimit = 5
+
+    private static func samplePaths<S: Sequence>(from paths: S) -> [URL] where S.Element == URL {
+        Array(paths.prefix(samplePathLimit))
     }
 
     private func beginScanning(for kinds: Set<StorageFindingKind>?) {

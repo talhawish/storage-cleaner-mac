@@ -55,15 +55,23 @@ struct DuplicatesView: View {
                 MediaPreviewSheet(url: previewURL)
             }
         }
-        .confirmationDialog(
-            "Remove \(selectedURLs.count) duplicate copies?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Move to Trash", role: .destructive, action: performDelete)
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(deleteMessage)
+        .sheet(isPresented: $showDeleteConfirmation) {
+            ConfirmationModal(
+                variant: .destructive,
+                title: "Remove \(selectedURLs.count) duplicate copies?",
+                message: deleteMessage,
+                iconSystemName: "doc.on.doc.fill",
+                showsCloseButton: true,
+                confirm: AppModalActionBar.Action(
+                    title: "Move to Trash",
+                    systemImage: "trash.fill",
+                    isProminent: true,
+                    isDestructive: true,
+                    isDefault: true,
+                    action: performDelete
+                ),
+                cancel: AppModalActionBar.CancelAction(title: "Cancel")
+            )
         }
     }
 

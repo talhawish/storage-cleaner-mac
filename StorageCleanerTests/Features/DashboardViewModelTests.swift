@@ -243,7 +243,7 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertEqual(store.recordedCleanups.count, 1)
         XCTAssertEqual(
             store.recordedCleanups.first,
-            [CleanupAuditEntry(kind: .largeFiles, bytesReclaimed: 40, itemCount: 1)]
+            [CleanupAuditEntry(kind: .largeFiles, bytesReclaimed: 40, itemCount: 1, samplePaths: [fileA])]
         )
 
         let finding = viewModel.snapshot?.findings.first

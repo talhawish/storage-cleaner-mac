@@ -37,7 +37,7 @@ final class DashboardViewModelNestedDeleteTests: XCTestCase {
         _ = await viewModel.deleteFiles([child])
 
         XCTAssertEqual(store.recordedCleanups.first, [
-            CleanupAuditEntry(kind: .xcodeArtifacts, bytesReclaimed: 40, itemCount: 1)
+            CleanupAuditEntry(kind: .xcodeArtifacts, bytesReclaimed: 40, itemCount: 1, samplePaths: [child])
         ])
         let finding = viewModel.snapshot?.findings.first
         XCTAssertEqual(finding?.filePaths, [parent])

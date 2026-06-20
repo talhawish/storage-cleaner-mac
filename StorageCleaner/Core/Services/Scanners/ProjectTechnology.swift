@@ -5,6 +5,7 @@ import Foundation
 /// list) is computed on the enum so the UI never deals in magic strings.
 enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
     case flutter = "Flutter"
+    case reactNative = "React Native"
     case android = "Android"
     case swift = "Swift"
     case dotNet = ".NET"
@@ -24,6 +25,7 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
     var symbolName: String {
         switch self {
         case .flutter: "f.square.fill"
+        case .reactNative: "r.circle.fill"
         case .android: "a.square.fill"
         case .swift: "swift"
         case .dotNet: "n.circle.fill"
@@ -42,6 +44,7 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
     var color: String {
         switch self {
         case .flutter: "02569B"
+        case .reactNative: "61DAFB"
         case .android: "3DDC84"
         case .swift: "F05138"
         case .dotNet: "512BD4"
@@ -68,6 +71,7 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
     var dependencyDirectoryNames: Set<String> {
         switch self {
         case .flutter: [".dart_tool", "build", ".pub-cache"]
+        case .reactNative: ["Pods", "build", ".gradle"]
         case .android: ["build", ".gradle", ".cxx"]
         case .swift: [".build", "DerivedData", "Pods", ".swiftpm"]
         case .dotNet: ["bin", "obj", "packages"]
@@ -93,6 +97,9 @@ enum ProjectMarker: Hashable, Sendable {
     case relativePath(String)
     /// A Composer PHP project, identified by `composer.json` or `vendor/autoload.php`.
     case composerProject
+    /// A `package.json` file that contains the given string in any of its values
+    /// (e.g. `"react-native"` to detect React Native projects).
+    case packageJSONWithDependency(String)
 
     var displayName: String {
         switch self {
@@ -100,6 +107,7 @@ enum ProjectMarker: Hashable, Sendable {
         case let .fileExtension(ext): "*.\(ext)"
         case let .relativePath(path): path
         case .composerProject: "composer.json or vendor/autoload.php"
+        case let .packageJSONWithDependency(dep): "package.json with \"\(dep)\""
         }
     }
 
@@ -113,6 +121,8 @@ enum ProjectMarker: Hashable, Sendable {
             fileManager.fileExists(atPath: directory.appendingPathComponent(path).path)
         case .composerProject:
             ProjectDependencyRules.isComposerProject(at: directory, fileManager: fileManager)
+        case let .packageJSONWithDependency(dep):
+            ProjectDependencyRules.packageJSONContains(dep, at: directory, fileManager: fileManager)
         }
     }
 }
@@ -134,6 +144,9 @@ enum ProjectDetector {
     static let rules: [ProjectDetectionRule] = [
         ProjectDetectionRule(technology: .flutter, markers: [
             .file("pubspec.yaml")
+        ]),
+        ProjectDetectionRule(technology: .reactNative, markers: [
+            .packageJSONWithDependency("react-native")
         ]),
         ProjectDetectionRule(technology: .android, markers: [
             .relativePath("app/src/main/AndroidManifest.xml"),

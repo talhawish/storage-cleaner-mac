@@ -149,6 +149,27 @@ enum DependencyPaths {
         ]
     }
 
+    // MARK: - React Native
+
+    /// Bare React Native only — Expo-specific paths (`.expo`, Expo Go caches) are
+    /// intentionally omitted. Project-local build artifacts are discovered by
+    /// walking `Projects.searchRoots` and are not listed here.
+    enum ReactNative {
+        static let projectDependencyMaxDepth = Projects.maxDepth + 1
+
+        /// Subpaths of a React Native project root that hold per-project build artifacts.
+        /// All are matched by name via `ProjectTechnology.reactNative.dependencyDirectoryNames`
+        /// so `ProjectHibernationService` can remove them with the same machinery used for
+        /// other technologies.
+        static let buildSubpaths: [String] = [
+            "ios/Pods",
+            "ios/build",
+            "android/app/build",
+            "android/.gradle",
+            "android/build"
+        ]
+    }
+
     // MARK: - Android
 
     enum Android {
