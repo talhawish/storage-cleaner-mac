@@ -7,17 +7,13 @@ struct DeveloperStorageView: View {
     let onOpenFinding: (StorageFinding) -> Void
     @State private var selectedDomain: StorageDomain?
 
-    private var allDeveloperFindings: [StorageFinding] {
-        findings.filter { DeveloperDomains.kinds.contains($0.kind) }
-    }
-
     private var detectedDomains: [StorageDomain] {
         DeveloperDomains.detected(in: findings)
     }
 
     private var developerFindings: [StorageFinding] {
-        guard let selectedDomain else { return allDeveloperFindings }
-        return allDeveloperFindings.filter { $0.domain == selectedDomain }
+        guard let selectedDomain else { return findings }
+        return findings.filter { $0.domain == selectedDomain }
     }
 
     private var totalSize: Int64 {
@@ -32,12 +28,14 @@ struct DeveloperStorageView: View {
 
     var body: some View {
         Group {
-            if allDeveloperFindings.isEmpty {
-                AnimatedEmptyState(
-                    title: title,
-                    message: "Run a scan to discover developer storage artifacts.",
-                    actionTitle: "Scan Now",
+            if findings.isEmpty {
+                EmptyStateView(
+                    title: "Nothing to clean here",
+                    message: "No re-creatable developer files were found in the selected locations. "
+                        + "Run another scan if you've built new projects since the last one.",
                     systemImage: symbolName,
+                    tint: AppTheme.color(for: selectedDomain ?? .appleDevelopment),
+                    actionTitle: "Scan Again",
                     action: onScan
                 )
             } else {
@@ -68,7 +66,7 @@ struct DeveloperStorageView: View {
             if !detectedDomains.isEmpty {
                 Section {
                     DeveloperDomainSelector(
-                        findings: allDeveloperFindings,
+                        findings: findings,
                         domains: detectedDomains,
                         selectedDomain: $selectedDomain
                     )
@@ -126,7 +124,7 @@ private struct DeveloperDomainSelector: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                DeveloperDomainTab(
+                StatCardTab(
                     title: "All",
                     count: findings.count,
                     bytes: allBytes,
@@ -139,7 +137,7 @@ private struct DeveloperDomainSelector: View {
 
                 ForEach(domains) { domain in
                     let domainFindings = findings.filter { $0.domain == domain }
-                    DeveloperDomainTab(
+                    StatCardTab(
                         title: domain.title,
                         count: domainFindings.count,
                         bytes: domainFindings.reduce(0) { $0 + $1.bytes },
@@ -153,74 +151,6 @@ private struct DeveloperDomainSelector: View {
             }
             .padding(.vertical, 2)
         }
-    }
-}
-
-private struct DeveloperDomainTab: View {
-    let title: String
-    let count: Int
-    let bytes: Int64
-    let systemImage: String
-    let tint: Color
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(tint)
-                        .frame(width: 26, height: 26)
-                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .accessibilityHidden(true)
-
-                    Spacer(minLength: 6)
-
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppTheme.accent)
-                            .accessibilityHidden(true)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-
-                    Text(StorageFormatting.bytes(bytes))
-                        .font(.headline.monospacedDigit())
-
-                    Text("\(count) categories")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(12)
-            .frame(width: 178, height: 116, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? tint.opacity(0.16) : Color.secondary.opacity(0.08))
-        )
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(isSelected ? tint : Color.clear)
-                .frame(height: 3)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isSelected ? tint.opacity(0.55) : Color.secondary.opacity(0.14), lineWidth: 1)
-        }
-        .accessibilityLabel("\(title), \(count) categories, \(StorageFormatting.bytes(bytes))")
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityHint("Filters developer artifacts")
     }
 }
 

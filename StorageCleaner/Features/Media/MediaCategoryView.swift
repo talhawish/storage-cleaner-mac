@@ -175,11 +175,12 @@ struct MediaCategoryView: View {
     }
 
     private var emptyState: some View {
-        AnimatedEmptyState(
-            title: title,
+        EmptyStateView(
+            title: "Nothing to clean in \(title)",
             message: emptyStateMessage,
-            actionTitle: "Scan Now",
-            systemImage: "photo.on.rectangle.angled",
+            systemImage: "checkmark.seal.fill",
+            tint: AppTheme.mint,
+            actionTitle: "Scan Again",
             action: onScan
         )
         .frame(minHeight: 430)

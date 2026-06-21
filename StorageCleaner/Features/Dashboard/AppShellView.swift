@@ -2,13 +2,14 @@ import SwiftUI
 
 struct AppShellView: View {
     @Bindable var viewModel: DashboardViewModel
-    @State private var selection: SidebarItem? = .section(.overview)
-    @State private var detailPath = NavigationPath()
+    @State var selection: SidebarItem? = .section(.overview)
+    @State var detailPath = NavigationPath()
+    @State private var pendingSwitch: PendingSidebarSwitch?
 
     var body: some View {
         NavigationSplitView {
             SidebarView(
-                selection: $selection,
+                selection: selectionBinding,
                 isScanning: viewModel.isScanning
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
@@ -58,6 +59,8 @@ struct AppShellView: View {
                         duplicatesView(kinds: DuplicateMediaFilter.all.kinds)
                     case .section(.leftovers):
                         leftoversView(kinds: section?.filterKinds ?? [])
+                    case .section(.systemJunk):
+                        systemJunkView(kinds: section?.filterKinds ?? [])
                     case .section(.cleanupHistory):
                         CleanupHistoryView()
                     case .section(.settings):
@@ -103,290 +106,68 @@ struct AppShellView: View {
                 resetDetailNavigation()
             }
         }
+        .sheet(item: $pendingSwitch) { pending in
+            StopScanConfirmationSheet(
+                originSection: pending.originTitle,
+                destinationSection: pending.destinationTitle,
+                onConfirm: {
+                    if viewModel.isScanning {
+                        viewModel.cancelScan()
+                    }
+                    selection = pending.destination
+                    pendingSwitch = nil
+                },
+                onCancel: { pendingSwitch = nil }
+            )
+        }
     }
 }
 
-// MARK: - Section view builders
+// MARK: - Selection binding
 
 extension AppShellView {
-    private var section: AppSection? { selection?.section }
+    /// Selection binding that intercepts changes when a scan is in progress.
+    /// Same-section clicks pass through; any other click while scanning
+    /// routes to a confirmation sheet instead of switching directly.
+    fileprivate var selectionBinding: Binding<SidebarItem?> {
+        Binding(
+            get: { selection },
+            set: { newValue in
+                guard let newValue else {
+                    selection = newValue
+                    return
+                }
+                if !viewModel.isScanning || newValue == selection {
+                    selection = newValue
+                    return
+                }
+                pendingSwitch = PendingSidebarSwitch(
+                    origin: selection,
+                    destination: newValue
+                )
+            }
+        )
+    }
 
-    private var detailNavigationID: String {
+    fileprivate var section: AppSection? { selection?.section }
+
+    fileprivate var detailNavigationID: String {
         "\(section?.rawValue ?? "none").\(viewModel.phase.navigationIdentity)"
     }
-
-    @ViewBuilder
-    private func developerStorageView() -> some View {
-        let kinds = DeveloperDomains.kinds
-        switch viewModel.phase {
-        case .scanning:
-            ScanProgressView(
-                viewModel: viewModel,
-                title: "Scanning Developer Storage",
-                subtitle: "Only developer storage locations are being scanned."
-            )
-            .padding(28)
-        case .permissionRequired:
-            PermissionRequiredView(
-                blockedPermissions: viewModel.blockedPermissions,
-                onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
-            )
-            .padding(28)
-        case let .failed(message):
-            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
-                .padding(28)
-        case .idle, .results, .empty:
-            DeveloperStorageView(
-                findings: viewModel.snapshot?.findings ?? [],
-                onScan: {
-                    resetDetailNavigation()
-                    viewModel.startScan(for: kinds)
-                },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                },
-                onOpenFinding: openFinding
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func largeFilesView(kinds: [StorageFindingKind]) -> some View {
-        switch viewModel.phase {
-        case .scanning:
-            ScanProgressView(
-                viewModel: viewModel,
-                title: "Scanning Large Files",
-                subtitle: "Only large-file locations are being scanned."
-            )
-            .padding(28)
-        case .permissionRequired:
-            PermissionRequiredView(
-                blockedPermissions: viewModel.blockedPermissions,
-                onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
-            )
-            .padding(28)
-        case let .failed(message):
-            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
-                .padding(28)
-        case .idle, .results, .empty:
-            LargeFilesView(
-                findings: filteredFindings(for: kinds),
-                onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func leftoversView(kinds: [StorageFindingKind]) -> some View {
-        switch viewModel.phase {
-        case .scanning:
-            ScanProgressView(
-                viewModel: viewModel,
-                title: "Scanning Leftovers",
-                subtitle: "Only leftover-installer locations are being scanned."
-            )
-            .padding(28)
-        case .permissionRequired:
-            PermissionRequiredView(
-                blockedPermissions: viewModel.blockedPermissions,
-                onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
-            )
-            .padding(28)
-        case let .failed(message):
-            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
-                .padding(28)
-        case .idle, .results, .empty:
-            LeftoversView(
-                findings: filteredFindings(for: kinds),
-                onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func mediaCategoryView(
-        title: String,
-        kinds: [StorageFindingKind],
-        emptyStateMessage: String
-    ) -> some View {
-        switch viewModel.phase {
-        case .scanning:
-            ScanProgressView(
-                viewModel: viewModel,
-                title: "Scanning \(title)",
-                subtitle: "Only this category is being scanned."
-            )
-                .padding(28)
-        case .permissionRequired:
-            PermissionRequiredView(
-                blockedPermissions: viewModel.blockedPermissions,
-                onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
-            )
-            .padding(28)
-        case let .failed(message):
-            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
-                .padding(28)
-        case .idle, .results, .empty:
-            MediaCategoryView(
-                title: title,
-                findings: filteredFindings(for: kinds),
-                emptyStateMessage: emptyStateMessage,
-                onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func duplicatesView(kinds: [StorageFindingKind]) -> some View {
-        switch viewModel.phase {
-        case .scanning:
-            ScanProgressView(
-                viewModel: viewModel,
-                title: "Scanning for Duplicates",
-                subtitle: "Comparing media by content to find byte-identical copies."
-            )
-            .padding(28)
-        case .permissionRequired:
-            PermissionRequiredView(
-                blockedPermissions: viewModel.blockedPermissions,
-                onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
-            )
-            .padding(28)
-        case let .failed(message):
-            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
-                .padding(28)
-        case .idle, .results, .empty:
-            DuplicatesView(
-                findings: filteredFindings(for: kinds),
-                onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func cliProgramsView(
-        kinds: [StorageFindingKind],
-        emptyStateMessage: String
-    ) -> some View {
-        switch viewModel.phase {
-        case .scanning:
-            ScanProgressView(
-                viewModel: viewModel,
-                title: "Scanning CLI Programs",
-                subtitle: "Only command-line tool locations are being scanned."
-            )
-            .padding(28)
-        case .permissionRequired:
-            PermissionRequiredView(
-                blockedPermissions: viewModel.blockedPermissions,
-                onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
-            )
-            .padding(28)
-        case let .failed(message):
-            ErrorStateView(message: message, retry: { viewModel.startScan(for: kinds) })
-                .padding(28)
-        case .idle, .results, .empty:
-            CLIProgramsView(
-                findings: filteredFindings(for: kinds),
-                emptyStateMessage: emptyStateMessage,
-                onScan: { viewModel.startScan(for: kinds) },
-                onRemove: { urls in
-                    _ = await viewModel.removeCLIPrograms(urls)
-                }
-            )
-        }
-    }
-
-    private func filteredFindings(for kinds: [StorageFindingKind]) -> [StorageFinding] {
-        guard !kinds.isEmpty else { return [] }
-        return (viewModel.snapshot?.findings ?? []).filter { kinds.contains($0.kind) }
-    }
-
-    private func openFinding(_ finding: StorageFinding) {
-        route(to: finding)
-        viewModel.selectedFinding = finding
-    }
-
-    private func route(to finding: StorageFinding) {
-        detailPath = NavigationPath()
-        detailPath.append(finding)
-    }
-
-    private func resetDetailNavigation() {
-        detailPath = NavigationPath()
-        viewModel.selectedFinding = nil
-    }
-
-    @ViewBuilder
-    private func findingDestination(for finding: StorageFinding) -> some View {
-        if finding.kind == .duplicatePhotos
-            || finding.kind == .duplicateVideos
-            || finding.kind == .duplicateDocuments {
-            DuplicatesView(
-                findings: [finding],
-                onScan: { viewModel.startScan(for: DuplicateMediaFilter.all.kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
-        } else if finding.kind == .dockerArtifacts {
-            DockerView(onDockerChanged: {
-                viewModel.startScan(for: [.dockerArtifacts])
-            })
-        } else if finding.kind == .cliApps {
-            // Reuse the exact same CLI Programs view/discovery as the
-            // sidebar, so tapping the Overview card shows identical results.
-            CLIProgramsView(
-                findings: [finding],
-                emptyStateMessage: "Homebrew, version managers, global npm packages, "
-                    + "and standalone CLI tools you've installed.",
-                onScan: { viewModel.startScan(for: [.cliApps]) },
-                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
-            )
-        } else if finding.kind == .runtimeVersions {
-            // Reuse the grouped Runtime Versions experience for the Overview card.
-            RuntimeVersionsView(
-                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
-            )
-        } else if AppSection.leftovers.filterKinds.contains(finding.kind) {
-            // Reuse the exact same Leftovers view as the sidebar, so tapping either the
-            // installer or APK Overview card shows the unified results.
-            LeftoversView(
-                findings: filteredFindings(for: AppSection.leftovers.filterKinds),
-                onScan: { viewModel.startScan(for: AppSection.leftovers.filterKinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
-        } else {
-            CategoryDetailView(
-                finding: finding,
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
-        }
-    }
 }
+
+/// Intermediate state for a sidebar switch that needs user confirmation
+/// because a scan is currently running.
+private struct PendingSidebarSwitch: Identifiable {
+    let origin: SidebarItem?
+    let destination: SidebarItem
+    var id: String { destination.id }
+
+    var originTitle: String { origin?.section.title ?? "Overview" }
+    var destinationTitle: String { destination.section.title }
+}
+
+// MARK: - ScanPhase identity
 
 private extension ScanPhase {
     var navigationIdentity: String {

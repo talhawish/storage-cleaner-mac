@@ -52,12 +52,13 @@ struct LargeFilesView: View {
     var body: some View {
         Group {
             if allLargeFileRecords.isEmpty {
-                AnimatedEmptyState(
-                    title: "No Large Files",
-                    message: "Run a scan to find review-safe large files in Desktop, Downloads, "
-                        + "Documents, Pictures, and Movies.",
-                    actionTitle: "Scan Large Files",
-                    systemImage: "doc.badge.ellipsis",
+                EmptyStateView(
+                    title: "Nothing to clean here",
+                    message: "No review-safe large files turned up in the selected locations. "
+                        + "Lower the minimum size to see more, or scan again to refresh.",
+                    systemImage: "checkmark.seal.fill",
+                    tint: AppTheme.mint,
+                    actionTitle: "Scan Again",
                     action: onScan
                 )
             } else {

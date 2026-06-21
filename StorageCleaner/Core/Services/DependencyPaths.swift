@@ -296,6 +296,22 @@ enum DependencyPaths {
         static let maxDepth = 4
     }
 
+    // MARK: - System Junk
+
+    /// Re-export of `SystemJunkPaths` so callers that already use `DependencyPaths.SystemJunk.…`
+    /// continue to compile without changes. The actual data lives in `SystemJunkPaths.swift` to
+    /// keep this enum under the 350-line type-body cap.
+    enum SystemJunk {
+        static let applicationSupport = SystemJunkPaths.applicationSupport
+        static let caches = SystemJunkPaths.caches
+        static let containers = SystemJunkPaths.containers
+        static let groupContainers = SystemJunkPaths.groupContainers
+        static let preferences = SystemJunkPaths.preferences
+        static let savedApplicationState = SystemJunkPaths.savedApplicationState
+        static let diagnosticReports = SystemJunkPaths.diagnosticReports
+        static let crashReporter = SystemJunkPaths.crashReporter
+    }
+
     // MARK: - Cleanup Quick Clean Paths
 
     enum QuickClean {

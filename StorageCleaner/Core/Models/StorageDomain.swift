@@ -14,6 +14,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
     case trash
     case cliTooling
     case leftovers
+    case systemJunk
     case otherCaches
 
     var id: Self { self }
@@ -33,6 +34,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
         case .trash: "Trash"
         case .cliTooling: "CLI Tooling"
         case .leftovers: "Leftovers"
+        case .systemJunk: "System Junk"
         case .otherCaches: "Other Caches"
         }
     }
@@ -52,6 +54,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
         case .trash: "trash.fill"
         case .cliTooling: "terminal.fill"
         case .leftovers: "archivebox.fill"
+        case .systemJunk: "trash.slash.fill"
         case .otherCaches: "externaldrive.fill"
         }
     }
@@ -71,6 +74,7 @@ enum StorageDomain: String, CaseIterable, Codable, Identifiable, Sendable {
         case .trash: .gray
         case .cliTooling: .teal
         case .leftovers: .amber
+        case .systemJunk: .rose
         case .otherCaches: .secondary
         }
     }

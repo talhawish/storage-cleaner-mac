@@ -268,24 +268,44 @@ struct CLIProgramsView: View {
     }
 
     private var emptyState: some View {
-        AnimatedEmptyState(
-            title: "CLI Programs & Toolchains",
+        EmptyStateView(
+            title: "No CLI programs to clean",
             message: emptyStateMessage,
-            actionTitle: "Scan Now",
-            systemImage: "terminal",
+            systemImage: "checkmark.seal.fill",
+            tint: AppTheme.mint,
+            actionTitle: "Scan Again",
             action: onScan
         )
         .frame(minHeight: 430)
     }
 
     private var loadingState: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-            Text("Reading installed programs…")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScanningLoaderView(
+            title: "Reading installed programs",
+            subtitle: "Discovering Homebrew, version managers, global npm packages, and standalone binaries.",
+            progress: nil,
+            scanners: [
+                ScannerLoaderItem(
+                    id: "cli-discovery",
+                    title: "Installed programs",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "Reading brew, fnm, nvm, and binary paths",
+                    systemImage: "terminal.fill",
+                    tint: AppTheme.teal
+                ),
+                ScannerLoaderItem(
+                    id: "cli-sizing",
+                    title: "On-disk sizes",
+                    state: .pending,
+                    itemsScanned: 0,
+                    message: "Measuring after discovery",
+                    systemImage: "internaldrive",
+                    tint: .secondary
+                )
+            ],
+            cancelAction: {}
+        )
     }
 
 }

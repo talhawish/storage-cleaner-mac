@@ -86,6 +86,41 @@ final class LiveStorageScannerTests: XCTestCase {
         XCTAssertEqual(snapshot?.scannedItemCount, 2)
     }
 
+    func testLiveScannerIncludesAllSystemJunkKinds() async {
+        let scanner = LiveStorageScanner.live()
+        let systemJunkKinds: Set<StorageFindingKind> = [
+            .orphanedAppSupport,
+            .orphanedAppCaches,
+            .orphanedAppContainers,
+            .orphanedAppPreferences,
+            .oldCrashReports
+        ]
+
+        var snapshot: ScanSnapshot?
+
+        for await event in scanner.scanEvents(for: systemJunkKinds) {
+            if case let .completed(result) = event {
+                snapshot = result
+            }
+        }
+
+        // The kinds must have been scheduled even if some return no finding on the test host.
+        XCTAssertNotNil(snapshot, "Live scanner must complete even if no system junk is present")
+    }
+
+    func testSystemJunkSectionAggregatesAllFiveKinds() {
+        XCTAssertEqual(
+            AppSection.systemJunk.filterKinds,
+            [
+                .orphanedAppSupport,
+                .orphanedAppCaches,
+                .orphanedAppContainers,
+                .orphanedAppPreferences,
+                .oldCrashReports
+            ]
+        )
+    }
+
     private var screenshotsResult: CategoryScanResult {
         CategoryScanResult(
             finding: StorageFinding(

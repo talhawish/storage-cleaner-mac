@@ -26,6 +26,13 @@ final class DashboardViewModel {
     /// Domains whose newest sampled files are older than the stale threshold. Populated off the main
     /// thread after a scan completes; empty until (and unless) sampling finds something.
     private(set) var staleHints: [StaleHint] = []
+    /// What the most recent scan covered. `never` means no scan has
+    /// completed in this session (so every section is in its pre-scan
+    /// "ready to discover" state). `full` means a full scan ran and covered
+    /// every kind. `targeted` means only the listed kinds were scanned, so
+    /// other sections should still show their pre-scan state until they
+    /// too are scanned.
+    private(set) var lastCompletedScan: LastScan = .never
     private var staleTask: Task<Void, Never>?
     var selectedDomain: StorageDomain?
     var selectedFinding: StorageFinding?
@@ -125,7 +132,15 @@ final class DashboardViewModel {
         currentLocation = ""
         scannedItemCount = 0
         scannerProgress = []
-        phase = .idle
+        activeScanKinds = nil
+
+        if let snapshot, !snapshot.findings.isEmpty {
+            phase = .results
+        } else if snapshot != nil {
+            phase = .empty
+        } else {
+            phase = .idle
+        }
     }
 
     func deleteFiles(_ urls: [URL]) async -> CleanupResult {
@@ -287,6 +302,28 @@ final class DashboardViewModel {
                 guard !Task.isCancelled else { return }
                 self?.consume(event)
             }
+            await MainActor.run {
+                guard let self, self.phase == .scanning else { return }
+                self.phase = .idle
+            }
+        }
+    }
+
+    /// `true` when the most recent scan covered every kind in `kinds`. Used
+    /// by per-section views to distinguish "we scanned this section, no
+    /// results" (empty state) from "we haven't scanned this section yet"
+    /// (initial state) when the snapshot happens to have no findings for
+    /// this section — e.g. a Developer-only scan leaving Screenshots empty
+    /// in the global snapshot.
+    func hasScanned(_ kinds: [StorageFindingKind]) -> Bool {
+        guard !kinds.isEmpty else { return false }
+        switch lastCompletedScan {
+        case .never:
+            return false
+        case .full:
+            return true
+        case let .targeted(scanned):
+            return Set(kinds).isSubset(of: scanned)
         }
     }
 
@@ -313,6 +350,7 @@ final class DashboardViewModel {
             self.snapshot = adjustedSnapshot
             scannedItemCount = adjustedSnapshot.scannedItemCount
             progress = 1
+            lastCompletedScan = activeScanKinds.map(LastScan.targeted) ?? .full
             phase = adjustedSnapshot.findings.isEmpty ? .empty : .results
             refreshStaleHints()
             // Only full scans become history records; targeted re-scans refresh a subset in place.
@@ -481,4 +519,17 @@ extension DashboardViewModel {
             return DuplicateGroup(contentHash: group.contentHash, files: remainingFiles, keepURL: keepURL)
         }
     }
+}
+
+/// The footprint of the most recent scan, used to tell per-section views
+/// whether they should show their pre-scan "ready to discover" hero or
+/// their post-scan "all clean" empty state.
+enum LastScan: Equatable {
+    /// No scan has completed in this session.
+    case never
+    /// A full scan ran; every kind was covered.
+    case full
+    /// A targeted scan covered only the listed kinds; other kinds are
+    /// still in their pre-scan state.
+    case targeted(Set<StorageFindingKind>)
 }

@@ -119,21 +119,23 @@ struct DuplicatesView: View {
     // MARK: - Empty states
 
     private var emptyState: some View {
-        AnimatedEmptyState(
-            title: "No Duplicates Found",
-            message: "Run a scan to detect byte-identical photos, videos, and documents "
-                + "across your media, Documents, Downloads, and Desktop folders.",
-            actionTitle: "Scan for Duplicates",
-            systemImage: "square.on.square",
+        EmptyStateView(
+            title: "No duplicates to clean",
+            message: "Every photo, video, and document in the scanned locations is unique. "
+                + "Run another scan after adding new media to keep duplicates in check.",
+            systemImage: "checkmark.seal.fill",
+            tint: AppTheme.mint,
+            actionTitle: "Scan Again",
             action: onScan
         )
     }
 
     private var filteredEmptyState: some View {
-        AnimatedEmptyState(
+        EmptyStateView(
             title: "No \(filter.rawValue) Duplicates",
             message: "Try a different filter to see duplicate groups.",
-            systemImage: "line.3.horizontal.decrease.circle"
+            systemImage: "line.3.horizontal.decrease.circle",
+            tint: AppTheme.accent
         )
     }
 

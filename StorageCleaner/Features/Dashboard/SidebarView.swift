@@ -30,6 +30,10 @@ struct SidebarView: View {
                 SidebarRow(section: .duplicates)
             }
 
+            Section("System") {
+                SidebarRow(section: .systemJunk)
+            }
+
             Section("Manage") {
                 SidebarRow(section: .cleanupHistory)
                 SidebarRow(section: .settings)

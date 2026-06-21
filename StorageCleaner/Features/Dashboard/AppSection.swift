@@ -29,6 +29,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case screenshotsAndRecordings
     case duplicates
     case leftovers
+    case systemJunk
     case cleanupHistory
     case settings
 
@@ -48,6 +49,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .screenshotsAndRecordings: "Screenshots & Recordings"
         case .duplicates: "Duplicates"
         case .leftovers: "Leftovers"
+        case .systemJunk: "System Junk"
         case .cleanupHistory: "Cleanup History"
         case .settings: "Settings"
         }
@@ -67,6 +69,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .screenshotsAndRecordings: "camera.viewfinder"
         case .duplicates: "square.on.square"
         case .leftovers: "archivebox.fill"
+        case .systemJunk: "trash.slash.fill"
         case .cleanupHistory: "clock.arrow.circlepath"
         case .settings: "gearshape.fill"
         }
@@ -80,6 +83,13 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .runtimeVersions: [.runtimeVersions]
         case .screenshotsAndRecordings: [.screenshots, .screenRecordings]
         case .leftovers: [.installerLeftovers, .androidPackages]
+        case .systemJunk: [
+            .orphanedAppSupport,
+            .orphanedAppCaches,
+            .orphanedAppContainers,
+            .orphanedAppPreferences,
+            .oldCrashReports
+        ]
         default: []
         }
     }

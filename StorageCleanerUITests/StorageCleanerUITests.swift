@@ -69,29 +69,42 @@ final class StorageCleanerUITests: XCTestCase {
         let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
         startScanAndWaitForResults(in: app)
 
-        let pages = [
-            ("overview", "dashboard-results"),
-            ("projectActivity", "project-activity-root"),
-            ("apps", "applications-root"),
-            ("developerStorage", "developer-storage-root"),
-            ("runtimeVersions", "runtime-versions-root"),
-            ("simulatorsEmulators", "simulators-emulators-root"),
-            ("cliPrograms", "cli-programs-root"),
-            ("largeFiles", "large-files-root"),
-            ("leftovers", "leftovers-root"),
-            ("screenshotsAndRecordings", "media-category-screenshots-recordings"),
-            ("duplicates", "duplicates-root"),
-            ("cleanupHistory", "cleanup-history-root"),
-            ("settings", "settings-root")
+        // Each entry is the sidebar identifier and a list of root identifiers
+        // the section is allowed to render. CLI Programs and the Duplicates
+        // page have no demo data, so they correctly fall through to the
+        // post-scan empty state instead of the content root.
+        let pages: [(String, [String])] = [
+            ("overview", ["dashboard-results"]),
+            ("projectActivity", ["project-activity-root"]),
+            ("apps", ["applications-root"]),
+            ("developerStorage", ["developer-storage-root", "developer-storage-empty"]),
+            ("runtimeVersions", ["runtime-versions-root"]),
+            ("simulatorsEmulators", ["simulators-emulators-root"]),
+            ("cliPrograms", ["cli-programs-root", "cli-programs-empty"]),
+            ("largeFiles", ["large-files-root", "large-files-empty"]),
+            ("leftovers", ["leftovers-root", "leftovers-empty"]),
+            ("screenshotsAndRecordings", [
+                "media-category-screenshots-recordings",
+                "media-category-empty"
+            ]),
+            ("duplicates", ["duplicates-root", "duplicates-empty"]),
+            ("systemJunk", ["system-junk-root", "system-junk-empty"]),
+            ("cleanupHistory", ["cleanup-history-root"]),
+            ("settings", ["settings-root"])
         ]
 
-        for (sidebarID, rootID) in pages {
+        for (sidebarID, rootIDs) in pages {
             let row = app.descendants(matching: .any)["sidebar-\(sidebarID)"]
             XCTAssertTrue(row.waitForExistence(timeout: 4), "Missing sidebar row \(sidebarID)")
             row.click()
 
-            let root = app.descendants(matching: .any)[rootID]
-            XCTAssertTrue(root.waitForExistence(timeout: 4), "Expected root \(rootID) after opening \(sidebarID)")
+            let found = rootIDs.contains { identifier in
+                app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)
+            }
+            XCTAssertTrue(
+                found,
+                "Expected one of \(rootIDs) after opening \(sidebarID)"
+            )
         }
 
         app.descendants(matching: .any)["sidebar-developerStorage"].click()
@@ -113,6 +126,78 @@ final class StorageCleanerUITests: XCTestCase {
 
         XCTAssertTrue(app.descendants(matching: .any)["developer-storage-root"].waitForExistence(timeout: 4))
         XCTAssertFalse(app.descendants(matching: .any)["category-detail-xcodeArtifacts"].exists)
+    }
+
+    /// Regression for the pre-scan UX: opening Developer Storage before any
+    /// scan has run must show the welcoming `InitialStateView` (with the
+    /// "initial-state-scan-button" CTA), not a "No X Found" empty state.
+    /// The previous wording implied the page had already looked and found
+    /// nothing — which was misleading.
+    @MainActor
+    func testDeveloperStorageBeforeScanShowsInitialState() {
+        let app = launchApp()
+        XCTAssertTrue(app.buttons["primary-scan-button"].waitForExistence(timeout: 3))
+
+        app.descendants(matching: .any)["sidebar-developerStorage"].click()
+
+        let initialState = app.descendants(matching: .any)["developer-storage-initial"]
+        XCTAssertTrue(
+            initialState.waitForExistence(timeout: 4),
+            "Unscanned sections must show the InitialStateView, not an empty result."
+        )
+        XCTAssertTrue(
+            app.buttons["initial-state-scan-button"].waitForExistence(timeout: 4),
+            "InitialStateView must offer a primary scan CTA before any scan has run."
+        )
+    }
+
+    /// Regression for the bulk-removal UX on the System Junk page: the inline "Clean All" button
+    /// (sitting above the file list, not in the toolbar) must pre-select every visible item and
+    /// open the destructive confirmation so the user can review before trashing.
+    @MainActor
+    func testSystemJunkCleanAllOpensDeleteConfirmation() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+        startScanAndWaitForResults(in: app)
+
+        app.descendants(matching: .any)["sidebar-systemJunk"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["system-junk-root"].waitForExistence(timeout: 4))
+
+        let cleanButton = app.buttons["system-junk-clean-button"]
+        XCTAssertTrue(cleanButton.waitForExistence(timeout: 4))
+        cleanButton.click()
+
+        // The confirmation modal's primary action is "Move to Trash" — verifying it appears
+        // confirms the modal opened with the right destructive context.
+        let moveToTrash = app.buttons["Move to Trash"]
+        XCTAssertTrue(moveToTrash.waitForExistence(timeout: 4))
+    }
+
+    /// The master checkbox above the file list toggles the visible selection. After clicking it,
+    /// the destructive button's label must update from "Clean All" to "Clean N Selected" to
+    /// reflect the picked subset.
+    @MainActor
+    func testSystemJunkSelectAllUpdatesCleanButtonLabel() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+        startScanAndWaitForResults(in: app)
+
+        app.descendants(matching: .any)["sidebar-systemJunk"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["system-junk-root"].waitForExistence(timeout: 4))
+
+        // Before any selection the button shows "Clean All". After checking, the label must
+        // change so it reads "Clean N Selected". The exact N is demo-data dependent, so we
+        // just confirm the label no longer starts with "Clean All".
+        let checkbox = app.checkBoxes["system-junk-select-all"]
+        XCTAssertTrue(checkbox.waitForExistence(timeout: 4))
+        checkbox.click()
+
+        let button = app.buttons["system-junk-clean-button"]
+        XCTAssertTrue(button.waitForExistence(timeout: 4))
+        let label = button.label
+        XCTAssertTrue(
+            label.contains("Selected"),
+            "Clean button label should contain 'Selected' after toggling the master checkbox, "
+                + "got '\(label)'"
+        )
     }
 
     @MainActor

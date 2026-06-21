@@ -109,6 +109,8 @@ private extension StorageFindingKind {
              .rustDependencies, .dotnetDependencies, .gradleDependencies: .webDevelopment
         case .cliApps: .cliTooling
         case .installerLeftovers: .leftovers
+        case .orphanedAppSupport, .orphanedAppCaches, .orphanedAppContainers,
+             .orphanedAppPreferences, .oldCrashReports: .systemJunk
         case .trash: .trash
         }
     }

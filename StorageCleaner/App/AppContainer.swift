@@ -39,6 +39,11 @@ private struct DemoStorageScanner: StorageScanning {
         demo(.largeVideos, .media, bytes: 3_758_096_384, items: 9, safety: .review),
         demo(.browserCaches, .browserData, bytes: 1_503_238_553, items: 64, safety: .safe),
         demo(.screenshots, .screenshots, bytes: 734_003_200, items: 218, safety: .review),
+        demo(.orphanedAppSupport, .systemJunk, bytes: 2_146_435_072, items: 47, safety: .review),
+        demo(.orphanedAppCaches, .systemJunk, bytes: 1_073_741_824, items: 39, safety: .review),
+        demo(.orphanedAppContainers, .systemJunk, bytes: 412_316_860, items: 18, safety: .review),
+        demo(.orphanedAppPreferences, .systemJunk, bytes: 8_388_608, items: 124, safety: .review),
+        demo(.oldCrashReports, .systemJunk, bytes: 24_117_248, items: 33, safety: .review),
         demo(.trash, .trash, bytes: 524_288_000, items: 96, safety: .review)
     ]
 

@@ -13,6 +13,7 @@ final class ProjectActivityViewModel {
 
     private(set) var snapshot: ProjectActivitySnapshot?
     private(set) var isScanning = false
+    private(set) var hasScanned = false
     private(set) var lastHibernation: HibernationSummary?
     private(set) var lastCompression: CompressionOutcome?
     var selectedTechnology: ProjectTechnology?
@@ -80,6 +81,7 @@ final class ProjectActivityViewModel {
         let result = await scanner.scan()
         guard !Task.isCancelled else { return }
         snapshot = result
+        hasScanned = true
         isScanning = false
     }
 

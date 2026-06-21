@@ -102,20 +102,40 @@ struct AppsView: View {
     }
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-            Text("Scanning applications…")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScanningLoaderView(
+            title: "Scanning applications",
+            subtitle: "Reading /Applications and ~/Applications to inventory every installed app and its size.",
+            progress: nil,
+            scanners: [
+                ScannerLoaderItem(
+                    id: "system-applications",
+                    title: "System Applications",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "/Applications",
+                    systemImage: "macwindow.on.rectangle",
+                    tint: AppTheme.accent
+                ),
+                ScannerLoaderItem(
+                    id: "user-applications",
+                    title: "User Applications",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "~/Applications",
+                    systemImage: "person.fill",
+                    tint: AppTheme.violet
+                )
+            ],
+            cancelAction: {}
+        )
     }
 
     private var emptyState: some View {
-        AnimatedEmptyState(
+        EmptyStateView(
             title: "No Applications",
             message: "No applications were found in /Applications or ~/Applications.",
-            systemImage: "app.badge"
+            systemImage: "app.badge",
+            tint: AppTheme.accent
         )
     }
 

@@ -173,6 +173,7 @@ struct LiveStorageScanner: StorageScanning {
 extension LiveStorageScanner {
     static func live() -> LiveStorageScanner {
         let collector = FileSystemCollector()
+        let appCatalog = InstalledAppCatalog()
 
         return LiveStorageScanner(
             scanners: [
@@ -203,6 +204,11 @@ extension LiveStorageScanner {
                 LeftoversScanner(collector: collector),
                 CLIAppScanner(collector: collector),
                 RuntimeVersionScanner(),
+                OrphanedAppSupportScanner(collector: collector, catalog: appCatalog),
+                OrphanedAppCachesScanner(collector: collector, catalog: appCatalog),
+                OrphanedAppContainersScanner(collector: collector, catalog: appCatalog),
+                OrphanedPreferencesScanner(catalog: appCatalog, collector: collector),
+                OldCrashReportsScanner(collector: collector),
                 TrashStorageScanner(collector: collector)
             ]
         )

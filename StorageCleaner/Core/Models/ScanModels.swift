@@ -81,6 +81,11 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case cliApps
     case runtimeVersions
     case installerLeftovers
+    case orphanedAppSupport
+    case orphanedAppCaches
+    case orphanedAppContainers
+    case orphanedAppPreferences
+    case oldCrashReports
     case trash
 
     var title: String {
@@ -113,6 +118,11 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .cliApps: "CLI apps & toolchains"
         case .runtimeVersions: "Duplicate runtime versions"
         case .installerLeftovers: "Leftover installers"
+        case .orphanedAppSupport: "Orphaned app data"
+        case .orphanedAppCaches: "Orphaned app caches"
+        case .orphanedAppContainers: "Orphaned app containers"
+        case .orphanedAppPreferences: "Orphaned app preferences"
+        case .oldCrashReports: "Old crash reports"
         case .trash: "Trash"
         }
     }
@@ -147,6 +157,11 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .cliApps: "Homebrew formulae, Rust toolchains, Node version managers, and installed CLI tools"
         case .runtimeVersions: "Older language runtime and SDK versions kept by version managers"
         case .installerLeftovers: "Loose DMG, PKG, IPA, ISO, and other installer files in Downloads and Desktop"
+        case .orphanedAppSupport: "Application Support folders left behind by uninstalled apps"
+        case .orphanedAppCaches: "Cache folders left behind by uninstalled apps"
+        case .orphanedAppContainers: "Sandbox containers left behind by uninstalled apps"
+        case .orphanedAppPreferences: "Preference files left behind by uninstalled apps"
+        case .oldCrashReports: "Stale crash reports and diagnostic logs in your user Library"
         case .trash: "Files already moved to Trash but still occupying disk space"
         }
     }

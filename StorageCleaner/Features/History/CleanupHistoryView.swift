@@ -14,10 +14,11 @@ struct CleanupHistoryView: View {
     var body: some View {
         Group {
             if scans.isEmpty {
-                AnimatedEmptyState(
+                EmptyStateView(
                     title: "No History",
                     message: "Scan results and cleanup actions will appear here.",
-                    systemImage: "clock.arrow.circlepath"
+                    systemImage: "clock.arrow.circlepath",
+                    tint: AppTheme.accent
                 )
             } else {
                 historyList

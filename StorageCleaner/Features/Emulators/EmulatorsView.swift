@@ -175,25 +175,45 @@ struct EmulatorsView: View {
     }
 
     private var emptyState: some View {
-        AnimatedEmptyState(
+        EmptyStateView(
             title: "No Simulator or Emulator Images",
             message: "Installed iOS simulator runtimes and Android system images appear here so you can "
                 + "reclaim the space they use. None were found on this Mac.",
-            actionTitle: "Rescan",
             systemImage: "iphone.gen3",
+            tint: AppTheme.accent,
+            actionTitle: "Rescan",
             action: { Task { await load() } }
         )
         .frame(minHeight: 430)
     }
 
     private var loadingState: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-            Text("Looking for installed simulator and emulator images…")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScanningLoaderView(
+            title: "Looking for OS images",
+            subtitle: "Discovering installed iOS simulator runtimes and Android system images.",
+            progress: nil,
+            scanners: [
+                ScannerLoaderItem(
+                    id: "apple-runtimes",
+                    title: "Apple simulator runtimes",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "Reading Xcode CoreSimulator devices",
+                    systemImage: "iphone.gen3",
+                    tint: AppTheme.accent
+                ),
+                ScannerLoaderItem(
+                    id: "android-images",
+                    title: "Android system images",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "Scanning ~/.android/avd",
+                    systemImage: "ipad.gen2",
+                    tint: AppTheme.violet
+                )
+            ],
+            cancelAction: {}
+        )
     }
 }
 

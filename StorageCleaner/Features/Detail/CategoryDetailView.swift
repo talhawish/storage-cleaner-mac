@@ -303,10 +303,11 @@ struct CategoryDetailView: View {
     }
 
     private var emptyState: some View {
-        AnimatedEmptyState(
-            title: finding.kind.title,
+        EmptyStateView(
+            title: "No files in this category",
             message: "No individual file paths were captured for this category during the scan.",
-            systemImage: finding.domain.symbolName
+            systemImage: finding.domain.symbolName,
+            tint: AppTheme.color(for: finding.domain)
         )
         .navigationTitle(finding.kind.title)
     }

@@ -43,12 +43,13 @@ struct LeftoversView: View {
     var body: some View {
         Group {
             if allRecords.isEmpty {
-                AnimatedEmptyState(
-                    title: "No Leftover Installers",
-                    message: "Run a scan to find leftover disk images, packages, and app bundles "
-                        + "(DMG, PKG, IPA, ISO, APK) in Downloads, Desktop, and Documents.",
-                    actionTitle: "Scan Leftovers",
-                    systemImage: "archivebox",
+                EmptyStateView(
+                    title: "Nothing to clean here",
+                    message: "No leftover disk images, packages, or app bundles turned up in the "
+                        + "selected locations. Run another scan to refresh.",
+                    systemImage: "checkmark.seal.fill",
+                    tint: AppTheme.mint,
+                    actionTitle: "Scan Again",
                     action: onScan
                 )
             } else {

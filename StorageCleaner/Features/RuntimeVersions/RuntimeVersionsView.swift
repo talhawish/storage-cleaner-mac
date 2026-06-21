@@ -175,26 +175,46 @@ struct RuntimeVersionsView: View {
     }
 
     private var emptyState: some View {
-        AnimatedEmptyState(
+        EmptyStateView(
             title: "No Duplicate Versions",
             message: "Every language runtime has a single installed version. When you keep multiple "
                 + "versions of tools like Node, Python, Go, .NET, Rust, PHP, or a JDK, the older "
                 + "ones show up here.",
-            actionTitle: "Rescan",
             systemImage: "square.stack.3d.up",
+            tint: AppTheme.violet,
+            actionTitle: "Rescan",
             action: { Task { await load() } }
         )
         .frame(minHeight: 430)
     }
 
     private var loadingState: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-            Text("Looking for installed runtime versions…")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScanningLoaderView(
+            title: "Looking for runtime versions",
+            subtitle: "Discovering every tool with multiple installed versions, then measuring on-disk sizes.",
+            progress: nil,
+            scanners: [
+                ScannerLoaderItem(
+                    id: "runtime-discovery",
+                    title: "Version managers",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "asdf, mise, fnm, pyenv, rbenv, nvm, sdkman",
+                    systemImage: "square.stack.3d.up.fill",
+                    tint: AppTheme.violet
+                ),
+                ScannerLoaderItem(
+                    id: "runtime-sizing",
+                    title: "On-disk sizes",
+                    state: .pending,
+                    itemsScanned: 0,
+                    message: "Measuring after discovery",
+                    systemImage: "internaldrive",
+                    tint: .secondary
+                )
+            ],
+            cancelAction: {}
+        )
     }
 }
 

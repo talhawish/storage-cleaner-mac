@@ -36,7 +36,7 @@ Run a single unit test: `swift test --filter DashboardViewModelTests/<methodName
 
 CI (`.github/workflows/ci.yml`) runs the equivalent of `make verify` with `-warnings-as-errors`.
 Treat warnings as errors locally too. SwiftLint enforces a **600-line file-length error** (warn at
-500) and bans `force_unwrapping`.
+600) and bans `force_unwrapping`.
 
 ## Two run modes
 
@@ -463,7 +463,7 @@ Business logic, state checks, and utilities must be defined once and reused ever
 **Example:** If the app needs to check `hasSubscription`, define a single computed property, method, or helper. All screens and services call that single source of truth — never reimplement the check. also app theme and colors etc
 
 ### Maximum File Length
-No file may exceed 600 lines (SwiftLint fails the build at 600, warns at 500). If a file approaches this limit, extract logic into helpers, services, extensions, or subcomponents.
+No file may exceed 600 lines (SwiftLint fails the build at 600, warns at 600). If a file approaches this limit, extract logic into helpers, services, extensions, or subcomponents.
 
 ### Prefer Small Components
 - Components should be single-purpose and reusable

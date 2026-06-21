@@ -23,9 +23,11 @@ struct DashboardView: View {
                     case .results:
                         results(scrollProxy: proxy)
                     case .empty:
-                        AnimatedEmptyState(
+                        EmptyStateView(
                             title: "Your developer storage is tidy",
                             message: "No re-creatable developer files were found in the selected locations.",
+                            systemImage: "checkmark.seal.fill",
+                            tint: AppTheme.mint,
                             actionTitle: "Scan Again",
                             action: viewModel.startScan
                         )

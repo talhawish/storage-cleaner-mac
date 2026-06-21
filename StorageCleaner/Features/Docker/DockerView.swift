@@ -278,32 +278,53 @@ struct DockerView: View {
     }
 
     private var loadingState: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-            Text("Reading Docker inventory...")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScanningLoaderView(
+            title: "Reading Docker inventory",
+            subtitle: "Querying the Docker CLI for images, containers, volumes, and build cache.",
+            progress: nil,
+            scanners: [
+                ScannerLoaderItem(
+                    id: "docker-engine",
+                    title: "Docker engine",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "docker version, docker info",
+                    systemImage: "shippingbox.fill",
+                    tint: AppTheme.violet
+                ),
+                ScannerLoaderItem(
+                    id: "docker-inventory",
+                    title: "Images & containers",
+                    state: .pending,
+                    itemsScanned: 0,
+                    message: "docker images, docker ps -a",
+                    systemImage: "list.bullet.rectangle",
+                    tint: .secondary
+                )
+            ],
+            cancelAction: {}
+        )
     }
 
     private var notInstalledState: some View {
-        AnimatedEmptyState(
+        EmptyStateView(
             title: "Docker is not installed",
             message: "Install Docker Desktop or the Docker CLI to manage local images, containers, volumes, and build cache.",
-            actionTitle: "Refresh",
             systemImage: "shippingbox",
+            tint: AppTheme.violet,
+            actionTitle: "Refresh",
             action: { Task { await load() } }
         )
         .frame(minHeight: 430)
     }
 
     private func daemonUnavailableState(_ snapshot: DockerSnapshot) -> some View {
-        AnimatedEmptyState(
+        EmptyStateView(
             title: "Docker is installed",
             message: snapshot.statusMessage,
-            actionTitle: "Refresh",
             systemImage: "shippingbox.fill",
+            tint: AppTheme.violet,
+            actionTitle: "Refresh",
             action: { Task { await load() } }
         )
         .frame(minHeight: 430)

@@ -16,8 +16,10 @@ struct ProjectActivityView: View {
                     scanningView
                 } else if let snapshot = viewModel.snapshot, !snapshot.projects.isEmpty {
                     dashboard(snapshot: snapshot)
-                } else {
+                } else if viewModel.hasScanned {
                     emptyState
+                } else {
+                    initialState
                 }
             }
             .padding(28)
@@ -101,22 +103,24 @@ struct ProjectActivityView: View {
     }
 
     private var scanningView: some View {
-        VStack(spacing: 24) {
-            ProgressView()
-                .controlSize(.large)
-            VStack(spacing: 6) {
-                Text("Scanning for projects…")
-                    .font(.headline)
-                Text("Looking for project markers across your home directory")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Button("Cancel Scan") {
-                viewModel.cancelScan()
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, minHeight: 300)
+        ScanningLoaderView(
+            title: "Finding your developer projects",
+            subtitle: "Detecting Xcode, Node.js, Rust, Go, Android, Python, and more across your home directory.",
+            progress: nil,
+            currentLocation: "~/",
+            scanners: [
+                ScannerLoaderItem(
+                    id: "home-directory",
+                    title: "Home directory",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "Matching Xcode, package.json, Cargo.toml, go.mod, build.gradle…",
+                    systemImage: "folder.fill",
+                    tint: AppTheme.accent
+                )
+            ],
+            cancelAction: viewModel.cancelScan
+        )
     }
 
     private func dashboard(snapshot: ProjectActivitySnapshot) -> some View {
@@ -150,16 +154,36 @@ struct ProjectActivityView: View {
         selectedProject = project
     }
 
-    private var emptyState: some View {
-        AnimatedEmptyState(
-            title: "No projects found",
-            message: "Scan to discover developer projects across your home directory "
-                + "and spot the ones quietly eating disk space.",
+    private var initialState: some View {
+        InitialStateView(
+            title: "Discover your project activity",
+            subtitle: "Scans your home directory for project markers — Xcode workspaces, "
+                + "Cargo.toml, go.mod, build.gradle, package.json, pubspec.yaml, .sln files, "
+                + "and more — then surfaces inactive ones you can hibernate or compress.",
+            highlights: [
+                InitialStateHighlight(title: "Xcode, Swift", systemImage: "hammer.fill"),
+                InitialStateHighlight(title: "Android, Kotlin, Java, Flutter", systemImage: "square.stack.3d.up.fill"),
+                InitialStateHighlight(title: "Node, React, PHP, Ruby", systemImage: "globe"),
+                InitialStateHighlight(title: "Rust, Go, Python, .NET", systemImage: "terminal.fill")
+            ],
             actionTitle: "Scan Projects",
-            systemImage: "folder.badge.questionmark",
+            systemImage: "clock.badge.checkmark",
+            tint: AppTheme.accent,
             action: viewModel.scan
         )
-        .frame(maxWidth: .infinity, minHeight: 320)
+        .accessibilityIdentifier("project-activity-initial")
+    }
+
+    private var emptyState: some View {
+        EmptyStateView(
+            title: "No active projects detected",
+            message: "Scan your home directory to surface every developer project and spot the "
+                + "ones quietly eating disk space.",
+            systemImage: "folder.badge.questionmark",
+            tint: AppTheme.accent,
+            actionTitle: "Scan Projects",
+            action: viewModel.scan
+        )
     }
 }
 
