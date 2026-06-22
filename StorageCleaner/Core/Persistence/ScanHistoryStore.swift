@@ -62,7 +62,7 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         guard !entries.isEmpty else { return }
 
         let scan = mostRecentScan()
-        let newBytes = entries.reduce(Int64(0)) { $0 + $1.bytesReclaimed }
+        let newBytes = saturatedCleanupTotal(for: entries)
         for entry in entries {
             let action = StoredCleanupAction(
                 kindRaw: entry.kind.rawValue,
@@ -76,7 +76,7 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         // Update the scan's running total in-place so the Cleanup History row can read a
         // single field for the "storage recovered" call-out without re-summing actions.
         if let scan {
-            scan.cleanedBytes += newBytes
+            scan.cleanedBytes = saturatedAdd(scan.cleanedBytes, newBytes)
         }
         save()
     }
@@ -87,6 +87,17 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         )
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first
+    }
+
+    private func saturatedCleanupTotal(for entries: [CleanupAuditEntry]) -> Int64 {
+        entries.reduce(Int64(0)) { total, entry in
+            saturatedAdd(total, max(0, entry.bytesReclaimed))
+        }
+    }
+
+    private func saturatedAdd(_ lhs: Int64, _ rhs: Int64) -> Int64 {
+        let (sum, overflow) = max(0, lhs).addingReportingOverflow(max(0, rhs))
+        return overflow ? .max : sum
     }
 
     /// Audit records are best-effort: a persistence failure must never crash the app or block

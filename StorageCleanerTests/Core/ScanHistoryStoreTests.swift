@@ -20,6 +20,26 @@ final class ScanHistoryStoreTests: XCTestCase {
         )
     }
 
+    private func recordMinimalScan(in store: SwiftDataScanHistoryStore) {
+        store.recordCompletedScan(
+            ScanSnapshot(
+                findings: [
+                    StorageFinding(
+                        kind: .trash,
+                        domain: .trash,
+                        bytes: 1,
+                        itemCount: 1,
+                        safety: .review,
+                        examples: [],
+                        filePaths: [URL(filePath: "/tmp/x")]
+                    )
+                ],
+                scannedItemCount: 1,
+                duration: .seconds(1)
+            )
+        )
+    }
+
     func testRecordCompletedScanPersistsScanAndFindings() throws {
         let fixture = makeStore()
         let snapshot = ScanSnapshot(
@@ -223,6 +243,33 @@ final class ScanHistoryStoreTests: XCTestCase {
 
         let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
         XCTAssertEqual(scan.cleanedBytes, 5_000)
+    }
+
+    func testCleanupActionsClampScanCleanedBytesWhenExistingTotalWouldOverflow() throws {
+        let fixture = makeStore()
+        recordMinimalScan(in: fixture.store)
+
+        let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
+        scan.cleanedBytes = Int64.max - 10
+
+        fixture.store.recordCleanupActions([
+            CleanupAuditEntry(kind: .trash, bytesReclaimed: 100, itemCount: 1)
+        ])
+
+        XCTAssertEqual(scan.cleanedBytes, Int64.max)
+    }
+
+    func testCleanupActionsClampScanCleanedBytesWhenNewEntriesWouldOverflow() throws {
+        let fixture = makeStore()
+        recordMinimalScan(in: fixture.store)
+
+        fixture.store.recordCleanupActions([
+            CleanupAuditEntry(kind: .trash, bytesReclaimed: Int64.max, itemCount: 1),
+            CleanupAuditEntry(kind: .trash, bytesReclaimed: 1, itemCount: 1)
+        ])
+
+        let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
+        XCTAssertEqual(scan.cleanedBytes, Int64.max)
     }
 
     func testCleanedBytesRemainZeroWhenNoActionsRecorded() throws {
