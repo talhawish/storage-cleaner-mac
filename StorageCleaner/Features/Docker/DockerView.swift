@@ -9,6 +9,7 @@ struct DockerView: View {
     @State private var selectedTab: DockerTab = .containers
     @State private var pendingAction: PendingDockerAction?
     @State private var actionMessage: String?
+    @State private var loadTask: Task<Void, Never>?
 
     init(
         service: DockerService = .live,
@@ -37,7 +38,8 @@ struct DockerView: View {
         .navigationTitle("Docker")
         .navigationSubtitle(subtitle)
         .toolbar { toolbarContent }
-        .task { await load() }
+        .onAppear { startLoading() }
+        .onDisappear { cancelLoading() }
         .alert(item: $pendingAction) { action in
             Alert(
                 title: Text(action.title),
@@ -54,13 +56,14 @@ struct DockerView: View {
         guard let snapshot else { return "Checking Docker" }
         if !snapshot.isInstalled { return "Not installed" }
         if !snapshot.daemonAvailable { return "Installed, daemon unavailable" }
-        return "\(snapshot.containers.count) containers - \(snapshot.images.count) images - \(StorageFormatting.bytes(snapshot.totalBytes))"
+        return "\(snapshot.containers.count) containers - \(snapshot.images.count) images - "
+            + StorageFormatting.bytes(snapshot.totalBytes)
     }
 
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem {
             Button {
-                Task { await load() }
+                startLoading()
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
@@ -81,6 +84,7 @@ struct DockerView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .foregroundStyle(AppTheme.accent)
+                        .accessibilityHidden(true)
                     Text(actionMessage)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -143,15 +147,38 @@ struct DockerView: View {
                 }
             }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-                DockerMetricTile(title: "Images", value: "\(snapshot.images.count)", detail: StorageFormatting.bytes(snapshot.imageBytes))
-                DockerMetricTile(title: "Containers", value: "\(snapshot.containers.count)", detail: StorageFormatting.bytes(snapshot.containerBytes))
-                DockerMetricTile(title: "Volumes", value: "\(snapshot.volumes.count)", detail: StorageFormatting.bytes(snapshot.volumeBytes))
-                DockerMetricTile(title: "Build Cache", value: "\(snapshot.builderCache.entryCount)", detail: StorageFormatting.bytes(snapshot.builderCache.bytes))
-            }
+            metricsGrid(snapshot)
         }
         .padding(24)
         .background(.ultraThinMaterial)
+    }
+
+    private func metricsGrid(_ snapshot: DockerSnapshot) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 150), spacing: 12)],
+            spacing: 12
+        ) {
+            DockerMetricTile(
+                title: "Images",
+                value: "\(snapshot.images.count)",
+                detail: StorageFormatting.bytes(snapshot.imageBytes)
+            )
+            DockerMetricTile(
+                title: "Containers",
+                value: "\(snapshot.containers.count)",
+                detail: StorageFormatting.bytes(snapshot.containerBytes)
+            )
+            DockerMetricTile(
+                title: "Volumes",
+                value: "\(snapshot.volumes.count)",
+                detail: StorageFormatting.bytes(snapshot.volumeBytes)
+            )
+            DockerMetricTile(
+                title: "Build Cache",
+                value: "\(snapshot.builderCache.entryCount)",
+                detail: StorageFormatting.bytes(snapshot.builderCache.bytes)
+            )
+        }
     }
 
     private var tabBar: some View {
@@ -223,6 +250,7 @@ struct DockerView: View {
                     .font(.title2)
                     .foregroundStyle(AppTheme.orange)
                     .frame(width: 28)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Builder Cache")
@@ -242,7 +270,10 @@ struct DockerView: View {
                 .disabled(cache.bytes == 0)
             }
 
-            Text("Pruning removes reusable build layers. Docker can recreate them, but the next image build may take longer.")
+            Text(
+                "Pruning removes reusable build layers. Docker can recreate them, "
+                    + "but the next image build may take longer."
+            )
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -267,6 +298,7 @@ struct DockerView: View {
             Image(systemName: systemImage)
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text(title)
                 .font(.headline)
             Text("Refresh after Docker creates new resources.")
@@ -302,18 +334,19 @@ struct DockerView: View {
                     tint: .secondary
                 )
             ],
-            cancelAction: {}
+            cancelAction: cancelLoading
         )
     }
 
     private var notInstalledState: some View {
         EmptyStateView(
             title: "Docker is not installed",
-            message: "Install Docker Desktop or the Docker CLI to manage local images, containers, volumes, and build cache.",
+            message: "Install Docker Desktop or the Docker CLI to manage local images, "
+                + "containers, volumes, and build cache.",
             systemImage: "shippingbox",
             tint: AppTheme.violet,
             actionTitle: "Refresh",
-            action: { Task { await load() } }
+            action: startLoading
         )
         .frame(minHeight: 430)
     }
@@ -325,7 +358,7 @@ struct DockerView: View {
             systemImage: "shippingbox.fill",
             tint: AppTheme.violet,
             actionTitle: "Refresh",
-            action: { Task { await load() } }
+            action: startLoading
         )
         .frame(minHeight: 430)
     }
@@ -339,6 +372,18 @@ private extension DockerView {
         let nextSnapshot = await service.loadSnapshot()
         guard !Task.isCancelled else { return }
         snapshot = nextSnapshot
+        isLoading = false
+        loadTask = nil
+    }
+
+    func startLoading() {
+        loadTask?.cancel()
+        loadTask = Task { await load() }
+    }
+
+    func cancelLoading() {
+        loadTask?.cancel()
+        loadTask = nil
         isLoading = false
     }
 
@@ -430,7 +475,8 @@ private enum PendingDockerAction: Identifiable {
         case let .removeContainer(_, name):
             "Docker will remove \(name). Stopped containers can be recreated from their image."
         case let .removeImage(_, name):
-            "Docker will remove \(name). Images used by containers may fail to remove until those containers are removed."
+            "Docker will remove \(name). Images used by containers may fail to remove "
+                + "until those containers are removed."
         case let .removeVolume(name):
             "Docker will remove volume \(name). Volume data is not moved to the Trash."
         case .pruneBuilderCache:
@@ -469,194 +515,5 @@ private struct DockerMetricTile: View {
         .padding(12)
         .background(AppTheme.subtleSurface)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-}
-
-private struct DockerStateBadge: View {
-    let title: String
-    let isRunning: Bool
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(isRunning ? AppTheme.mint : .secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background((isRunning ? AppTheme.mint : Color.secondary).opacity(0.12), in: Capsule())
-    }
-}
-
-private struct DockerContainerRow: View {
-    let container: DockerContainer
-    let stats: DockerContainerStats?
-    let onStop: () -> Void
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: container.isRunning ? "play.circle.fill" : "stop.circle")
-                .font(.title2)
-                .foregroundStyle(container.isRunning ? AppTheme.mint : .secondary)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text(container.name)
-                        .font(.headline)
-                    DockerStateBadge(title: container.state.isEmpty ? "unknown" : container.state, isRunning: container.isRunning)
-                }
-
-                Text(container.image)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                HStack(spacing: 14) {
-                    Label(StorageFormatting.bytes(container.writableBytes), systemImage: "internaldrive")
-                    if container.virtualBytes > 0 {
-                        Label("\(StorageFormatting.bytes(container.virtualBytes)) virtual", systemImage: "square.stack.3d.up")
-                    }
-                    if let stats {
-                        Label(stats.cpuPercent, systemImage: "cpu")
-                        Label(stats.memoryUsage, systemImage: "memorychip")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                if !container.status.isEmpty {
-                    Text(container.status)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                if container.isRunning {
-                    Button(action: onStop) {
-                        Image(systemName: "stop.fill")
-                    }
-                    .help("Stop container")
-                }
-
-                Button(role: .destructive, action: onRemove) {
-                    Image(systemName: "trash")
-                }
-                .help("Remove container")
-            }
-            .buttonStyle(.bordered)
-        }
-        .padding(16)
-        .cardSurface()
-    }
-}
-
-private struct DockerImageRow: View {
-    let image: DockerImage
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "photo.stack.fill")
-                .font(.title2)
-                .foregroundStyle(AppTheme.violet)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(image.displayName)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text("\(image.id) - \(image.createdSince)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Text(StorageFormatting.bytes(image.bytes))
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
-
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.bordered)
-            .help("Remove image")
-        }
-        .padding(16)
-        .cardSurface()
-    }
-}
-
-private struct DockerVolumeRow: View {
-    let volume: DockerVolume
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "externaldrive.fill")
-                .font(.title2)
-                .foregroundStyle(AppTheme.cyan)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(volume.name)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(volume.mountpoint?.path ?? volume.driver)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Text(StorageFormatting.bytes(volume.bytes))
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
-
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.bordered)
-            .help("Remove volume")
-        }
-        .padding(16)
-        .cardSurface()
-    }
-}
-
-private struct DockerStatsRow: View {
-    let stats: DockerContainerStats
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.title2)
-                .foregroundStyle(AppTheme.mint)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text(stats.name)
-                    .font(.headline)
-
-                HStack(spacing: 14) {
-                    Label(stats.cpuPercent, systemImage: "cpu")
-                    Label(stats.memoryUsage, systemImage: "memorychip")
-                    Label(stats.networkIO, systemImage: "network")
-                    Label(stats.blockIO, systemImage: "externaldrive")
-                    Label("\(stats.pids) PIDs", systemImage: "number")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(16)
-        .cardSurface()
     }
 }

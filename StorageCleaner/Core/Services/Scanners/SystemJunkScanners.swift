@@ -175,7 +175,7 @@ struct OrphanedPreferencesScanner: StorageCategoryScanning {
 }
 
 /// Walks `~/Library/Logs/DiagnosticReports` and `~/Library/Logs/CrashReporter` for stale crash
-/// reports (`.ips`, `.crash`, `.synced`). Crash reports are user-owned by the system, not by any
+/// reports and diagnostic logs. Crash reports are user-owned by the system, not by any
 /// app, so they do not use `InstalledAppCatalog`. The discovery is dynamic: only reports that
 /// actually exist are surfaced.
 struct OldCrashReportsScanner: StorageCategoryScanning {
@@ -234,7 +234,16 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
 
     private static func isCrashReport(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
-        return ext == "crash" || ext == "ips" || ext == "synced"
+        return [
+            "crash",
+            "diag",
+            "hang",
+            "ips",
+            "memory",
+            "panic",
+            "spin",
+            "synced"
+        ].contains(ext)
     }
 }
 

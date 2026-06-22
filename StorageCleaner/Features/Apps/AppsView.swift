@@ -5,8 +5,8 @@ struct AppsView: View {
     @State private var isLoading = true
     @State private var searchText = ""
     @State private var sortOption: SortOption = .sizeDesc
-    @State private var selectedApps: Set<String> = []
     @State private var appToDelete: AppItem?
+    @State private var loadTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -37,11 +37,6 @@ struct AppsView: View {
         apps.reduce(0) { $0 + $1.sizeBytes }
     }
 
-    private var selectedTotalSize: Int64 {
-        apps.filter { selectedApps.contains($0.id) }
-            .reduce(0) { $0 + $1.sizeBytes }
-    }
-
     var body: some View {
         Group {
             if isLoading {
@@ -58,13 +53,12 @@ struct AppsView: View {
         .toolbar {
             toolbarContent
         }
-        .task {
-            await loadApps()
-        }
+        .onAppear { startLoadingApps() }
+        .onDisappear { cancelLoadingApps() }
         .sheet(item: $appToDelete) { app in
             DeleteAppConfirmationSheet(
                 app: app,
-                onDelete: {
+                onUninstall: {
                     try await uninstallApp(app)
                 },
                 onCancel: { appToDelete = nil }
@@ -90,7 +84,7 @@ struct AppsView: View {
 
         ToolbarItem {
             Button {
-                Task { await loadApps() }
+                startLoadingApps()
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .accessibilityHidden(true)
@@ -125,7 +119,7 @@ struct AppsView: View {
                     tint: AppTheme.violet
                 )
             ],
-            cancelAction: {}
+            cancelAction: cancelLoadingApps
         )
     }
 
@@ -151,10 +145,8 @@ struct AppsView: View {
                     ForEach(filteredApps) { app in
                         AppRowView(
                             app: app,
-                            isSelected: selectedApps.contains(app.id),
-                            onToggle: { toggleApp(app) },
                             onReveal: { Task { await inventoryService.revealInFinder(app) } },
-                            onDelete: { appToDelete = app }
+                            onUninstall: { appToDelete = app }
                         )
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
@@ -167,34 +159,9 @@ struct AppsView: View {
 
     private var statsBar: some View {
         HStack(spacing: 12) {
-            if !selectedApps.isEmpty {
-                Button {
-                    selectedApps.removeAll()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "xmark.circle.fill")
-                            .accessibilityHidden(true)
-                        Text("Clear selection")
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppTheme.accent)
-                }
-                .buttonStyle(.plain)
-
-                Divider().frame(height: 16)
-
-                Text("\(selectedApps.count) selected")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppTheme.accent)
-
-                Text(StorageFormatting.bytes(selectedTotalSize))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Total: \(StorageFormatting.bytes(totalSize))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Text("Total: \(StorageFormatting.bytes(totalSize))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
             Spacer()
 
@@ -207,25 +174,29 @@ struct AppsView: View {
         .background(.regularMaterial)
     }
 
-    private func toggleApp(_ app: AppItem) {
-        if selectedApps.contains(app.id) {
-            selectedApps.remove(app.id)
-        } else {
-            selectedApps.insert(app.id)
-        }
-    }
-
     private func loadApps() async {
         isLoading = true
         let found = await inventoryService.scanInstalledApps()
+        guard !Task.isCancelled else { return }
         apps = found
+        isLoading = false
+        loadTask = nil
+    }
+
+    private func startLoadingApps() {
+        loadTask?.cancel()
+        loadTask = Task { await loadApps() }
+    }
+
+    private func cancelLoadingApps() {
+        loadTask?.cancel()
+        loadTask = nil
         isLoading = false
     }
 
     private func uninstallApp(_ app: AppItem) async throws {
         try await inventoryService.uninstallApp(app)
         apps.removeAll { $0.id == app.id }
-        selectedApps.remove(app.id)
     }
 
     private func sortedApps(from list: [AppItem]) -> [AppItem] {

@@ -96,7 +96,9 @@ struct DockerService: Sendable {
         let output = await runCommand(docker, arguments)
         return DockerActionResult(
             succeeded: output.succeeded,
-            message: output.succeeded ? success : (Self.firstMeaningfulLine(output.output) ?? "Docker reported an error.")
+            message: output.succeeded
+                ? success
+                : (Self.firstMeaningfulLine(output.output) ?? "Docker reported an error.")
         )
     }
 }

@@ -342,13 +342,22 @@ final class DashboardViewModel {
 
         let scanner = scanner
         scanTask = Task { [weak self] in
+            var didFinish = false
             for await event in scanner.scanEvents(for: kinds) {
                 guard !Task.isCancelled else { return }
+                if case .completed = event {
+                    didFinish = true
+                } else if case .failed = event {
+                    didFinish = true
+                }
                 self?.consume(event)
             }
             await MainActor.run {
                 guard let self, self.phase == .scanning else { return }
-                self.phase = .idle
+                guard !didFinish else { return }
+                self.phase = .failed(message: "The scan stopped before it completed. Try scanning again.")
+                self.scanTask = nil
+                self.activeScanKinds = nil
             }
         }
     }
@@ -407,6 +416,10 @@ final class DashboardViewModel {
             if activeScanKinds == nil {
                 historyStore?.recordCompletedScan(adjustedSnapshot)
             }
+            scanTask = nil
+            activeScanKinds = nil
+        case let .failed(message):
+            phase = .failed(message: message)
             scanTask = nil
             activeScanKinds = nil
         }

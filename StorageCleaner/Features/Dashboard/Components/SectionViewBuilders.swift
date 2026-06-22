@@ -13,8 +13,7 @@ extension AppShellView {
     @ViewBuilder
     func developerStorageView() -> some View {
         let kinds = DeveloperDomains.kinds
-        let findings = viewModel.snapshot?.findings ?? []
-        let sectionFindings = findings.filter { kinds.contains($0.kind) }
+        let sectionFindings = visibleFindings.filter { kinds.contains($0.kind) }
         let scanAction = { viewModel.startScan(for: kinds) }
         switch viewModel.phase {
         case .scanning:
@@ -440,7 +439,15 @@ extension AppShellView {
 
     func filteredFindings(for kinds: [StorageFindingKind]) -> [StorageFinding] {
         guard !kinds.isEmpty else { return [] }
-        return (viewModel.snapshot?.findings ?? []).filter { kinds.contains($0.kind) }
+        return visibleFindings.filter { kinds.contains($0.kind) }
+    }
+
+    var visibleFindings: [StorageFinding] {
+        let findings = viewModel.snapshot?.findings ?? []
+        guard showReviewItems else {
+            return findings.filter { $0.safety == .safe }
+        }
+        return findings
     }
 
     func openFinding(_ finding: StorageFinding) {

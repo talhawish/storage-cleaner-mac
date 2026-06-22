@@ -33,7 +33,7 @@ struct LargeFilesView: View {
                         url: url,
                         kind: finding.kind,
                         domain: finding.domain,
-                        bytes: StorageFormatting.fileSize(at: url)
+                        bytes: StorageFormatting.itemSize(at: url)
                     )
                 }
             }
@@ -45,7 +45,7 @@ struct LargeFilesView: View {
 
     private var totalSelectedBytes: Int64 {
         selectedURLs.reduce(Int64(0)) { total, url in
-            total + StorageFormatting.fileSize(at: url)
+            total + StorageFormatting.itemSize(at: url)
         }
     }
 
@@ -84,7 +84,7 @@ struct LargeFilesView: View {
                 Button {
                     onScan()
                 } label: {
-                    Label("Scan Large Files", systemImage: "sparkle.magnifyingglass")
+                    Label("Scan Large Files", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
                 .help("Scan large-file locations again")

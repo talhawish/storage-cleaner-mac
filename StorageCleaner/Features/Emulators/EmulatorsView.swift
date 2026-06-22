@@ -12,6 +12,7 @@ struct EmulatorsView: View {
     @State private var selectedIDs: Set<String> = []
     @State private var isLoading = true
     @State private var showConfirmation = false
+    @State private var loadTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -49,7 +50,8 @@ struct EmulatorsView: View {
         .navigationSubtitle("\(images.count) OS images · \(StorageFormatting.bytes(totalBytes))")
         .accessibilityIdentifier("simulators-emulators-root")
         .toolbar { toolbarContent }
-        .task { await load() }
+        .onAppear { startLoading() }
+        .onDisappear { cancelLoading() }
         .sheet(isPresented: $showConfirmation) {
             EmulatorDeleteConfirmationSheet(
                 images: selectedImages,
@@ -59,7 +61,7 @@ struct EmulatorsView: View {
                     showConfirmation = false
                     Task {
                         _ = await service.remove(toRemove)
-                        await load()
+                        startLoading()
                     }
                 },
                 onCancel: { showConfirmation = false }
@@ -82,7 +84,7 @@ struct EmulatorsView: View {
 
         ToolbarItem {
             Button {
-                Task { await load() }
+                startLoading()
             } label: {
                 Label("Rescan", systemImage: "arrow.clockwise")
             }
@@ -182,7 +184,7 @@ struct EmulatorsView: View {
             systemImage: "iphone.gen3",
             tint: AppTheme.accent,
             actionTitle: "Rescan",
-            action: { Task { await load() } }
+            action: startLoading
         )
         .frame(minHeight: 430)
     }
@@ -212,7 +214,7 @@ struct EmulatorsView: View {
                     tint: AppTheme.violet
                 )
             ],
-            cancelAction: {}
+            cancelAction: cancelLoading
         )
     }
 }
@@ -254,5 +256,17 @@ private extension EmulatorsView {
         }.value
         guard !Task.isCancelled else { return }
         images = sized
+        loadTask = nil
+    }
+
+    func startLoading() {
+        loadTask?.cancel()
+        loadTask = Task { await load() }
+    }
+
+    func cancelLoading() {
+        loadTask?.cancel()
+        loadTask = nil
+        isLoading = false
     }
 }

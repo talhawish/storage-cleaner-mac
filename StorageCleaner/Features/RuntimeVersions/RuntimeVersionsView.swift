@@ -13,6 +13,7 @@ struct RuntimeVersionsView: View {
     @State private var selectedURLs: Set<URL> = []
     @State private var isLoading = true
     @State private var showDeleteConfirmation = false
+    @State private var loadTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -42,7 +43,8 @@ struct RuntimeVersionsView: View {
         .navigationSubtitle(subtitle)
         .accessibilityIdentifier("runtime-versions-root")
         .toolbar { toolbarContent }
-        .task { await load() }
+        .onAppear { startLoading() }
+        .onDisappear { cancelLoading() }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
                 finding: deletionFinding,
@@ -54,7 +56,7 @@ struct RuntimeVersionsView: View {
                     showDeleteConfirmation = false
                     Task {
                         await onRemove(urls)
-                        await load()
+                        startLoading()
                     }
                 },
                 onCancel: { showDeleteConfirmation = false }
@@ -83,7 +85,7 @@ struct RuntimeVersionsView: View {
 
         ToolbarItem {
             Button {
-                Task { await load() }
+                startLoading()
             } label: {
                 Label("Rescan", systemImage: "arrow.clockwise")
             }
@@ -183,7 +185,7 @@ struct RuntimeVersionsView: View {
             systemImage: "square.stack.3d.up",
             tint: AppTheme.violet,
             actionTitle: "Rescan",
-            action: { Task { await load() } }
+            action: startLoading
         )
         .frame(minHeight: 430)
     }
@@ -213,7 +215,7 @@ struct RuntimeVersionsView: View {
                     tint: .secondary
                 )
             ],
-            cancelAction: {}
+            cancelAction: cancelLoading
         )
     }
 }
@@ -270,6 +272,18 @@ private extension RuntimeVersionsView {
 
         guard !Task.isCancelled else { return }
         groups = measured
+        loadTask = nil
+    }
+
+    func startLoading() {
+        loadTask?.cancel()
+        loadTask = Task { await load() }
+    }
+
+    func cancelLoading() {
+        loadTask?.cancel()
+        loadTask = nil
+        isLoading = false
     }
 
     func suggestedSelection(in groups: [RuntimeVersionGroup]) -> Set<URL> {

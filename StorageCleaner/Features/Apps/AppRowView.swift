@@ -2,25 +2,14 @@ import SwiftUI
 
 struct AppRowView: View {
     let app: AppItem
-    let isSelected: Bool
-    let onToggle: () -> Void
     let onReveal: () -> Void
-    let onDelete: () -> Void
+    let onUninstall: () -> Void
 
     @State private var appIcon: NSImage?
     @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 12) {
-            Toggle(isOn: Binding(
-                get: { isSelected },
-                set: { _ in onToggle() }
-            )) {
-                EmptyView()
-            }
-            .toggleStyle(.checkbox)
-            .accessibilityLabel("Select \(app.displayName)")
-
             appIconView
 
             VStack(alignment: .leading, spacing: 3) {
@@ -100,16 +89,16 @@ struct AppRowView: View {
 
             if !app.isSystemApp {
                 Button {
-                    onDelete()
+                    onUninstall()
                 } label: {
-                    Image(systemName: "trash")
+                    Image(systemName: "xmark.bin")
                         .font(.system(size: 12))
                         .foregroundStyle(.red)
                         .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
-                .help("Move to Trash")
-                .accessibilityLabel("Move to Trash")
+                .help("Uninstall")
+                .accessibilityLabel("Uninstall")
             }
         }
     }
@@ -130,7 +119,7 @@ struct AppRowView: View {
         }
         if !app.isSystemApp {
             Divider()
-            Button("Move to Trash", role: .destructive) { onDelete() }
+            Button("Uninstall", role: .destructive) { onUninstall() }
         }
     }
 }

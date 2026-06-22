@@ -140,7 +140,7 @@ struct WelcomeHeroText: View {
     private var actions: some View {
         HStack(spacing: AppTheme.Spacing.medium) {
             Button(action: startScan) {
-                Label("Start Smart Scan", systemImage: "sparkle.magnifyingglass")
+                Label("Start Smart Scan", systemImage: "arrow.clockwise")
                     .font(.headline)
                     .frame(minWidth: 170)
             }

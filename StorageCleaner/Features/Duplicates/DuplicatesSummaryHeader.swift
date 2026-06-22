@@ -1,25 +1,5 @@
 import SwiftUI
 
-/// Media-type filter for the Duplicates screen.
-enum DuplicateMediaFilter: String, CaseIterable, Identifiable {
-    case all = "All"
-    case photos = "Photos"
-    case videos = "Videos"
-    case documents = "Documents"
-
-    var id: Self { self }
-
-    /// The finding kinds shown for this filter.
-    var kinds: [StorageFindingKind] {
-        switch self {
-        case .all: [.duplicatePhotos, .duplicateVideos, .duplicateDocuments]
-        case .photos: [.duplicatePhotos]
-        case .videos: [.duplicateVideos]
-        case .documents: [.duplicateDocuments]
-        }
-    }
-}
-
 /// Sticky header: totals, media-type filter, bulk selection controls, and the primary remove action.
 struct DuplicatesSummaryHeader: View {
     let groupCount: Int

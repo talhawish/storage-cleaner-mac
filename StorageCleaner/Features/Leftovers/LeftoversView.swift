@@ -18,7 +18,7 @@ struct LeftoversView: View {
                 LeftoverRecord(
                     url: url,
                     kind: finding.kind,
-                    bytes: StorageFormatting.fileSize(at: url)
+                    bytes: StorageFormatting.itemSize(at: url)
                 )
             }
         }
@@ -36,7 +36,7 @@ struct LeftoversView: View {
 
     private var totalSelectedBytes: Int64 {
         selectedURLs.reduce(Int64(0)) { total, url in
-            total + StorageFormatting.fileSize(at: url)
+            total + StorageFormatting.itemSize(at: url)
         }
     }
 
@@ -75,7 +75,7 @@ struct LeftoversView: View {
                 Button {
                     onScan()
                 } label: {
-                    Label("Scan Leftovers", systemImage: "sparkle.magnifyingglass")
+                    Label("Scan Leftovers", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
                 .help("Scan for leftover installers again")

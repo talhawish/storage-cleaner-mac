@@ -31,7 +31,7 @@ struct InitialStateView: View {
         subtitle: String,
         highlights: [InitialStateHighlight] = [],
         actionTitle: String = "Start Scan",
-        systemImage: String = "sparkle.magnifyingglass",
+        systemImage: String = "arrow.clockwise",
         tint: Color = AppTheme.accent,
         action: @escaping () -> Void
     ) {
@@ -69,7 +69,7 @@ struct InitialStateView: View {
             }
 
             Button(action: action) {
-                Label(actionTitle, systemImage: "sparkles")
+                Label(actionTitle, systemImage: "arrow.clockwise")
                     .font(.headline)
                     .frame(minWidth: 200)
             }
@@ -86,6 +86,7 @@ struct InitialStateView: View {
         .padding(.horizontal, 48)
         .padding(.vertical, 56)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
         .onAppear { startAnimations() }
     }
 

@@ -197,6 +197,7 @@ enum ScanEvent: Equatable, Sendable {
         scannerProgress: [ScannerProgress]
     )
     case completed(ScanSnapshot)
+    case failed(message: String)
 }
 
 enum ScanPhase: Equatable, Sendable {

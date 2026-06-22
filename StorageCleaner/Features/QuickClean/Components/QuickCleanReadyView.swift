@@ -30,7 +30,7 @@ struct QuickCleanReadyView: View {
             Button {
                 onStartScan()
             } label: {
-                Label("Scan & Clean", systemImage: "sparkle.magnifyingglass")
+                Label("Scan & Clean", systemImage: "arrow.clockwise")
                     .frame(minWidth: 180)
             }
             .buttonStyle(.borderedProminent)

@@ -14,6 +14,7 @@ struct CLIProgramsView: View {
     @State private var isLoading = true
     @State private var detailProgram: CLIProgram?
     @State private var showDeleteConfirmation = false
+    @State private var loadTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -84,7 +85,9 @@ struct CLIProgramsView: View {
         .navigationSubtitle("\(allPrograms.count) programs · \(StorageFormatting.bytes(totalBytes))")
         .accessibilityIdentifier("cli-programs-root")
         .toolbar { toolbarContent }
-        .task(id: rootsKey) { await load() }
+        .onAppear { startLoading() }
+        .onChange(of: rootsKey, initial: false) { _, _ in startLoading() }
+        .onDisappear { cancelLoading() }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
                 finding: deletionFinding,
@@ -95,7 +98,7 @@ struct CLIProgramsView: View {
                     selectedURLs.removeAll()
                     Task {
                         await onRemove(urls)
-                        await load()
+                        startLoading()
                     }
                 },
                 onCancel: { showDeleteConfirmation = false }
@@ -123,7 +126,7 @@ struct CLIProgramsView: View {
             Button {
                 onScan()
             } label: {
-                Label("Scan Now", systemImage: "sparkle.magnifyingglass")
+                Label("Scan Now", systemImage: "arrow.clockwise")
             }
             .keyboardShortcut("r", modifiers: [.command])
             .help("Scan CLI tool locations again")
@@ -304,7 +307,7 @@ struct CLIProgramsView: View {
                     tint: .secondary
                 )
             ],
-            cancelAction: {}
+            cancelAction: cancelLoading
         )
     }
 
@@ -390,5 +393,17 @@ private extension CLIProgramsView {
 
         guard !Task.isCancelled else { return }
         sizes = measured
+        loadTask = nil
+    }
+
+    func startLoading() {
+        loadTask?.cancel()
+        loadTask = Task { await load() }
+    }
+
+    func cancelLoading() {
+        loadTask?.cancel()
+        loadTask = nil
+        isLoading = false
     }
 }

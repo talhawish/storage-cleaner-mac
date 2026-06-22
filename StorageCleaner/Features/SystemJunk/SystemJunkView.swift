@@ -133,7 +133,7 @@ struct SystemJunkView: View {
                 Button {
                     onScan()
                 } label: {
-                    Label("Scan System Junk", systemImage: "sparkle.magnifyingglass")
+                    Label("Scan System Junk", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
                 .help("Re-scan orphaned app data and crash reports")

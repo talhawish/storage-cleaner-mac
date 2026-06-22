@@ -2,9 +2,11 @@ import SwiftUI
 
 struct DashboardView: View {
     @Bindable var viewModel: DashboardViewModel
-    var onOpenSettings: (() -> Void)? = nil
+    var onOpenSettings: (() -> Void)?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
+    @AppStorage("showReviewItems")
+    private var showReviewItems = true
     @State private var showQuickClean = false
 
     var body: some View {
@@ -51,7 +53,7 @@ struct DashboardView: View {
                 Button {
                     viewModel.startScan()
                 } label: {
-                    Label(viewModel.isScanning ? "Scanning…" : "Scan Now", systemImage: "sparkle.magnifyingglass")
+                    Label(viewModel.isScanning ? "Scanning…" : "Scan Now", systemImage: "arrow.clockwise")
                 }
                 .accessibilityIdentifier("toolbar-scan-button")
                 .disabled(viewModel.isScanning)
@@ -90,28 +92,29 @@ struct DashboardView: View {
 
     @ViewBuilder
     private func results(scrollProxy: ScrollViewProxy) -> some View {
-        if let snapshot = viewModel.snapshot {
+        if let snapshot = visibleSnapshot {
             VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
                 OverviewSummaryBar(
                     snapshot: snapshot,
-                    safeBytes: viewModel.safeReclaimableBytes,
-                    reviewBytes: viewModel.reviewReclaimableBytes,
+                    safeBytes: StorageOverview.safeBytes(in: snapshot.findings),
+                    reviewBytes: StorageOverview.reviewBytes(in: snapshot.findings),
                     startScan: viewModel.startScan,
                     quickClean: { showQuickClean = true }
                 )
 
-                if !viewModel.domainTiles.isEmpty {
-                    SpaceBreakdownGrid(tiles: viewModel.domainTiles) { domain in
+                let domainTiles = StorageOverview.tiles(in: snapshot.findings, maxTiles: 6)
+                if !domainTiles.isEmpty {
+                    SpaceBreakdownGrid(tiles: domainTiles) { domain in
                         withAnimation(reduceMotion ? nil : .snappy) {
                             scrollProxy.scrollTo(domain, anchor: .top)
                         }
                     }
                 }
 
-                OverviewTipsCarousel(tips: viewModel.overviewTips, onAction: handleTip)
+                OverviewTipsCarousel(tips: overviewTips(for: snapshot), onAction: handleTip)
 
                 VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
-                    ForEach(viewModel.domainGroups) { usage in
+                    ForEach(StorageOverview.domainUsages(in: snapshot.findings)) { usage in
                         DetectionGroupSection(usage: usage) { viewModel.selectedFinding = $0 }
                             .id(usage.domain)
                     }
@@ -126,10 +129,26 @@ struct DashboardView: View {
         case .quickClean:
             showQuickClean = true
         case let .reveal(kind):
-            viewModel.selectedFinding = viewModel.finding(for: kind)
+            viewModel.selectedFinding = visibleSnapshot?.findings.first { $0.kind == kind }
         case .none:
             break
         }
+    }
+
+    private var visibleSnapshot: ScanSnapshot? {
+        guard let snapshot = viewModel.snapshot else { return nil }
+        guard !showReviewItems else { return snapshot }
+        return ScanSnapshot(
+            findings: snapshot.findings.filter { $0.safety == .safe },
+            scannedItemCount: snapshot.scannedItemCount,
+            duration: snapshot.duration
+        )
+    }
+
+    private func overviewTips(for snapshot: ScanSnapshot) -> [OverviewTip] {
+        let visibleKinds = Set(snapshot.findings.map(\.kind))
+        let visibleStaleHints = viewModel.staleHints.filter { visibleKinds.contains($0.kind) }
+        return OverviewTipBuilder.tips(for: snapshot, stale: visibleStaleHints)
     }
 
     private var greeting: String {

@@ -193,6 +193,11 @@ final class SystemJunkScannersTests: XCTestCase {
         try writeBytes(1024, to: "Logs/DiagnosticReports/Foo.crash")
         try writeBytes(2048, to: "Logs/DiagnosticReports/Bar.ips")
         try writeBytes(512, to: "Logs/CrashReporter/Baz.synced")
+        try writeBytes(256, to: "Logs/DiagnosticReports/Watchdog.diag")
+        try writeBytes(256, to: "Logs/DiagnosticReports/Kernel.panic")
+        try writeBytes(256, to: "Logs/DiagnosticReports/Sampler.spin")
+        try writeBytes(256, to: "Logs/DiagnosticReports/App.hang")
+        try writeBytes(256, to: "Logs/DiagnosticReports/Memory.memory")
         try writeBytes(128, to: "Logs/DiagnosticReports/notes.txt")
 
         let scanner = OldCrashReportsScanner(
@@ -208,9 +213,21 @@ final class SystemJunkScannersTests: XCTestCase {
         XCTAssertEqual(finding.kind, .oldCrashReports)
         XCTAssertEqual(finding.domain, .systemJunk)
         XCTAssertEqual(finding.safety, .review)
-        XCTAssertEqual(finding.itemCount, 3)
+        XCTAssertEqual(finding.itemCount, 8)
         let names = Set(finding.filePaths.map(\.lastPathComponent))
-        XCTAssertEqual(names, ["Foo.crash", "Bar.ips", "Baz.synced"])
+        XCTAssertEqual(
+            names,
+            [
+                "App.hang",
+                "Bar.ips",
+                "Baz.synced",
+                "Foo.crash",
+                "Kernel.panic",
+                "Memory.memory",
+                "Sampler.spin",
+                "Watchdog.diag"
+            ]
+        )
         XCTAssertGreaterThan(finding.bytes, 1024)
     }
 

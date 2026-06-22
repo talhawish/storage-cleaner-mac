@@ -25,6 +25,8 @@ final class LiveStorageScannerTests: XCTestCase {
                 progressEvents.append(progress)
             case let .completed(completedSnapshot):
                 snapshot = completedSnapshot
+            case let .failed(message):
+                XCTFail("Unexpected scan failure: \(message)")
             }
         }
 
@@ -78,6 +80,8 @@ final class LiveStorageScannerTests: XCTestCase {
                 progressKinds.formUnion(progress.map(\.kind))
             case let .completed(result):
                 snapshot = result
+            case let .failed(message):
+                XCTFail("Unexpected scan failure: \(message)")
             }
         }
 

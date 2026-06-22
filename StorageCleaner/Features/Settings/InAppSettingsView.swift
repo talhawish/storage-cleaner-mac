@@ -213,7 +213,7 @@ struct InAppSettingsView: View {
                 )
                 SettingsValueRow(
                     title: "Scanner",
-                    value: "18 category scanners",
+                    value: "33 category scanners",
                     icon: "list.bullet.rectangle",
                     color: AppTheme.orange
                 )

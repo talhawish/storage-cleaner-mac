@@ -3,38 +3,41 @@ import XCTest
 @testable import StorageCleaner
 
 final class AppInventoryServiceTests: XCTestCase {
-    func testUninstallMovesExactAppURLToTrash() async throws {
+    func testUninstallRemovesExactAppBundle() async throws {
         let app = appItem(path: "/Applications/Cleaner.app")
         let recorder = AppUninstallRecorder(existingPaths: [app.url.standardizedFileURL.path])
         let service = makeService(recorder: recorder)
 
         try await service.uninstallApp(app)
 
-        XCTAssertEqual(recorder.recycledURLs, [[app.url.standardizedFileURL]])
-        XCTAssertTrue(recorder.trashedURLs.isEmpty)
+        XCTAssertEqual(recorder.removedURLs, [app.url.standardizedFileURL])
         XCTAssertFalse(recorder.exists(app.url.standardizedFileURL.path))
     }
 
-    func testUninstallFallsBackToTrashWhenRecycleFails() async throws {
+    func testUninstallReportsPermissionDenied() async throws {
         let app = appItem(path: "/Applications/Cleaner.app")
         let recorder = AppUninstallRecorder(
             existingPaths: [app.url.standardizedFileURL.path],
-            recycleError: CocoaError(.fileWriteNoPermission)
+            removeError: CocoaError(.fileWriteNoPermission)
         )
         let service = makeService(recorder: recorder)
 
-        try await service.uninstallApp(app)
-
-        XCTAssertEqual(recorder.recycledURLs, [[app.url.standardizedFileURL]])
-        XCTAssertEqual(recorder.trashedURLs, [app.url.standardizedFileURL])
-        XCTAssertFalse(recorder.exists(app.url.standardizedFileURL.path))
+        do {
+            try await service.uninstallApp(app)
+            XCTFail("Expected uninstall to fail when macOS denies write permission.")
+        } catch let error as AppUninstallError {
+            guard case let .permissionDenied(url) = error else {
+                return XCTFail("Expected permissionDenied error, got \(error).")
+            }
+            XCTAssertEqual(url, app.url.standardizedFileURL)
+        }
     }
 
-    func testUninstallFailsWhenAppBundleStillExistsAfterTrashMove() async throws {
+    func testUninstallFailsWhenAppBundleStillExistsAfterRemoval() async throws {
         let app = appItem(path: "/Applications/Cleaner.app")
         let recorder = AppUninstallRecorder(
             existingPaths: [app.url.standardizedFileURL.path],
-            removeOnRecycle: false
+            removeOnUninstall: false
         )
         let service = makeService(recorder: recorder)
 
@@ -49,6 +52,29 @@ final class AppInventoryServiceTests: XCTestCase {
         }
     }
 
+    func testAdministratorApprovalFailureKeepsUnderlyingMessage() async throws {
+        let app = appItem(path: "/Applications/Cleaner.app")
+        let recorder = AppUninstallRecorder(
+            existingPaths: [app.url.standardizedFileURL.path],
+            removeError: AppBundleUninstallerError.administratorApprovalFailed(
+                app.url.standardizedFileURL,
+                "User canceled."
+            )
+        )
+        let service = makeService(recorder: recorder)
+
+        do {
+            try await service.uninstallApp(app)
+            XCTFail("Expected administrator approval failure to surface.")
+        } catch let error as AppUninstallError {
+            guard case let .failed(url, message) = error else {
+                return XCTFail("Expected failed error, got \(error).")
+            }
+            XCTAssertEqual(url, app.url.standardizedFileURL)
+            XCTAssertEqual(message, "User canceled.")
+        }
+    }
+
     func testAppIdentityUsesExactPathInsteadOfBundleIdentifier() {
         let first = appItem(path: "/Applications/Cleaner.app", bundleIdentifier: "com.example.cleaner")
         let second = appItem(path: "/Users/me/Applications/Cleaner.app", bundleIdentifier: "com.example.cleaner")
@@ -59,8 +85,7 @@ final class AppInventoryServiceTests: XCTestCase {
 
     private func makeService(recorder: AppUninstallRecorder) -> AppInventoryService {
         AppInventoryService(
-            recycleItems: { urls in try recorder.recycle(urls) },
-            trashItem: { url in try recorder.trash(url) },
+            uninstallAppBundle: { url in try recorder.remove(url) },
             fileExists: { path in recorder.exists(path) },
             verificationAttempts: 1,
             verificationDelay: .zero
@@ -85,46 +110,32 @@ final class AppInventoryServiceTests: XCTestCase {
 private final class AppUninstallRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var existingPaths: Set<String>
-    private let recycleError: Error?
-    private let removeOnRecycle: Bool
+    private let removeError: Error?
+    private let removeOnUninstall: Bool
 
-    private var _recycledURLs: [[URL]] = []
-    private var _trashedURLs: [URL] = []
+    private var _removedURLs: [URL] = []
 
     init(
         existingPaths: Set<String>,
-        recycleError: Error? = nil,
-        removeOnRecycle: Bool = true
+        removeError: Error? = nil,
+        removeOnUninstall: Bool = true
     ) {
         self.existingPaths = existingPaths
-        self.recycleError = recycleError
-        self.removeOnRecycle = removeOnRecycle
+        self.removeError = removeError
+        self.removeOnUninstall = removeOnUninstall
     }
 
-    var recycledURLs: [[URL]] {
-        lock.withLock { _recycledURLs }
+    var removedURLs: [URL] {
+        lock.withLock { _removedURLs }
     }
 
-    var trashedURLs: [URL] {
-        lock.withLock { _trashedURLs }
-    }
-
-    func recycle(_ urls: [URL]) throws {
+    func remove(_ url: URL) throws {
         try lock.withLock {
-            _recycledURLs.append(urls)
-            if let recycleError { throw recycleError }
-            if removeOnRecycle {
-                for url in urls {
-                    existingPaths.remove(url.standardizedFileURL.path)
-                }
+            _removedURLs.append(url)
+            if let removeError { throw removeError }
+            if removeOnUninstall {
+                existingPaths.remove(url.standardizedFileURL.path)
             }
-        }
-    }
-
-    func trash(_ url: URL) throws {
-        lock.withLock {
-            _trashedURLs.append(url)
-            existingPaths.remove(url.standardizedFileURL.path)
         }
     }
 

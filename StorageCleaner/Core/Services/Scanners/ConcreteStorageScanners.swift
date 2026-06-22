@@ -110,12 +110,12 @@ struct AndroidPackageScanner: StorageCategoryScanning {
     private let scanner: FilePatternScanner
 
     init(
-        roots: [URL] = [
+        roots: [URL] = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Documents"),
             DependencyPaths.home("Developer")
-        ],
+        ]),
         collector: FileSystemCollector
     ) {
         scanner = FilePatternScanner(
@@ -140,11 +140,11 @@ struct ScreenshotStorageScanner: StorageCategoryScanning {
     private let scanner: FilePatternScanner
 
     init(
-        roots: [URL] = [
+        roots: [URL] = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Pictures"),
             DependencyPaths.home("Downloads")
-        ],
+        ]),
         collector: FileSystemCollector
     ) {
         scanner = FilePatternScanner(

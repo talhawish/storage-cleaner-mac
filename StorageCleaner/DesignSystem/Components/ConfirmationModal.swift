@@ -49,6 +49,7 @@ struct ConfirmationModal<Content: View>: View {
     let iconTint: Color?
     let trailing: AppModalTrailing?
     let showsCloseButton: Bool
+    let preferredHeight: CGFloat?
     let confirm: AppModalActionBar.Action
     let cancel: AppModalActionBar.CancelAction?
     let isProcessing: Bool
@@ -65,6 +66,7 @@ struct ConfirmationModal<Content: View>: View {
         iconTint: Color? = nil,
         trailing: AppModalTrailing? = nil,
         showsCloseButton: Bool = true,
+        preferredHeight: CGFloat? = nil,
         confirm: AppModalActionBar.Action,
         cancel: AppModalActionBar.CancelAction? = nil,
         isProcessing: Bool = false,
@@ -78,6 +80,7 @@ struct ConfirmationModal<Content: View>: View {
         self.iconTint = iconTint
         self.trailing = trailing
         self.showsCloseButton = showsCloseButton
+        self.preferredHeight = preferredHeight
         self.confirm = confirm
         self.cancel = cancel
         self.isProcessing = isProcessing
@@ -97,6 +100,7 @@ struct ConfirmationModal<Content: View>: View {
         iconTint: Color? = nil,
         trailing: AppModalTrailing? = nil,
         showsCloseButton: Bool = true,
+        preferredHeight: CGFloat? = nil,
         confirm: AppModalActionBar.Action,
         cancel: AppModalActionBar.CancelAction? = nil,
         isProcessing: Bool = false
@@ -110,6 +114,7 @@ struct ConfirmationModal<Content: View>: View {
             iconTint: iconTint,
             trailing: trailing,
             showsCloseButton: showsCloseButton,
+            preferredHeight: preferredHeight,
             confirm: confirm,
             cancel: cancel,
             isProcessing: isProcessing
@@ -175,6 +180,6 @@ struct ConfirmationModal<Content: View>: View {
         }
     }
 
-    private var idealHeight: CGFloat { 400 }
+    private var idealHeight: CGFloat { preferredHeight ?? 400 }
     private var maxHeight: CGFloat { 640 }
 }

@@ -249,7 +249,7 @@ final class RuntimeVersionCatalogTests: XCTestCase {
         try Data("3.22.0\n".utf8).write(to: stableRoot.appendingPathComponent("version"))
         _ = try makeDir("home/development/flutter/bin")
         let stableBin = stableRoot.appendingPathComponent("bin/flutter")
-        try FileManager.default.createFile(atPath: stableBin.path, contents: nil)
+        FileManager.default.createFile(atPath: stableBin.path, contents: nil)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],
             ofItemAtPath: stableBin.path
@@ -259,7 +259,7 @@ final class RuntimeVersionCatalogTests: XCTestCase {
         try Data("3.24.0-1.1.pre\n".utf8).write(to: devRoot.appendingPathComponent("version"))
         _ = try makeDir("home/flutter/bin")
         let devBin = devRoot.appendingPathComponent("bin/flutter")
-        try FileManager.default.createFile(atPath: devBin.path, contents: nil)
+        FileManager.default.createFile(atPath: devBin.path, contents: nil)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],
             ofItemAtPath: devBin.path

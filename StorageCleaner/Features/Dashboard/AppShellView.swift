@@ -6,6 +6,8 @@ struct AppShellView: View {
     @State var detailPath = NavigationPath()
     @State private var pendingSwitch: PendingSidebarSwitch?
     @State private var isSidebarExpanded = true
+    @AppStorage("showReviewItems")
+    var showReviewItems = true
 
     var body: some View {
         HStack(spacing: 0) {
@@ -54,8 +56,7 @@ struct AppShellView: View {
 // MARK: - Layout
 
 private extension AppShellView {
-    @ViewBuilder
-    var sidebarColumn: some View {
+    @ViewBuilder var sidebarColumn: some View {
         if isSidebarExpanded {
             SidebarView(
                 selection: selectionBinding,

@@ -31,13 +31,13 @@ struct SettingsView: View {
             }
 
             Section("Safety") {
-                LabeledContent("Deletion policy", value: "Permanent delete")
+                LabeledContent("Deletion policy", value: "Move to Trash")
                 LabeledContent("Confirmation", value: "Always required")
             }
 
             Section("About") {
                 LabeledContent("Version", value: "0.1.0")
-                LabeledContent("Scanner", value: includeExternalVolumes ? "Full filesystem" : "Home directory only")
+                LabeledContent("Scanner", value: "33 category scanners")
             }
         }
         .formStyle(.grouped)

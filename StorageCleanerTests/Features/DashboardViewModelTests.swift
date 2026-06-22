@@ -35,6 +35,26 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isScanning)
     }
 
+    func testStreamFinishingWithoutCompletionShowsFailedPhase() async {
+        let viewModel = DashboardViewModel(
+            scanner: EmptyStreamScanner(),
+            permissionHandler: StubPermissionHandler(statuses: allAccessibleStatuses)
+        )
+
+        viewModel.startScan()
+
+        for _ in 0..<20 {
+            if case .failed = viewModel.phase { break }
+            await Task.yield()
+        }
+
+        guard case let .failed(message) = viewModel.phase else {
+            return XCTFail("Expected failed phase, got \(viewModel.phase)")
+        }
+        XCTAssertTrue(message.contains("stopped before it completed"))
+        XCTAssertFalse(viewModel.isScanning)
+    }
+
     func testStartScanWithBlockedPermissionsShowsPermissionRequired() {
         let handler = StubPermissionHandler(
             statuses: [
@@ -435,13 +455,16 @@ final class DashboardViewModelDuplicatePruneTests: XCTestCase {
 
     // MARK: - Scanner stream ending without .completed
 
-    func testScannerStreamEndWithoutCompletedResetsToIdle() async {
+    func testScannerStreamEndWithoutCompletedFails() async {
         let viewModel = DashboardViewModel(
             scanner: EmptyStreamScanner(),
             permissionHandler: StubPermissionHandler(statuses: allAccessibleStatuses)
         )
         viewModel.startScan()
         for _ in 0..<20 where viewModel.phase == .scanning { await Task.yield() }
-        XCTAssertEqual(viewModel.phase, .idle)
+        guard case let .failed(message) = viewModel.phase else {
+            return XCTFail("Expected failed phase, got \(viewModel.phase)")
+        }
+        XCTAssertTrue(message.contains("stopped before it completed"))
     }
 }

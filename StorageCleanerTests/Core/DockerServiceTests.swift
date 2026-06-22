@@ -19,37 +19,7 @@ final class DockerServiceTests: XCTestCase {
 
     func testSnapshotAggregatesDockerInventory() async {
         let docker = URL(fileURLWithPath: "/usr/local/bin/docker")
-        let outputs: [String: DockerService.CommandOutput] = [
-            "version --format {{.Server.Version}}": .init(exitCode: 0, output: "26.1.0\n"),
-            "info --format {{json .}}": .init(exitCode: 0, output: "{}\n"),
-            "image ls --all --format {{json .}}": .init(
-                exitCode: 0,
-                output: #"{"ID":"img1","Repository":"redis","Tag":"7","Size":"120MB","CreatedSince":"2 weeks ago"}"#
-                    + "\n"
-            ),
-            "container ls --all --size --format {{json .}}": .init(
-                exitCode: 0,
-                output: #"{"ID":"abc123","Names":"redis-dev","Image":"redis:7","State":"running","Status":"Up 2 hours","Ports":"6379/tcp","Size":"12MB (virtual 180MB)"}"#
-                    + "\n"
-            ),
-            "volume ls --format {{json .}}": .init(
-                exitCode: 0,
-                output: #"{"Name":"redis-data","Driver":"local"}"# + "\n"
-            ),
-            "volume inspect redis-data --format {{json .}}": .init(
-                exitCode: 0,
-                output: #"{"Mountpoint":"/tmp/redis-data"}"# + "\n"
-            ),
-            "builder du --verbose --format {{json .}}": .init(
-                exitCode: 0,
-                output: #"{"Size":"50MB"}"# + "\n" + #"{"Size":"25MB"}"# + "\n"
-            ),
-            "stats --no-stream --format {{json .}}": .init(
-                exitCode: 0,
-                output: #"{"Container":"abc123","Name":"redis-dev","CPUPerc":"0.15%","MemUsage":"42MiB / 2GiB","MemPerc":"2.1%","NetIO":"1kB / 2kB","BlockIO":"3MB / 4MB","PIDs":"12"}"#
-                    + "\n"
-            )
-        ]
+        let outputs = Self.dockerInventoryOutputs
 
         let service = DockerService(
             locateDocker: { docker },
@@ -85,5 +55,48 @@ final class DockerServiceTests: XCTestCase {
 
         XCTAssertTrue(snapshot.isInstalled)
         XCTAssertFalse(snapshot.daemonAvailable)
+    }
+
+    private static var dockerInventoryOutputs: [String: DockerService.CommandOutput] {
+        [
+            "version --format {{.Server.Version}}": .init(exitCode: 0, output: "26.1.0\n"),
+            "info --format {{json .}}": .init(exitCode: 0, output: "{}\n"),
+            "image ls --all --format {{json .}}": .init(
+                exitCode: 0,
+                output: #"{"ID":"img1","Repository":"redis","Tag":"7","Size":"120MB","CreatedSince":"2 weeks ago"}"#
+                    + "\n"
+            ),
+            "container ls --all --size --format {{json .}}": .init(
+                exitCode: 0,
+                output: containerJSON + "\n"
+            ),
+            "volume ls --format {{json .}}": .init(
+                exitCode: 0,
+                output: #"{"Name":"redis-data","Driver":"local"}"# + "\n"
+            ),
+            "volume inspect redis-data --format {{json .}}": .init(
+                exitCode: 0,
+                output: #"{"Mountpoint":"/tmp/redis-data"}"# + "\n"
+            ),
+            "builder du --verbose --format {{json .}}": .init(
+                exitCode: 0,
+                output: #"{"Size":"50MB"}"# + "\n" + #"{"Size":"25MB"}"# + "\n"
+            ),
+            "stats --no-stream --format {{json .}}": .init(
+                exitCode: 0,
+                output: statsJSON + "\n"
+            )
+        ]
+    }
+
+    private static var containerJSON: String {
+        #"{"ID":"abc123","Names":"redis-dev","Image":"redis:7","State":"running","#
+            + #""Status":"Up 2 hours","Ports":"6379/tcp","Size":"12MB (virtual 180MB)"}"#
+    }
+
+    private static var statsJSON: String {
+        #"{"Container":"abc123","Name":"redis-dev","CPUPerc":"0.15%","#
+            + #""MemUsage":"42MiB / 2GiB","MemPerc":"2.1%","NetIO":"1kB / 2kB","#
+            + #""BlockIO":"3MB / 4MB","PIDs":"12"}"#
     }
 }

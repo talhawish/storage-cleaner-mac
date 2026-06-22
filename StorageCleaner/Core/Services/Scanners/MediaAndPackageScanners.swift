@@ -166,11 +166,11 @@ struct LargeVideoScanner: StorageCategoryScanning {
     private let scanner: FilePatternScanner
 
     init(
-        roots: [URL] = [
+        roots: [URL] = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
-        ],
+        ]),
         collector: FileSystemCollector
     ) {
         scanner = FilePatternScanner(
@@ -195,11 +195,11 @@ struct ScreenRecordingScanner: StorageCategoryScanning {
     private let scanner: FilePatternScanner
 
     init(
-        roots: [URL] = [
+        roots: [URL] = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Downloads")
-        ],
+        ]),
         collector: FileSystemCollector
     ) {
         scanner = FilePatternScanner(
@@ -226,11 +226,11 @@ struct LargePhotoScanner: StorageCategoryScanning {
     private let scanner: FilePatternScanner
 
     init(
-        roots: [URL] = [
+        roots: [URL] = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Pictures"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
-        ],
+        ]),
         collector: FileSystemCollector
     ) {
         scanner = FilePatternScanner(
@@ -255,11 +255,11 @@ struct DuplicatePhotoScanner: StorageCategoryScanning {
     private let scanner: DuplicateMediaScanner
 
     init(collector: FileSystemCollector) {
-        let mediaRoots = [
+        let mediaRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Pictures"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
-        ]
+        ])
         scanner = DuplicateMediaScanner(
             kind: .duplicatePhotos,
             domain: .photos,
@@ -281,11 +281,11 @@ struct DuplicateVideoScanner: StorageCategoryScanning {
     private let scanner: DuplicateMediaScanner
 
     init(collector: FileSystemCollector) {
-        let mediaRoots = [
+        let mediaRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
-        ]
+        ])
         scanner = DuplicateMediaScanner(
             kind: .duplicateVideos,
             domain: .media,
@@ -307,11 +307,11 @@ struct DuplicateDocumentScanner: StorageCategoryScanning {
     private let scanner: DuplicateMediaScanner
 
     init(collector: FileSystemCollector) {
-        let documentRoots = [
+        let documentRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Documents"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
-        ]
+        ])
         scanner = DuplicateMediaScanner(
             kind: .duplicateDocuments,
             domain: .documents,
@@ -333,11 +333,11 @@ struct JunkFileScanner: StorageCategoryScanning {
     private let scanner: FilePatternScanner
 
     init(collector: FileSystemCollector) {
-        let junkRoots = [
+        let junkRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Library/Logs")
-        ]
+        ])
         scanner = FilePatternScanner(
             kind: .junkFiles,
             domain: .otherCaches,

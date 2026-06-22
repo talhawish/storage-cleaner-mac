@@ -244,11 +244,13 @@ enum DependencyPaths {
     /// Loose installer and package files that linger after an app is installed. Scanned regardless of
     /// size, so even small leftover packages surface (unlike the 100 MB Large Files threshold).
     enum Leftovers {
-        static let searchRoots: [URL] = [
-            home("Downloads"),
-            home("Desktop"),
-            home("Documents")
-        ]
+        static var searchRoots: [URL] {
+            ScanPreferences.includingExternalVolumes([
+                home("Downloads"),
+                home("Desktop"),
+                home("Documents")
+            ])
+        }
 
         /// Installer and package extensions treated as leftovers. Android packages (`apk`/`aab`) are
         /// intentionally excluded — they have their own `androidPackages` scanner — so the Leftovers
@@ -279,25 +281,27 @@ enum DependencyPaths {
     /// Common locations where developers keep source-code projects. Used by
     /// `ProjectActivityScanner` to discover projects across the home directory.
     enum Projects {
-        static let searchRoots: [URL] = [
-            home("Developer"),
-            home("Documents"),
-            home("Desktop"),
-            home("Projects"),
-            home("Code"),
-            home("Work"),
-            home("dev"),
-            home("src"),
-            home("repos"),
-            home("git"),
-            home("workspace"),
-            home("Sites"),
-            home("development"),
-            home("IdeaProjects"),
-            home("AndroidStudioProjects"),
-            home("StudioProjects"),
-            home("Documents/GitHub")
-        ]
+        static var searchRoots: [URL] {
+            ScanPreferences.includingExternalVolumes([
+                home("Developer"),
+                home("Documents"),
+                home("Desktop"),
+                home("Projects"),
+                home("Code"),
+                home("Work"),
+                home("dev"),
+                home("src"),
+                home("repos"),
+                home("git"),
+                home("workspace"),
+                home("Sites"),
+                home("development"),
+                home("IdeaProjects"),
+                home("AndroidStudioProjects"),
+                home("StudioProjects"),
+                home("Documents/GitHub")
+            ])
+        }
 
         /// How deep to descend into each search root before giving up on finding
         /// a project marker. Descent stops as soon as a project is detected.

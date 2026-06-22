@@ -36,9 +36,30 @@ private struct DemoStorageScanner: StorageScanning {
         demo(.nodeDependencies, .webDevelopment, bytes: 9_126_805_504, items: 286, safety: .safe),
         demo(.dockerArtifacts, .containers, bytes: 6_442_450_944, items: 37, safety: .safe),
         demo(.aiModelCaches, .artificialIntelligence, bytes: 4_294_967_296, items: 12, safety: .safe),
+        demo(.flutterArtifacts, .mobileDevelopment, bytes: 2_813_624_320, items: 58, safety: .safe),
+        demo(.reactNativeArtifacts, .mobileDevelopment, bytes: 2_469_396_480, items: 43, safety: .safe),
+        demo(.androidStudioArtifacts, .mobileDevelopment, bytes: 3_221_225_472, items: 29, safety: .safe),
+        demo(.pythonDependencies, .otherCaches, bytes: 2_040_109_056, items: 91, safety: .safe),
+        demo(.rustDependencies, .otherCaches, bytes: 1_288_490_188, items: 76, safety: .safe),
+        demo(.goDependencies, .otherCaches, bytes: 947_912_704, items: 44, safety: .safe),
+        demo(.phpDependencies, .otherCaches, bytes: 1_395_864_576, items: 52, safety: .safe),
+        demo(.rubyDependencies, .otherCaches, bytes: 1_019_215_872, items: 35, safety: .safe),
+        demo(.dotnetDependencies, .otherCaches, bytes: 1_610_612_736, items: 61, safety: .safe),
+        demo(.gradleDependencies, .otherCaches, bytes: 2_362_556_416, items: 80, safety: .safe),
+        demo(.cliApps, .cliTooling, bytes: 3_006_906_368, items: 22, safety: .review),
+        demo(.runtimeVersions, .cliTooling, bytes: 4_831_838_208, items: 11, safety: .review),
+        demo(.largeFiles, .otherCaches, bytes: 5_368_709_120, items: 14, safety: .review),
         demo(.largeVideos, .media, bytes: 3_758_096_384, items: 9, safety: .review),
+        demo(.largePhotos, .photos, bytes: 1_127_428_096, items: 27, safety: .review),
+        demoDuplicate(.duplicatePhotos, .photos, bytes: 644_245_094, itemName: "duplicate-photo"),
+        demoDuplicate(.duplicateVideos, .media, bytes: 1_932_735_283, itemName: "duplicate-video"),
+        demoDuplicate(.duplicateDocuments, .documents, bytes: 214_748_365, itemName: "duplicate-document"),
         demo(.browserCaches, .browserData, bytes: 1_503_238_553, items: 64, safety: .safe),
         demo(.screenshots, .screenshots, bytes: 734_003_200, items: 218, safety: .review),
+        demo(.screenRecordings, .media, bytes: 2_255_841_280, items: 6, safety: .review),
+        demo(.junkFiles, .otherCaches, bytes: 185_597_952, items: 141, safety: .review),
+        demo(.installerLeftovers, .documents, bytes: 2_684_354_560, items: 8, safety: .review),
+        demo(.androidPackages, .mobileDevelopment, bytes: 912_680_550, items: 16, safety: .review),
         demo(.orphanedAppSupport, .systemJunk, bytes: 2_146_435_072, items: 47, safety: .review),
         demo(.orphanedAppCaches, .systemJunk, bytes: 1_073_741_824, items: 39, safety: .review),
         demo(.orphanedAppContainers, .systemJunk, bytes: 412_316_860, items: 18, safety: .review),
@@ -63,6 +84,45 @@ private struct DemoStorageScanner: StorageScanning {
             safety: safety,
             examples: examples,
             filePaths: examples.map { URL(fileURLWithPath: "/tmp/StorageCleanerDemo/\(kind.rawValue)/\($0)") }
+        )
+    }
+
+    private static func demoDuplicate(
+        _ kind: StorageFindingKind,
+        _ domain: StorageDomain,
+        bytes: Int64,
+        itemName: String
+    ) -> StorageFinding {
+        let root = URL(fileURLWithPath: "/tmp/StorageCleanerDemo/\(kind.rawValue)", isDirectory: true)
+        let modifiedAt = Date(timeIntervalSinceNow: -86_400)
+        let files = [
+            DuplicateFile(
+                url: root.appendingPathComponent("\(itemName)-original.dat"),
+                bytes: bytes,
+                modifiedAt: modifiedAt
+            ),
+            DuplicateFile(
+                url: root.appendingPathComponent("\(itemName)-copy-a.dat"),
+                bytes: bytes,
+                modifiedAt: modifiedAt
+            ),
+            DuplicateFile(
+                url: root.appendingPathComponent("\(itemName)-copy-b.dat"),
+                bytes: bytes,
+                modifiedAt: modifiedAt
+            )
+        ]
+        let group = DuplicateGroup(contentHash: "demo-\(kind.rawValue)", files: files, keepURL: files[0].url)
+        let removable = group.removableURLs
+        return StorageFinding(
+            kind: kind,
+            domain: domain,
+            bytes: group.reclaimableBytes,
+            itemCount: removable.count,
+            safety: .review,
+            examples: removable.map { $0.lastPathComponent },
+            filePaths: removable,
+            duplicateGroups: [group]
         )
     }
 
@@ -101,7 +161,14 @@ private struct DemoStorageScanner: StorageScanning {
             if completesImmediately {
                 complete()
             } else {
-                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 8, execute: complete)
+                let task = Task {
+                    try? await Task.sleep(for: .seconds(8))
+                    guard !Task.isCancelled else { return }
+                    complete()
+                }
+                continuation.onTermination = { _ in
+                    task.cancel()
+                }
             }
         }
     }
@@ -120,12 +187,30 @@ private struct DemoPermissionHandler: StoragePermissionHandling {
 }
 
 private struct DemoCleanupService: CleanupService {
+    private static let bytesByURL: [URL: Int64] = Dictionary(
+        uniqueKeysWithValues: DemoStorageScanner.allFindings.flatMap { finding in
+            finding.filePaths.map { ($0, demoBytes(for: $0, in: finding)) }
+        }
+    )
+
     func delete(urls: [URL]) async -> CleanupResult {
-        CleanupResult(
+        let items = urls.map { url in
+            DeletedItem(originalURL: url, bytesReclaimed: Self.bytesByURL[url] ?? 0)
+        }
+        return CleanupResult(
             deletedURLs: urls,
-            deletedItems: urls.map { DeletedItem(originalURL: $0, bytesReclaimed: 0) },
+            deletedItems: items,
             failedURLs: [],
-            totalBytesReclaimed: 0
+            totalBytesReclaimed: items.reduce(Int64(0)) { $0 + $1.bytesReclaimed }
         )
+    }
+
+    private static func demoBytes(for url: URL, in finding: StorageFinding) -> Int64 {
+        if let duplicateFile = finding.duplicateGroups
+            .flatMap(\.files)
+            .first(where: { $0.url == url }) {
+            return duplicateFile.bytes
+        }
+        return finding.itemCount > 0 ? finding.bytes / Int64(finding.itemCount) : finding.bytes
     }
 }

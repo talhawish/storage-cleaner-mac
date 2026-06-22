@@ -71,7 +71,7 @@ struct DeveloperStorageView: View {
         .toolbar {
             ToolbarItem {
                 Button(action: onScan) {
-                    Label("Scan Now", systemImage: "sparkle.magnifyingglass")
+                    Label("Scan Now", systemImage: "arrow.clockwise")
                 }
                 .accessibilityIdentifier("developer-storage-scan-button")
                 .keyboardShortcut("r", modifiers: [.command])

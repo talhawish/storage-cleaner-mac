@@ -109,7 +109,7 @@ struct MediaCategoryView: View {
                 Button {
                     onScan()
                 } label: {
-                    Label("Scan Now", systemImage: "sparkle.magnifyingglass")
+                    Label("Scan Now", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
                 .help("Scan storage locations again")

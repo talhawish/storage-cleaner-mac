@@ -7,13 +7,13 @@ struct LargeFileScanner: StorageCategoryScanning {
     private let safetyPolicy: LargeFileSafetyPolicy
 
     init(
-        roots: [URL] = [
+        roots: [URL] = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Documents"),
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Pictures")
-        ],
+        ]),
         minimumBytes: Int64 = LargeFileThreshold.collectionFloor.bytes,
         safetyPolicy: LargeFileSafetyPolicy = LargeFileSafetyPolicy(),
         collector: FileSystemCollector

@@ -53,19 +53,31 @@ struct MiniSidebarView: View {
             VStack(spacing: 0) {
                 Divider()
 
-                Image(systemName: "shield.checkered")
-                    .foregroundStyle(AppTheme.mint)
-                    .font(.system(size: AppTheme.MiniSidebar.iconSize))
-                    .frame(height: AppTheme.MiniSidebar.footerHeight)
-                    .accessibilityLabel("Nothing is deleted automatically")
+                ZStack {
+                    Image(systemName: "shield.checkered")
+                        .foregroundStyle(AppTheme.mint)
+                        .font(.system(size: AppTheme.MiniSidebar.iconSize))
+                }
+                .frame(height: AppTheme.MiniSidebar.footerHeight)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .tooltip("Nothing is deleted automatically")
+                .accessibilityLabel("Nothing is deleted automatically")
 
                 Divider()
 
-                Circle()
-                    .fill(isScanning ? AppTheme.orange : AppTheme.mint)
-                    .frame(width: AppTheme.MiniSidebar.statusIndicatorSize, height: AppTheme.MiniSidebar.statusIndicatorSize)
-                    .padding(.vertical, AppTheme.MiniSidebar.statusPadding)
-                    .accessibilityLabel(isScanning ? "Scan in progress" : "Ready to scan")
+                ZStack {
+                    Circle()
+                        .fill(isScanning ? AppTheme.orange : AppTheme.mint)
+                        .frame(
+                            width: AppTheme.MiniSidebar.statusIndicatorSize,
+                            height: AppTheme.MiniSidebar.statusIndicatorSize
+                        )
+                }
+                .frame(width: AppTheme.MiniSidebar.buttonSize, height: AppTheme.MiniSidebar.buttonSize)
+                .contentShape(Rectangle())
+                .tooltip(isScanning ? "Scan in progress" : "Ready to scan")
+                .accessibilityLabel(isScanning ? "Scan in progress" : "Ready to scan")
             }
         }
         .frame(width: AppTheme.MiniSidebar.width)
@@ -97,13 +109,15 @@ private struct MiniSidebarButton: View {
         Button {
             selection = .section(section)
         } label: {
-            Image(systemName: section.symbolName)
-                .font(.system(size: AppTheme.MiniSidebar.iconSize, weight: .medium))
-                .frame(width: AppTheme.MiniSidebar.buttonSize, height: AppTheme.MiniSidebar.buttonSize)
-                .contentShape(Rectangle())
+            ZStack {
+                Image(systemName: section.symbolName)
+                    .font(.system(size: AppTheme.MiniSidebar.iconSize, weight: .medium))
+            }
+            .frame(width: AppTheme.MiniSidebar.buttonSize, height: AppTheme.MiniSidebar.buttonSize)
+            .contentShape(Rectangle())
+            .tooltip(section.title)
         }
         .buttonStyle(MiniSidebarButtonStyle(isSelected: isSelected))
-        .help(section.title)
         .accessibilityLabel(section.title)
         .accessibilityIdentifier("sidebar-\(section.rawValue)")
     }

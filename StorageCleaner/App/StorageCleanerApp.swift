@@ -10,6 +10,7 @@ struct StorageCleanerApp: App {
     private var appearanceMode: AppearanceMode = .system
     private let modelContainer: ModelContainer
 
+    @MainActor
     init() {
         let arguments = CommandLine.arguments
         let container = AppContainer.current(arguments: arguments)
