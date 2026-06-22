@@ -219,8 +219,10 @@ The live scanner currently inspects these storage candidate types:
 - Package artifacts: Gradle, Maven, Composer caches and project `vendor` folders, pip, Poetry,
   conda, Cargo, Go, NuGet, and Flutter caches
 - Duplicate runtime versions: multiple installed versions of the same language runtime (Node via
-  nvm/Volta/fnm, Python via pyenv, Ruby via rbenv/RVM, Rust via rustup, plus Homebrew versioned
-  formulae like `php@8.1`/`php@8.2`, asdf, SDKMAN, and system JDKs) — keep the newest, reclaim the rest
+  nvm/Volta/fnm/Bun, Python via pyenv, Ruby via rbenv/RVM, Rust via rustup, Go via goenv/GVM, PHP via
+  phpenv/Laravel Herd, .NET, Java via Jabba/jEnv/SDKMAN/asdf, Haskell via GHCup/Stack, Flutter via
+  FVM or hand-cloned SDKs, Deno, plus Homebrew versioned formulae like `php@8.1`/`php@8.2`, asdf
+  plugins, and system JDKs) — keep the newest, reclaim the rest. Lives inside Developer Storage.
 - Simulators & emulators: iOS/Apple simulator runtimes (often 8+ GB each) and Android system images by
   API level — view every installed OS image with its size and remove the ones you don't need. Apple
   runtimes are removed with `xcrun simctl runtime delete` (re-downloadable); Android images move to the

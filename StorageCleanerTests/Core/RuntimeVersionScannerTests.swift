@@ -37,7 +37,7 @@ final class RuntimeVersionScannerTests: XCTestCase {
         let finding = try XCTUnwrap(result.finding)
 
         XCTAssertEqual(finding.kind, .runtimeVersions)
-        XCTAssertEqual(finding.domain, .cliTooling)
+        XCTAssertEqual(finding.domain, .otherCaches)
         XCTAssertEqual(finding.safety, .review)
         XCTAssertEqual(finding.itemCount, 1, "only the older version is removable")
         XCTAssertEqual(finding.filePaths.first?.lastPathComponent, "v18.20.4")

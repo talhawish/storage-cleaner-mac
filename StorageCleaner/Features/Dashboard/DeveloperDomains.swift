@@ -20,12 +20,12 @@ enum DeveloperDomains {
         .gradleDependencies,
         .cliApps,
         .nodeDependencies,
-        .aiModelCaches
+        .aiModelCaches,
+        .runtimeVersions
     ]
 
     /// Developer domains surfaced as in-screen filters, in display order. CLI Tooling is
-    /// intentionally excluded because it has its own dedicated "CLI Programs" section, as are runtime
-    /// versions, which live in their own section too.
+    /// intentionally excluded because it has its own dedicated "CLI Programs" section.
     static let orderedDomains: [StorageDomain] = [
         .appleDevelopment,
         .webDevelopment,

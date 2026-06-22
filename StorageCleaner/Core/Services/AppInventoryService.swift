@@ -8,14 +8,60 @@ struct AppItem: Identifiable, Sendable {
     let sizeBytes: Int64
     let isSystemApp: Bool
 
-    var id: String { bundleIdentifier }
+    var id: String { url.standardizedFileURL.path }
 
     var displayName: String {
         name.replacingOccurrences(of: ".app", with: "")
     }
 }
 
+enum AppUninstallError: LocalizedError, Sendable {
+    case systemApp(String)
+    case missing(URL)
+    case failed(String)
+    case stillPresent(URL)
+
+    var errorDescription: String? {
+        switch self {
+        case let .systemApp(name):
+            "\(name) is protected by macOS and can't be moved to Trash from here."
+        case let .missing(url):
+            "The app was not found at \(url.path). Rescan Applications and try again."
+        case let .failed(message):
+            message
+        case let .stillPresent(url):
+            "The app is still present at \(url.path). macOS did not complete the move to Trash."
+        }
+    }
+}
+
 actor AppInventoryService {
+    private let recycleItems: @Sendable ([URL]) async throws -> Void
+    private let trashItem: @Sendable (URL) throws -> Void
+    private let fileExists: @Sendable (String) -> Bool
+    private let verificationAttempts: Int
+    private let verificationDelay: Duration
+
+    init(
+        recycleItems: @escaping @Sendable ([URL]) async throws -> Void = { urls in
+            _ = try await NSWorkspace.shared.recycle(urls)
+        },
+        trashItem: @escaping @Sendable (URL) throws -> Void = { url in
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        },
+        fileExists: @escaping @Sendable (String) -> Bool = { path in
+            FileManager.default.fileExists(atPath: path)
+        },
+        verificationAttempts: Int = 8,
+        verificationDelay: Duration = .milliseconds(150)
+    ) {
+        self.recycleItems = recycleItems
+        self.trashItem = trashItem
+        self.fileExists = fileExists
+        self.verificationAttempts = verificationAttempts
+        self.verificationDelay = verificationDelay
+    }
+
     func scanInstalledApps() -> [AppItem] {
         let fileManager = FileManager.default
         var items: [AppItem] = []
@@ -63,8 +109,23 @@ actor AppInventoryService {
     }
 
     func uninstallApp(_ item: AppItem) async throws {
-        let workspace = NSWorkspace.shared
-        _ = try await workspace.recycle([item.url])
+        let appURL = item.url.standardizedFileURL
+        guard !item.isSystemApp else { throw AppUninstallError.systemApp(item.displayName) }
+        guard fileExists(appURL.path) else { throw AppUninstallError.missing(appURL) }
+
+        do {
+            try await recycleItems([appURL])
+        } catch {
+            do {
+                try trashItem(appURL)
+            } catch {
+                throw AppUninstallError.failed((error as NSError).localizedDescription)
+            }
+        }
+
+        guard await waitUntilMissing(appURL.path) else {
+            throw AppUninstallError.stillPresent(appURL)
+        }
     }
 
     func revealInFinder(_ item: AppItem) {
@@ -88,5 +149,13 @@ actor AppInventoryService {
             total += Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
         }
         return total
+    }
+
+    private func waitUntilMissing(_ path: String) async -> Bool {
+        for _ in 0..<verificationAttempts {
+            guard fileExists(path) else { return true }
+            try? await Task.sleep(for: verificationDelay)
+        }
+        return !fileExists(path)
     }
 }

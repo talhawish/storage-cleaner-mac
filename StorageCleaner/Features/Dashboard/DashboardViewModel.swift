@@ -213,6 +213,50 @@ final class DashboardViewModel {
         return result
     }
 
+    /// Removes selected older runtime versions (always trashed; not Homebrew packages)
+    /// and reconciles the `runtimeVersions` finding. Recorded as a `.runtimeVersions`
+    /// audit entry so Cleanup History reflects what was reclaimed. Returns the result
+    /// so the caller can refresh its view.
+    func removeRuntimeVersions(_ urls: [URL]) async -> CleanupResult {
+        let result = await cliRemovalService.remove(urls)
+        lastCleanupResult = result
+
+        guard result.totalBytesReclaimed > 0 else { return result }
+
+        historyStore?.recordCleanupActions([
+            CleanupAuditEntry(
+                kind: .runtimeVersions,
+                bytesReclaimed: result.totalBytesReclaimed,
+                itemCount: result.deletedCount,
+                samplePaths: Self.samplePaths(
+                    from: result.deletedItems.map(\.originalURL)
+                )
+            )
+        ])
+
+        if let currentSnapshot = snapshot {
+            let updatedFindings = currentSnapshot.findings.map { finding -> StorageFinding in
+                guard finding.kind == .runtimeVersions else { return finding }
+                return StorageFinding(
+                    kind: finding.kind,
+                    domain: finding.domain,
+                    bytes: max(0, finding.bytes - result.totalBytesReclaimed),
+                    itemCount: finding.itemCount,
+                    safety: finding.safety,
+                    examples: finding.examples,
+                    filePaths: finding.filePaths
+                )
+            }
+            snapshot = ScanSnapshot(
+                findings: updatedFindings,
+                scannedItemCount: currentSnapshot.scannedItemCount,
+                duration: currentSnapshot.duration
+            )
+        }
+
+        return result
+    }
+
     /// Removes the deleted paths from a finding and decrements its byte total using the sizes
     /// captured at delete time, avoiding any synchronous filesystem access on the main actor.
     /// Returns `nil` when the finding has no remaining paths.
@@ -350,7 +394,13 @@ final class DashboardViewModel {
             self.snapshot = adjustedSnapshot
             scannedItemCount = adjustedSnapshot.scannedItemCount
             progress = 1
-            lastCompletedScan = activeScanKinds.map(LastScan.targeted) ?? .full
+            if let activeScanKinds {
+                if lastCompletedScan != .full {
+                    lastCompletedScan = .targeted(activeScanKinds)
+                }
+            } else {
+                lastCompletedScan = .full
+            }
             phase = adjustedSnapshot.findings.isEmpty ? .empty : .results
             refreshStaleHints()
             // Only full scans become history records; targeted re-scans refresh a subset in place.

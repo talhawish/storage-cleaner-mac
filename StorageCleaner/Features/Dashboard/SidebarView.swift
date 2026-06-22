@@ -18,7 +18,6 @@ struct SidebarView: View {
                 if isDockerInstalled {
                     SidebarRow(section: .docker)
                 }
-                SidebarRow(section: .runtimeVersions)
                 SidebarRow(section: .simulatorsEmulators)
                 SidebarRow(section: .cliPrograms)
             }
@@ -72,7 +71,6 @@ struct SidebarView: View {
                 .padding(.vertical, 8)
             }
         }
-        .navigationTitle("Storage Cleaner")
     }
 }
 

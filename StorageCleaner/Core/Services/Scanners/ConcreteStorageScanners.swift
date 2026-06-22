@@ -109,12 +109,15 @@ struct AndroidPackageScanner: StorageCategoryScanning {
     let title = StorageFindingKind.androidPackages.title
     private let scanner: FilePatternScanner
 
-    init(collector: FileSystemCollector) {
-        let roots = [
+    init(
+        roots: [URL] = [
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop"),
+            DependencyPaths.home("Documents"),
             DependencyPaths.home("Developer")
-        ]
+        ],
+        collector: FileSystemCollector
+    ) {
         scanner = FilePatternScanner(
             kind: .androidPackages,
             domain: .mobileDevelopment,
@@ -122,7 +125,7 @@ struct AndroidPackageScanner: StorageCategoryScanning {
             safety: .review,
             collector: collector
         ) { url in
-            ["apk", "aab"].contains(url.pathExtension.lowercased())
+            DependencyPaths.Leftovers.androidPackageExtensions.contains(url.pathExtension.lowercased())
         }
     }
 

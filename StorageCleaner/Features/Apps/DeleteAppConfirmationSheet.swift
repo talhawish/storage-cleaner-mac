@@ -2,10 +2,11 @@ import SwiftUI
 
 struct DeleteAppConfirmationSheet: View {
     let app: AppItem
-    let onDelete: () async -> Void
+    let onDelete: () async throws -> Void
     let onCancel: () -> Void
 
     @State private var isDeleting = false
+    @State private var errorMessage: String?
 
     var body: some View {
         ConfirmationModal(
@@ -23,7 +24,16 @@ struct DeleteAppConfirmationSheet: View {
                 isDefault: true,
                 action: {
                     isDeleting = true
-                    Task { await onDelete() }
+                    errorMessage = nil
+                    Task {
+                        do {
+                            try await onDelete()
+                            onCancel()
+                        } catch {
+                            errorMessage = Self.message(for: error)
+                            isDeleting = false
+                        }
+                    }
                 }
             ),
             cancel: AppModalActionBar.CancelAction(title: "Cancel", action: onCancel),
@@ -53,6 +63,11 @@ struct DeleteAppConfirmationSheet: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                            Text(app.url.path)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
                         Spacer()
                     }
@@ -64,6 +79,22 @@ struct DeleteAppConfirmationSheet: View {
                 tint: AppTheme.cyan,
                 text: "You can reinstall this app from the App Store or its original source at any time."
             )
+
+            if let errorMessage {
+                AppModalBanner(
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: AppTheme.orange,
+                    text: errorMessage
+                )
+            }
         }
+    }
+
+    private static func message(for error: Error) -> String {
+        let description = (error as NSError).localizedDescription
+        guard !description.isEmpty else {
+            return "The app could not be moved to Trash. Check permissions and try again."
+        }
+        return description
     }
 }

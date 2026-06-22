@@ -50,4 +50,10 @@ final class DeveloperDomainsTests: XCTestCase {
     func testNoFindingsYieldsNoDomains() {
         XCTAssertTrue(DeveloperDomains.detected(in: []).isEmpty)
     }
+
+    func testRuntimeVersionsAreConsideredDeveloperStorage() {
+        let findings = [finding(.runtimeVersions, .otherCaches)]
+        XCTAssertEqual(DeveloperDomains.detected(in: findings), [.otherCaches])
+        XCTAssertTrue(DeveloperDomains.kinds.contains(.runtimeVersions))
+    }
 }

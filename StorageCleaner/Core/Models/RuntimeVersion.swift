@@ -22,6 +22,10 @@ enum DevRuntime: String, CaseIterable, Identifiable, Sendable {
     case erlang
     case perl
     case swift
+    case flutter
+    case scala
+    case haskell
+    case lua
 
     var id: String { rawValue }
 
@@ -43,20 +47,25 @@ enum DevRuntime: String, CaseIterable, Identifiable, Sendable {
         case .erlang: "Erlang"
         case .perl: "Perl"
         case .swift: "Swift"
+        case .flutter: "Flutter"
+        case .scala: "Scala"
+        case .haskell: "Haskell"
+        case .lua: "Lua"
         }
     }
 
     var symbolName: String {
         switch self {
         case .node, .deno, .bun: "hexagon.fill"
-        case .python: "chevron.left.forwardslash.chevron.right"
+        case .python, .dart, .elixir, .erlang, .perl, .swift, .scala, .haskell, .lua:
+            "chevron.left.forwardslash.chevron.right"
         case .ruby: "diamond.fill"
         case .php: "curlybraces"
         case .rust: "gearshape.2.fill"
         case .java, .kotlin: "cup.and.saucer.fill"
         case .golang: "tortoise.fill"
         case .dotnet: "number.square.fill"
-        case .dart, .elixir, .erlang, .perl, .swift: "chevron.left.forwardslash.chevron.right"
+        case .flutter: "wind"
         }
     }
 
@@ -73,7 +82,10 @@ enum DevRuntime: String, CaseIterable, Identifiable, Sendable {
         case .dart: .cyan
         case .deno: .teal
         case .bun: .indigo
-        case .elixir, .erlang, .perl, .swift: .teal
+        case .flutter: .cyan
+        case .scala: .rose
+        case .haskell: .violet
+        case .elixir, .erlang, .perl, .swift, .lua: .teal
         }
     }
 }
@@ -99,6 +111,13 @@ enum VersionSource: String, Sendable {
     case mise
     case jabba
     case jenv
+    case phpenv
+    case bun
+    case denoBin
+    case fvm
+    case flutterSdk
+    case stack
+    case ghcup
 
     /// Friendly manager label shown under the runtime title.
     var displayName: String {
@@ -121,6 +140,13 @@ enum VersionSource: String, Sendable {
         case .mise: "mise"
         case .jabba: "Jabba"
         case .jenv: "jEnv"
+        case .phpenv: "phpenv"
+        case .bun: "Bun"
+        case .denoBin: "Deno"
+        case .fvm: "FVM"
+        case .flutterSdk: "Flutter SDK"
+        case .stack: "Stack"
+        case .ghcup: "GHCup"
         }
     }
 

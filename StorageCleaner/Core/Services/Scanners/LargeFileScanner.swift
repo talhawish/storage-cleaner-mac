@@ -48,6 +48,9 @@ struct LargeFileSafetyPolicy: Sendable {
         let components = Set(url.standardizedFileURL.pathComponents)
         guard components.isDisjoint(with: blockedPathComponents) else { return false }
         guard !url.lastPathComponent.hasPrefix(".") else { return false }
+        if DependencyPaths.Leftovers.largeFilePackageExtensions.contains(url.pathExtension.lowercased()) {
+            return true
+        }
         guard !isExecutable(url) else { return false }
         return true
     }

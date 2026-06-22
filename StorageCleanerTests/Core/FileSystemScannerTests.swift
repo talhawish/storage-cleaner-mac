@@ -176,6 +176,9 @@ final class FileSystemScannerTests: XCTestCase {
         let archive = downloads.appending(path: "dataset.zip")
         let zstdArchive = downloads.appending(path: "logs.tar.zst")
         let debianPackage = downloads.appending(path: "postgresql-client.deb")
+        let iosPackage = downloads.appending(path: "InternalBuild.ipa")
+        let androidPackage = downloads.appending(path: "debug.apk")
+        let androidBundle = downloads.appending(path: "release.aab")
         let javaArchive = downloads.appending(path: "service.jar")
         let xipArchive = downloads.appending(path: "Xcode.xip")
         let geoDatabase = downloads.appending(path: "GeoLite2-City.mmdb")
@@ -190,6 +193,9 @@ final class FileSystemScannerTests: XCTestCase {
             archive,
             zstdArchive,
             debianPackage,
+            iosPackage,
+            androidPackage,
+            androidBundle,
             javaArchive,
             xipArchive,
             geoDatabase,
@@ -216,7 +222,7 @@ final class FileSystemScannerTests: XCTestCase {
 
         XCTAssertEqual(result.finding?.kind, .largeFiles)
         XCTAssertEqual(Set(paths), Set(expectedLargeFiles.map(\.standardizedFileURL)))
-        XCTAssertEqual(result.inspectedItemCount, 13)
+        XCTAssertEqual(result.inspectedItemCount, 16)
     }
 
     func testLargeFileScannerExcludesAppAndDependencyInternals() async throws {

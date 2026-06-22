@@ -22,7 +22,6 @@ enum AppSection: String, CaseIterable, Identifiable {
     case apps
     case developerStorage
     case docker
-    case runtimeVersions
     case simulatorsEmulators
     case largeFiles
     case cliPrograms
@@ -42,7 +41,6 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .apps: "Applications"
         case .developerStorage: "Developer Storage"
         case .docker: "Docker"
-        case .runtimeVersions: "Runtime Versions"
         case .simulatorsEmulators: "Simulators & Emulators"
         case .largeFiles: "Large Files"
         case .cliPrograms: "CLI Programs & Toolchains"
@@ -62,7 +60,6 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .apps: "app.badge.fill"
         case .developerStorage: "chevron.left.forwardslash.chevron.right"
         case .docker: "shippingbox.fill"
-        case .runtimeVersions: "square.stack.3d.up.fill"
         case .simulatorsEmulators: "iphone.gen3"
         case .largeFiles: "doc.badge.ellipsis"
         case .cliPrograms: "terminal.fill"
@@ -80,7 +77,6 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .docker: [.dockerArtifacts]
         case .largeFiles: [.largeFiles, .largeVideos, .largePhotos]
         case .cliPrograms: [.cliApps]
-        case .runtimeVersions: [.runtimeVersions]
         case .screenshotsAndRecordings: [.screenshots, .screenRecordings]
         case .leftovers: [.installerLeftovers, .androidPackages]
         case .systemJunk: [

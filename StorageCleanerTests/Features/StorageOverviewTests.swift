@@ -23,16 +23,17 @@ final class StorageOverviewTests: XCTestCase {
     func testDomainUsagesRollUpSortAndShare() {
         let usages = StorageOverview.domainUsages(in: [
             finding(.xcodeArtifacts, .appleDevelopment, bytes: 60, items: 2),
-            finding(.runtimeVersions, .appleDevelopment, bytes: 40, items: 3),
+            finding(.runtimeVersions, .otherCaches, bytes: 40, items: 3),
             finding(.nodeDependencies, .webDevelopment, bytes: 100, items: 5)
         ])
 
-        XCTAssertEqual(usages.map(\.domain), [.appleDevelopment, .webDevelopment])
+        XCTAssertEqual(usages.map(\.domain), [.webDevelopment, .appleDevelopment, .otherCaches])
+        let web = usages.first { $0.domain == .webDevelopment }
+        XCTAssertEqual(web?.bytes, 100)
+        XCTAssertEqual(web?.itemCount, 5)
+        XCTAssertEqual(web?.share ?? 0, 0.5, accuracy: 0.0001)
         let apple = usages.first { $0.domain == .appleDevelopment }
-        XCTAssertEqual(apple?.bytes, 100)
-        XCTAssertEqual(apple?.itemCount, 5)
-        XCTAssertEqual(apple?.share ?? 0, 0.5, accuracy: 0.0001)
-        XCTAssertEqual(apple?.findings.map(\.kind), [.xcodeArtifacts, .runtimeVersions])
+        XCTAssertEqual(apple?.findings.map(\.kind), [.xcodeArtifacts])
     }
 
     func testZeroByteFindingsAreDropped() {

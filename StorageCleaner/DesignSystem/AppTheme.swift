@@ -24,6 +24,20 @@ enum AppTheme {
         static let hero: CGFloat = 56
     }
 
+    /// Metrics for the collapsed icon-only sidebar.
+    enum MiniSidebar {
+        static let width: CGFloat = 64
+        static let buttonSize: CGFloat = 32
+        static let iconSize: CGFloat = 16
+        static let cornerRadius: CGFloat = 7
+        static let footerHeight: CGFloat = 36
+        static let statusIndicatorSize: CGFloat = 8
+        static let statusPadding: CGFloat = 12
+        static let itemSpacing: CGFloat = 4
+        static let groupSpacing: CGFloat = 12
+        static let verticalPadding: CGFloat = 12
+    }
+
     /// Adaptive surfaces for card-heavy screens. Native control colors keep light mode readable while
     /// preserving the system appearance in dark mode.
     static let appBackground = Color(nsColor: .windowBackgroundColor)

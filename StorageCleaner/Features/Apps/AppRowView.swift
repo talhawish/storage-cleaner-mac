@@ -27,10 +27,11 @@ struct AppRowView: View {
                 Text(app.displayName)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                Text(app.bundleIdentifier)
+                Text(app.url.path)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
             Spacer()
@@ -122,6 +123,10 @@ struct AppRowView: View {
         Button("Copy Bundle ID") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(app.bundleIdentifier, forType: .string)
+        }
+        Button("Copy Path") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(app.url.path, forType: .string)
         }
         if !app.isSystemApp {
             Divider()

@@ -3,8 +3,10 @@ import SwiftUI
 /// One row in the `ScanningLoaderView`'s scanner list. Displays a named
 /// scanner with its icon, current state, and item count. State transitions
 /// (pending → scanning → completed) animate smoothly: the active scanner's
-/// icon spins, its card gets a subtle tinted border-glow, and a shimmering
-/// progress bar slides along the bottom edge.
+/// icon spins, its card gets a tinted border-glow, and a shimmering progress
+/// bar slides along the bottom edge. The card has no fill of its own so it
+/// reads as part of the page in both light and dark mode — the border
+/// carries the card's identity.
 struct ScannerLoaderRow: View {
     let item: ScannerLoaderItem
 
@@ -32,10 +34,9 @@ struct ScannerLoaderRow: View {
                     .transition(.opacity)
             }
         }
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
+                .strokeBorder(borderColor, lineWidth: borderWidth)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.title), \(statusText)")
@@ -52,7 +53,7 @@ struct ScannerLoaderRow: View {
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(item.tint)
             .frame(width: 30, height: 30)
-            .background(item.tint.opacity(0.12), in: Circle())
+            .background(item.tint.opacity(0.18), in: Circle())
             .rotationEffect(.degrees(iconRotation))
             .accessibilityHidden(true)
     }
@@ -125,9 +126,16 @@ struct ScannerLoaderRow: View {
 
     private var borderColor: Color {
         switch item.state {
-        case .scanning: item.tint.opacity(0.18)
-        case .completed: AppTheme.mint.opacity(0.12)
-        default: AppTheme.hairline
+        case .scanning: item.tint
+        case .completed: AppTheme.mint
+        case .pending, .skipped: AppTheme.hairline
+        }
+    }
+
+    private var borderWidth: CGFloat {
+        switch item.state {
+        case .scanning, .completed: 1.5
+        case .pending, .skipped: 1
         }
     }
 

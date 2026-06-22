@@ -48,6 +48,30 @@ final class LeftoversScannerTests: XCTestCase {
         XCTAssertEqual(finding.examples, ["Installer.dmg"])
     }
 
+    func testAndroidPackageScannerFindsLooseAPKsAndBundles() async throws {
+        try write("Documents/debug.apk")
+        try write("Documents/release.aab")
+        try write("Documents/MyApp.ipa")
+        try write("Documents/notes.txt")
+
+        let scanner = AndroidPackageScanner(
+            roots: [temporaryDirectory.appending(path: "Documents", directoryHint: .isDirectory)],
+            collector: FileSystemCollector()
+        )
+
+        let result = await scanner.scan()
+        let finding = try XCTUnwrap(result.finding)
+        let paths = finding.filePaths.map(\.standardizedFileURL)
+
+        XCTAssertEqual(finding.kind, .androidPackages)
+        XCTAssertEqual(finding.domain, .mobileDevelopment)
+        XCTAssertEqual(finding.safety, .review)
+        XCTAssertEqual(Set(paths), Set([
+            temporaryDirectory.appending(path: "Documents/debug.apk").standardizedFileURL,
+            temporaryDirectory.appending(path: "Documents/release.aab").standardizedFileURL
+        ]))
+    }
+
     func testScannerReturnsNoFindingWhenNoInstallersPresent() async throws {
         try write("readme.md")
         try write("photo.png")

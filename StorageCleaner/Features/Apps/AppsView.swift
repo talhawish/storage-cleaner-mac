@@ -6,7 +6,6 @@ struct AppsView: View {
     @State private var searchText = ""
     @State private var sortOption: SortOption = .sizeDesc
     @State private var selectedApps: Set<String> = []
-    @State private var showDeleteConfirmation = false
     @State private var appToDelete: AppItem?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
@@ -39,7 +38,7 @@ struct AppsView: View {
     }
 
     private var selectedTotalSize: Int64 {
-        apps.filter { selectedApps.contains($0.bundleIdentifier) }
+        apps.filter { selectedApps.contains($0.id) }
             .reduce(0) { $0 + $1.sizeBytes }
     }
 
@@ -66,7 +65,7 @@ struct AppsView: View {
             DeleteAppConfirmationSheet(
                 app: app,
                 onDelete: {
-                    await uninstallApp(app)
+                    try await uninstallApp(app)
                 },
                 onCancel: { appToDelete = nil }
             )
@@ -152,7 +151,7 @@ struct AppsView: View {
                     ForEach(filteredApps) { app in
                         AppRowView(
                             app: app,
-                            isSelected: selectedApps.contains(app.bundleIdentifier),
+                            isSelected: selectedApps.contains(app.id),
                             onToggle: { toggleApp(app) },
                             onReveal: { Task { await inventoryService.revealInFinder(app) } },
                             onDelete: { appToDelete = app }
@@ -209,10 +208,10 @@ struct AppsView: View {
     }
 
     private func toggleApp(_ app: AppItem) {
-        if selectedApps.contains(app.bundleIdentifier) {
-            selectedApps.remove(app.bundleIdentifier)
+        if selectedApps.contains(app.id) {
+            selectedApps.remove(app.id)
         } else {
-            selectedApps.insert(app.bundleIdentifier)
+            selectedApps.insert(app.id)
         }
     }
 
@@ -223,10 +222,10 @@ struct AppsView: View {
         isLoading = false
     }
 
-    private func uninstallApp(_ app: AppItem) async {
-        try? await inventoryService.uninstallApp(app)
-        apps.removeAll { $0.bundleIdentifier == app.bundleIdentifier }
-        selectedApps.remove(app.bundleIdentifier)
+    private func uninstallApp(_ app: AppItem) async throws {
+        try await inventoryService.uninstallApp(app)
+        apps.removeAll { $0.id == app.id }
+        selectedApps.remove(app.id)
     }
 
     private func sortedApps(from list: [AppItem]) -> [AppItem] {

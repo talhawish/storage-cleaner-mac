@@ -33,7 +33,7 @@ struct RuntimeVersionScanner: StorageCategoryScanning {
 
         let finding = StorageFinding(
             kind: .runtimeVersions,
-            domain: .cliTooling,
+            domain: .otherCaches,
             bytes: bytes,
             itemCount: removable.count,
             safety: .review,

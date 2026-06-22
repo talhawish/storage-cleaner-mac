@@ -16,8 +16,7 @@ struct DashboardView: View {
                     switch viewModel.phase {
                     case .idle:
                         WelcomeHeroView(startScan: viewModel.startScan)
-                        quickCleanCard
-                        TrustStripView()
+                        QuickCleanEntry(action: { showQuickClean = true })
                     case .scanning:
                         ScanProgressView(viewModel: viewModel)
                     case .results:
@@ -87,68 +86,6 @@ struct DashboardView: View {
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private var quickCleanCard: some View {
-        Button {
-            showQuickClean = true
-        } label: {
-            quickCleanCardContent
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("quick-clean-card")
-        .accessibilityHint("Opens Quick Clean to scan and remove safe files")
-    }
-
-    private var quickCleanCardContent: some View {
-        HStack(spacing: 18) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [AppTheme.accent, AppTheme.cyan],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 56, height: 56)
-
-                Image(systemName: "sparkle")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Quick Clean")
-                    .font(.headline)
-                Text("Scan and remove safe-to-delete files in one tap")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right.circle.fill")
-                .font(.title2)
-                .foregroundStyle(AppTheme.accent)
-                .accessibilityHidden(true)
-        }
-        .padding(22)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [AppTheme.accent.opacity(0.3), AppTheme.cyan.opacity(0.3)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
-        }
     }
 
     @ViewBuilder

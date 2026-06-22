@@ -5,92 +5,20 @@ struct AppShellView: View {
     @State var selection: SidebarItem? = .section(.overview)
     @State var detailPath = NavigationPath()
     @State private var pendingSwitch: PendingSidebarSwitch?
+    @State private var isSidebarExpanded = true
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(
-                selection: selectionBinding,
-                isScanning: viewModel.isScanning
-            )
-            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
-        } detail: {
-            NavigationStack(path: $detailPath) {
-                Group {
-                    switch selection {
-                    case .section(.overview), .none:
-                        DashboardView(
-                            viewModel: viewModel,
-                            onOpenSettings: { selection = .section(.settings) }
-                        )
-                    case .section(.apps):
-                        AppsView()
-                    case .section(.projectActivity):
-                        ProjectActivityView()
-                    case .section(.developerStorage):
-                        developerStorageView()
-                    case .section(.docker):
-                        DockerView(onDockerChanged: {
-                            viewModel.startScan(for: [.dockerArtifacts])
-                        })
-                    case .section(.runtimeVersions):
-                        RuntimeVersionsView(
-                            onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
-                        )
-                    case .section(.simulatorsEmulators):
-                        EmulatorsView()
-                    case .section(.largeFiles):
-                        largeFilesView(
-                            kinds: section?.filterKinds ?? []
-                        )
-                    case .section(.cliPrograms):
-                        cliProgramsView(
-                            kinds: section?.filterKinds ?? [],
-                            emptyStateMessage: "Run a scan to find Homebrew caches, version managers, "
-                                + "and installed CLI toolchains."
-                        )
-                    case .section(.screenshotsAndRecordings):
-                        mediaCategoryView(
-                            title: "Screenshots & Recordings",
-                            kinds: section?.filterKinds ?? [],
-                            emptyStateMessage: "Run a scan to find screenshots and screen recordings "
-                                + "in common media locations."
-                        )
-                    case .section(.duplicates):
-                        duplicatesView(kinds: DuplicateMediaFilter.all.kinds)
-                    case .section(.leftovers):
-                        leftoversView(kinds: section?.filterKinds ?? [])
-                    case .section(.systemJunk):
-                        systemJunkView(kinds: section?.filterKinds ?? [])
-                    case .section(.cleanupHistory):
-                        CleanupHistoryView()
-                    case .section(.settings):
-                        InAppSettingsView()
-                    }
-                }
-                .navigationDestination(for: StorageFinding.self) { finding in
-                    findingDestination(for: finding)
-                }
-            }
-            .id(detailNavigationID)
-            .background {
-                ZStack {
-                    AppTheme.appBackground
+        HStack(spacing: 0) {
+            sidebarColumn
 
-                    LinearGradient(
-                        colors: [
-                            AppTheme.accent.opacity(0.045),
-                            Color.clear,
-                            AppTheme.violet.opacity(0.03)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                }
-                .ignoresSafeArea()
-            }
+            Divider()
+
+            detailColumn
         }
-        .navigationSplitViewStyle(.balanced)
+        .animation(.smooth, value: isSidebarExpanded)
         .tint(AppTheme.accent)
+        .navigationTitle("Storage Cleaner")
+        .toolbar { sidebarToggleToolbarItem }
         .onChange(of: selection) { _, _ in
             resetDetailNavigation()
         }
@@ -119,6 +47,99 @@ struct AppShellView: View {
                 },
                 onCancel: { pendingSwitch = nil }
             )
+        }
+    }
+}
+
+// MARK: - Layout
+
+private extension AppShellView {
+    @ViewBuilder
+    var sidebarColumn: some View {
+        if isSidebarExpanded {
+            SidebarView(
+                selection: selectionBinding,
+                isScanning: viewModel.isScanning
+            )
+            .frame(width: 240)
+        } else {
+            MiniSidebarView(
+                selection: selectionBinding,
+                isScanning: viewModel.isScanning
+            )
+        }
+    }
+
+    var detailColumn: some View {
+        AppTheme.appBackground
+            .ignoresSafeArea()
+            .overlay {
+                NavigationStack(path: $detailPath) {
+                    Group {
+                        switch selection {
+                        case .section(.overview), .none:
+                            DashboardView(
+                                viewModel: viewModel,
+                                onOpenSettings: { selection = .section(.settings) }
+                            )
+                        case .section(.apps):
+                            AppsView()
+                        case .section(.projectActivity):
+                            ProjectActivityView()
+                        case .section(.developerStorage):
+                            developerStorageView()
+                        case .section(.docker):
+                            DockerView(onDockerChanged: {
+                                viewModel.startScan(for: [.dockerArtifacts])
+                            })
+                        case .section(.simulatorsEmulators):
+                            EmulatorsView()
+                        case .section(.largeFiles):
+                            largeFilesView(
+                                kinds: section?.filterKinds ?? []
+                            )
+                        case .section(.cliPrograms):
+                            cliProgramsView(
+                                kinds: section?.filterKinds ?? [],
+                                emptyStateMessage: "Run a scan to find Homebrew caches, version managers, "
+                                    + "and installed CLI toolchains."
+                            )
+                        case .section(.screenshotsAndRecordings):
+                            mediaCategoryView(
+                                title: "Screenshots & Recordings",
+                                kinds: section?.filterKinds ?? [],
+                                emptyStateMessage: "Run a scan to find screenshots and screen recordings "
+                                    + "in common media locations."
+                            )
+                        case .section(.duplicates):
+                            duplicatesView(kinds: DuplicateMediaFilter.all.kinds)
+                        case .section(.leftovers):
+                            leftoversView(kinds: section?.filterKinds ?? [])
+                        case .section(.systemJunk):
+                            systemJunkView(kinds: section?.filterKinds ?? [])
+                        case .section(.cleanupHistory):
+                            CleanupHistoryView()
+                        case .section(.settings):
+                            InAppSettingsView()
+                        }
+                    }
+                    .navigationDestination(for: StorageFinding.self) { finding in
+                        findingDestination(for: finding)
+                    }
+                }
+                .id(detailNavigationID)
+            }
+    }
+
+    var sidebarToggleToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button {
+                isSidebarExpanded.toggle()
+            } label: {
+                Image(systemName: isSidebarExpanded ? "sidebar.left" : "sidebar.right")
+            }
+            .help(isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar")
+            .accessibilityIdentifier("toolbar-sidebar-toggle")
         }
     }
 }

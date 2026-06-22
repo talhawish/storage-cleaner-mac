@@ -5,15 +5,21 @@ struct DeveloperStorageView: View {
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
     let onOpenFinding: (StorageFinding) -> Void
+    let onRemoveRuntimeVersions: ([URL]) async -> Void
     @State private var selectedDomain: StorageDomain?
 
     private var detectedDomains: [StorageDomain] {
         DeveloperDomains.detected(in: findings)
     }
 
+    /// Findings to render as rows. Excludes the `.runtimeVersions` finding because it
+    /// is presented by the embedded ``RuntimeVersionsSection`` below, which does its
+    /// own live discovery and sizing — surfacing the finding both ways would duplicate
+    /// the same data and the section's per-version selection.
     private var developerFindings: [StorageFinding] {
-        guard let selectedDomain else { return findings }
-        return findings.filter { $0.domain == selectedDomain }
+        let base = findings.filter { $0.kind != .runtimeVersions }
+        guard let selectedDomain else { return base }
+        return base.filter { $0.domain == selectedDomain }
     }
 
     private var totalSize: Int64 {
@@ -26,9 +32,23 @@ struct DeveloperStorageView: View {
         selectedDomain?.symbolName ?? "chevron.left.forwardslash.chevron.right"
     }
 
+    /// Whether the embedded Runtime Versions section should appear. The section is
+    /// always relevant for the "All" view and for the `otherCaches` filter (which is
+    /// where `.runtimeVersions` is bucketed) but is hidden when the user is focused
+    /// on a single non-runtime domain.
+    private var shouldShowRuntimeVersionsSection: Bool {
+        guard let selectedDomain else { return true }
+        return selectedDomain == .otherCaches
+    }
+
     var body: some View {
         Group {
-            if findings.isEmpty {
+            // The Runtime Versions section does its own live discovery, so it can
+            // surface useful work even when the scan-based findings are empty.
+            // Show the calm empty state only when there are no findings *and* the
+            // runtime section is hidden (e.g. the user is filtered to a non-runtime
+            // domain).
+            if findings.isEmpty, !shouldShowRuntimeVersionsSection {
                 EmptyStateView(
                     title: "Nothing to clean here",
                     message: "No re-creatable developer files were found in the selected locations. "
@@ -100,6 +120,21 @@ struct DeveloperStorageView: View {
                     Text(StorageFormatting.bytes(totalSize))
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            if shouldShowRuntimeVersionsSection {
+                Section {
+                    RuntimeVersionsSection(onRemove: onRemoveRuntimeVersions)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } header: {
+                    SectionHeader(
+                        title: "Runtime Versions",
+                        subtitle: "Multiple versions of the same runtime kept by your version managers",
+                        systemImage: "square.stack.3d.up.fill"
+                    )
                 }
             }
         }

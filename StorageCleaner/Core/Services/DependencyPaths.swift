@@ -258,6 +258,14 @@ enum DependencyPaths {
             "ipa", "ipsw", "deb", "rpm"
         ]
 
+        static let androidPackageExtensions: Set<String> = [
+            "apk", "aab"
+        ]
+
+        /// Package-like file types that should still surface in Large Files if they cross the
+        /// threshold, even when the executable bit is set by a build or download tool.
+        static let largeFilePackageExtensions = installerExtensions.union(androidPackageExtensions)
+
         /// Path components that mark build outputs or dependency caches. Matches inside these are
         /// skipped so a project's own generated installers are never flagged as leftovers.
         static let blockedPathComponents: Set<String> = [

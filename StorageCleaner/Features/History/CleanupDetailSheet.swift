@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Modal shown when a user taps a `HistoryRowView` in Cleanup History. The list is already a
+/// Modal shown when a user taps a `HistoryScanCard` in Cleanup History. The card is already a
 /// short, scannable summary; the sheet carries the same data plus a per-category breakdown and
 /// representative paths so the user can confirm exactly what was cleaned.
 struct CleanupDetailSheet: View {

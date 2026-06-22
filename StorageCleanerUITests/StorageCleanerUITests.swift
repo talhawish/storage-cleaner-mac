@@ -72,13 +72,13 @@ final class StorageCleanerUITests: XCTestCase {
         // Each entry is the sidebar identifier and a list of root identifiers
         // the section is allowed to render. CLI Programs and the Duplicates
         // page have no demo data, so they correctly fall through to the
-        // post-scan empty state instead of the content root.
+        // post-scan empty state instead of the content root. Runtime Versions
+        // now lives inside Developer Storage — its own sidebar entry was removed.
         let pages: [(String, [String])] = [
             ("overview", ["dashboard-results"]),
             ("projectActivity", ["project-activity-root"]),
             ("apps", ["applications-root"]),
             ("developerStorage", ["developer-storage-root", "developer-storage-empty"]),
-            ("runtimeVersions", ["runtime-versions-root"]),
             ("simulatorsEmulators", ["simulators-emulators-root"]),
             ("cliPrograms", ["cli-programs-root", "cli-programs-empty"]),
             ("largeFiles", ["large-files-root", "large-files-empty"]),

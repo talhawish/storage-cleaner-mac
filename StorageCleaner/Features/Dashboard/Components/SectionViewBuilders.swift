@@ -53,18 +53,32 @@ extension AppShellView {
             )
             .padding(28)
         case .results:
-            DeveloperStorageView(
+            developerStorageResults(
                 findings: sectionFindings,
-                onScan: {
-                    resetDetailNavigation()
-                    viewModel.startScan(for: kinds)
-                },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                },
-                onOpenFinding: openFinding
+                kinds: kinds
             )
         }
+    }
+
+    @ViewBuilder
+    private func developerStorageResults(
+        findings: [StorageFinding],
+        kinds: [StorageFindingKind]
+    ) -> some View {
+        DeveloperStorageView(
+            findings: findings,
+            onScan: {
+                resetDetailNavigation()
+                viewModel.startScan(for: kinds)
+            },
+            onDelete: { urls in
+                Task { await viewModel.deleteFiles(urls) }
+            },
+            onOpenFinding: openFinding,
+            onRemoveRuntimeVersions: { urls in
+                _ = await viewModel.removeRuntimeVersions(urls)
+            }
+        )
     }
 
     @ViewBuilder
@@ -396,7 +410,7 @@ extension AppShellView {
             )
         } else if finding.kind == .runtimeVersions {
             RuntimeVersionsView(
-                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
+                onRemove: { urls in _ = await viewModel.removeRuntimeVersions(urls) }
             )
         } else if AppSection.leftovers.filterKinds.contains(finding.kind) {
             LeftoversView(

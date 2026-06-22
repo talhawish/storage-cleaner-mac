@@ -104,8 +104,15 @@ Mirror it with a test under `StorageCleanerTests/`.
   per developer domain detected in the latest scan — derived once in `DeveloperDomains.detected(in:)`,
   the single source of truth shared with `DeveloperStorageView`.
 * **Runtime versions.** `RuntimeVersionCatalog` (data-driven descriptors) detects runtimes with 2+
-  installed versions — new tools are added by extending its descriptor lists. Removal reuses
-  `CLIRemovalService` (`brew uninstall` for Homebrew kegs, Trash for everything else).
+  installed versions — new tools are added by extending its descriptor lists. Coverage spans nvm,
+  Volta, fnm, Bun & Deno for Node; pyenv for Python; rbenv & RVM for Ruby; rustup for Rust; goenv &
+  GVM for Go; phpenv & Laravel Herd for PHP; local .NET SDK installs; Jabba, jEnv & SDKMAN for Java;
+  GHCup & Stack for Haskell; FVM and hand-cloned SDKs for Flutter; Bun's toolchain cache; Deno's
+  versioned binaries; Homebrew versioned formulae (`php@8.1`, `node@18`, …); asdf & mise plugins;
+  and system JDKs (which require manual removal). The dedicated `RuntimeVersionsSection` lives
+  inside `DeveloperStorageView` (no sidebar entry of its own), the standalone `RuntimeVersionsView`
+  is the deep-link target. Removal reuses `CLIRemovalService` (`brew uninstall` for Homebrew kegs,
+  Trash for everything else).
 * **Simulators & emulators.** `EmulatorManagementService` (injected side effects, like
   `CLIRemovalService`) discovers iOS/Apple simulator runtimes via `xcrun simctl runtime list -j` and
   Android system images on disk, and removes them per platform: `xcrun simctl runtime delete`
