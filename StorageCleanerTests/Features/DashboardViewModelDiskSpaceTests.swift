@@ -39,6 +39,10 @@ final class DashboardViewModelDiskSpaceTests: XCTestCase {
             )
         )
 
+        for _ in 0..<200 where !viewModel.volumeSnapshot.isAvailable {
+            await Task.yield()
+        }
+
         viewModel.startScan()
         for _ in 0..<20 where viewModel.phase != .results { await Task.yield() }
 

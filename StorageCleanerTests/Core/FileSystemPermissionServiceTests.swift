@@ -33,7 +33,7 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         XCTAssertEqual(service.currentStatuses().first?.state, .accessible)
     }
 
-    func testRejectsHomeOnlyBookmark() throws {
+    func testAcceptsHomeOnlyBookmark() throws {
         let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let store = InMemoryBookmarkDataStore()
@@ -49,7 +49,22 @@ final class FileSystemPermissionServiceTests: XCTestCase {
             homeDirectory: home
         )
 
-        XCTAssertEqual(service.currentStatuses().first?.state, .denied)
+        XCTAssertEqual(service.currentStatuses().first?.state, .accessible)
+        XCTAssertNotNil(service.beginHomeFolderAccess())
+    }
+
+    @MainActor
+    func testRequestSucceedsWhenStandardChildFoldersAreMissing() throws {
+        let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let service = FileSystemPermissionService(
+            bookmarkStore: InMemoryBookmarkDataStore(),
+            picker: FixedHomeFolderPicker(selectedURL: home),
+            homeDirectory: home
+        )
+
+        XCTAssertTrue(service.requestHomeFolderAccess())
+        XCTAssertEqual(service.currentStatuses().first?.state, .accessible)
     }
 
     private func createStandardHomeFolders(at home: URL) throws {
