@@ -17,7 +17,11 @@ struct CandidateFindingBuilder: Sendable {
             itemCount: candidates.count,
             safety: safety,
             examples: Array(candidates.prefix(3).map(\.displayName)),
-            filePaths: candidates.map(\.url)
+            filePaths: candidates.map(\.url),
+            pathBytes: Dictionary(
+                candidates.map { ($0.url, $0.bytes) },
+                uniquingKeysWith: { first, _ in first }
+            )
         )
     }
 

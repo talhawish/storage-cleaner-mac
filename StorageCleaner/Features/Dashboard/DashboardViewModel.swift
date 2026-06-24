@@ -23,6 +23,15 @@ final class DashboardViewModel {
     private(set) var permissionStatuses: [StoragePermissionStatus]
     private(set) var snapshot: ScanSnapshot?
     private(set) var lastCleanupResult: CleanupResult?
+    /// Latest disk-space snapshot for the startup volume. Refreshed on init,
+    /// after every scan completes, and after every successful cleanup. Drives
+    /// the home screen "Storage Status" card and the Quick Clean success
+    /// view's "free space after" pill.
+    var volumeSnapshot: VolumeSnapshot = .unavailable
+    /// Free bytes captured the moment a scan started. Combined with
+    /// `volumeSnapshot` it powers the "free before / after" pill on the
+    /// Cleanup History card. Reset to `nil` when no scan is in flight.
+    private(set) var freeBytesAtScanStart: Int64?
     /// Domains whose newest sampled files are older than the stale threshold. Populated off the main
     /// thread after a scan completes; empty until (and unless) sampling finds something.
     private(set) var staleHints: [StaleHint] = []
@@ -33,7 +42,9 @@ final class DashboardViewModel {
     /// other sections should still show their pre-scan state until they
     /// too are scanned.
     private(set) var lastCompletedScan: LastScan = .never
-    private var staleTask: Task<Void, Never>?
+    var staleTask: Task<Void, Never>?
+    var diskSpaceTask: Task<Void, Never>?
+    let diskSpaceReader: any DiskSpaceReading
     var selectedDomain: StorageDomain?
     var selectedFinding: StorageFinding?
 
@@ -42,14 +53,17 @@ final class DashboardViewModel {
         permissionHandler: any StoragePermissionHandling = FileSystemPermissionService(),
         cleanupService: CleanupService = FileManagerCleanupService(),
         cliRemovalService: CLIRemovalService = .live,
+        diskSpaceReader: any DiskSpaceReading = LiveDiskSpaceService.shared,
         historyStore: (any ScanHistoryStore)? = nil
     ) {
         self.scanner = scanner
         self.permissionHandler = permissionHandler
         self.cleanupService = cleanupService
         self.cliRemovalService = cliRemovalService
+        self.diskSpaceReader = diskSpaceReader
         self.historyStore = historyStore
         permissionStatuses = permissionHandler.currentStatuses()
+        refreshVolumeSnapshot()
     }
 
     func cancelScan() {
@@ -61,6 +75,7 @@ final class DashboardViewModel {
         scannedItemCount = 0
         scannerProgress = []
         activeScanKinds = nil
+        freeBytesAtScanStart = nil
 
         if let snapshot, !snapshot.findings.isEmpty {
             phase = .results
@@ -74,6 +89,13 @@ final class DashboardViewModel {
     func deleteFiles(_ urls: [URL]) async -> CleanupResult {
         let result = await cleanupService.delete(urls: urls)
         lastCleanupResult = result
+
+        // Refresh the volume snapshot *before* recording the audit, so the
+        // "free bytes after" captured on `StoredScan` reflects the volume
+        // state once the trashed items are gone. The refresh dispatches a
+        // background task; awaiting it here keeps the audit recording in
+        // lockstep with the post-cleanup free-bytes value.
+        await refreshVolumeSnapshotAsync()
 
         // `deletedItems` is keyed by the *original* path with the bytes captured at delete time;
         // `result.deletedURLs` holds Trash locations and cannot be matched against findings.
@@ -107,6 +129,8 @@ final class DashboardViewModel {
 
         guard result.totalBytesReclaimed > 0 else { return result }
 
+        await refreshVolumeSnapshotAsync()
+
         historyStore?.recordCleanupActions([
             CleanupAuditEntry(
                 kind: .cliApps,
@@ -116,7 +140,7 @@ final class DashboardViewModel {
                     from: result.deletedItems.map(\.originalURL)
                 )
             )
-        ])
+        ], disk: currentScanDiskSnapshot())
 
         if let currentSnapshot = snapshot {
             let updatedFindings = currentSnapshot.findings.map { finding -> StorageFinding in
@@ -140,8 +164,6 @@ final class DashboardViewModel {
 
         return result
     }
-
-    /// Removes selected older runtime versions (always trashed; not Homebrew packages)
     /// and reconciles the `runtimeVersions` finding. Recorded as a `.runtimeVersions`
     /// audit entry so Cleanup History reflects what was reclaimed. Returns the result
     /// so the caller can refresh its view.
@@ -150,6 +172,8 @@ final class DashboardViewModel {
         lastCleanupResult = result
 
         guard result.totalBytesReclaimed > 0 else { return result }
+
+        await refreshVolumeSnapshotAsync()
 
         historyStore?.recordCleanupActions([
             CleanupAuditEntry(
@@ -160,7 +184,7 @@ final class DashboardViewModel {
                     from: result.deletedItems.map(\.originalURL)
                 )
             )
-        ])
+        ], disk: currentScanDiskSnapshot())
 
         if let currentSnapshot = snapshot {
             let updatedFindings = currentSnapshot.findings.map { finding -> StorageFinding in
@@ -239,7 +263,7 @@ final class DashboardViewModel {
                 samplePaths: Self.samplePaths(from: deletedPaths)
             )
         }
-        historyStore.recordCleanupActions(entries)
+        historyStore.recordCleanupActions(entries, disk: currentScanDiskSnapshot())
     }
 
     private static let samplePathLimit = 5
@@ -255,6 +279,7 @@ final class DashboardViewModel {
         scannedItemCount = 0
         scannerProgress = []
         activeScanKinds = kinds
+        freeBytesAtScanStart = volumeSnapshot.isAvailable ? volumeSnapshot.freeBytes : 0
         if kinds == nil {
             snapshot = nil
             selectedDomain = nil
@@ -331,10 +356,16 @@ final class DashboardViewModel {
             }
             phase = adjustedSnapshot.findings.isEmpty ? .empty : .results
             refreshStaleHints()
+            refreshVolumeSnapshot()
             // Only full scans become history records; targeted re-scans refresh a subset in place.
             if activeScanKinds == nil {
-                historyStore?.recordCompletedScan(adjustedSnapshot)
+                let disk = ScanDiskSnapshot(
+                    totalBytes: volumeSnapshot.totalBytes,
+                    freeBytes: freeBytesAtScanStart ?? volumeSnapshot.freeBytes
+                )
+                historyStore?.recordCompletedScan(adjustedSnapshot, disk: disk)
             }
+            freeBytesAtScanStart = nil
             scanTask = nil
             activeScanKinds = nil
         case let .failed(message):
@@ -534,50 +565,6 @@ private extension URL {
         guard descendantPath.hasPrefix(ancestorPath) else { return false }
         let remainder = descendantPath.dropFirst(ancestorPath.count)
         return remainder.first == "/"
-    }
-}
-
-// MARK: - Duplicate finding pruning
-
-extension DashboardViewModel {
-    /// Rebuilds a duplicate finding from its pruned groups. Returns `nil` when no group still has
-    /// 2+ copies (nothing left to clean up).
-    func prunedDuplicateFinding(
-        from finding: StorageFinding,
-        deletedURLs: [URL: Int64]
-    ) -> StorageFinding? {
-        let groups = prunedGroups(from: finding.duplicateGroups, deletedURLs: deletedURLs)
-        guard !groups.isEmpty else { return nil }
-
-        let removableURLs = groups.flatMap(\.removableURLs)
-        let bytes = groups.reduce(Int64(0)) { $0 + $1.reclaimableBytes }
-        return StorageFinding(
-            kind: finding.kind,
-            domain: finding.domain,
-            bytes: bytes,
-            itemCount: removableURLs.count,
-            safety: finding.safety,
-            examples: Array(removableURLs.prefix(3).map(\.lastPathComponent)),
-            filePaths: removableURLs,
-            duplicateGroups: groups
-        )
-    }
-
-    /// Removes deleted copies from each duplicate group, drops groups that no longer have 2+ copies,
-    /// and re-elects a copy to keep when the previously kept file was the one deleted.
-    private func prunedGroups(
-        from groups: [DuplicateGroup],
-        deletedURLs: [URL: Int64]
-    ) -> [DuplicateGroup] {
-        groups.compactMap { group in
-            let remainingFiles = group.files.filter { deletedURLs[$0.url] == nil }
-            guard remainingFiles.count > 1 else { return nil }
-
-            let keepURL = remainingFiles.contains(where: { $0.url == group.keepURL })
-                ? group.keepURL
-                : DuplicateKeepStrategy.bestToKeep(from: remainingFiles).url
-            return DuplicateGroup(contentHash: group.contentHash, files: remainingFiles, keepURL: keepURL)
-        }
     }
 }
 

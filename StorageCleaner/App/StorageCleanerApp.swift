@@ -28,6 +28,7 @@ struct StorageCleanerApp: App {
                 scanner: container.storageScanner,
                 permissionHandler: container.permissionHandler,
                 cleanupService: container.cleanupService,
+                diskSpaceReader: container.diskSpaceReader,
                 historyStore: historyStore
             )
         )

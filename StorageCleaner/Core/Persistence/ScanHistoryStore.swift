@@ -24,6 +24,33 @@ struct CleanupAuditEntry: Sendable, Equatable {
     }
 }
 
+/// Optional disk-space metadata captured at scan time. Both snapshots are
+/// expected to come from the same `DiskSpaceReading` implementation so the
+/// numbers are directly comparable. `totalBytes` is `0` when the volume
+/// attributes couldn't be read — `StoredScan` stores all three fields as
+/// `Int64` and the Cleanup History card hides the disk pill when the total
+/// is `0`.
+struct ScanDiskSnapshot: Sendable, Equatable {
+    let totalBytes: Int64
+    let freeBytes: Int64
+
+    init(totalBytes: Int64, freeBytes: Int64) {
+        self.totalBytes = max(0, totalBytes)
+        self.freeBytes = max(0, freeBytes)
+    }
+
+    static let unavailable = ScanDiskSnapshot(totalBytes: 0, freeBytes: 0)
+    var isAvailable: Bool { totalBytes > 0 }
+
+    func snapshot() -> VolumeSnapshot {
+        VolumeSnapshot(
+            totalBytes: totalBytes,
+            usedBytes: max(0, totalBytes - freeBytes),
+            freeBytes: freeBytes
+        )
+    }
+}
+
 /// Persists scan results and cleanup audit records so the Cleanup History screen has data and
 /// every destructive action leaves a durable trail (a core safety invariant).
 ///
@@ -31,10 +58,15 @@ struct CleanupAuditEntry: Sendable, Equatable {
 /// which is the same context `@Query` reads from in `CleanupHistoryView`.
 @MainActor
 protocol ScanHistoryStore: AnyObject {
-    /// Records a completed full scan and its findings.
-    func recordCompletedScan(_ snapshot: ScanSnapshot)
-    /// Records cleanup actions, attaching them to the most recent scan when one exists.
-    func recordCleanupActions(_ entries: [CleanupAuditEntry])
+    /// Records a completed full scan and its findings, optionally including a
+    /// disk-space snapshot taken when the scan started. The disk snapshot
+    /// feeds the "X free before cleanup" call-out on the Cleanup History row.
+    func recordCompletedScan(_ snapshot: ScanSnapshot, disk: ScanDiskSnapshot)
+    /// Records cleanup actions, attaching them to the most recent scan when one exists. The
+    /// optional `disk` argument captures the volume's free-bytes *after* the cleanup so the
+    /// Cleanup History row can render "X was free before, Y is free after" without a follow-up
+    /// `statfs` roundtrip.
+    func recordCleanupActions(_ entries: [CleanupAuditEntry], disk: ScanDiskSnapshot)
 }
 
 @MainActor
@@ -45,20 +77,22 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         self.context = context
     }
 
-    func recordCompletedScan(_ snapshot: ScanSnapshot) {
+    func recordCompletedScan(_ snapshot: ScanSnapshot, disk: ScanDiskSnapshot) {
         guard !snapshot.findings.isEmpty else { return }
 
         let scan = StoredScan(
             durationSeconds: snapshot.duration.totalSeconds,
             scannedItemCount: snapshot.scannedItemCount,
             reclaimableBytes: snapshot.reclaimableBytes,
+            volumeTotalBytes: disk.totalBytes,
+            freeBytesBefore: disk.freeBytes,
             findings: snapshot.findings.map(StoredFinding.init(from:))
         )
         context.insert(scan)
         save()
     }
 
-    func recordCleanupActions(_ entries: [CleanupAuditEntry]) {
+    func recordCleanupActions(_ entries: [CleanupAuditEntry], disk: ScanDiskSnapshot) {
         guard !entries.isEmpty else { return }
 
         let scan = mostRecentScan()
@@ -77,6 +111,9 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         // single field for the "storage recovered" call-out without re-summing actions.
         if let scan {
             scan.cleanedBytes = saturatedAdd(scan.cleanedBytes, newBytes)
+            if disk.isAvailable {
+                scan.freeBytesAfter = disk.freeBytes
+            }
         }
         save()
     }

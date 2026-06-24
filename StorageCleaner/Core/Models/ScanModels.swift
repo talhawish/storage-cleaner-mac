@@ -8,6 +8,9 @@ struct StorageFinding: Identifiable, Equatable, Hashable, Sendable {
     let safety: CleanupSafety
     let examples: [String]
     let filePaths: [URL]
+    /// Precomputed per-path byte counts captured during the scan so the detail view can show
+    /// individual sizes without re-enumerating every directory on each navigation.
+    var pathBytes: [URL: Int64] = [:]
     /// Populated only for duplicate findings: the byte-identical groups behind `filePaths`,
     /// including each group's recommended copy to keep. Empty for every other finding kind.
     var duplicateGroups: [DuplicateGroup] = []

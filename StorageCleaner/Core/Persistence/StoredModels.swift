@@ -11,6 +11,20 @@ final class StoredScan {
     /// write time so the Cleanup History totals stay cheap and don't drift if action ordering or
     /// re-runs leave stale rows behind. Defaults to 0 so existing stores migrate cleanly.
     var cleanedBytes: Int64
+    /// Total capacity of the volume the user is on, captured when the scan
+    /// started. `0` when the volume attributes couldn't be read (older scans
+    /// migrated from a pre-disk-tracking build, or sandboxed environments
+    /// without the necessary entitlement).
+    var volumeTotalBytes: Int64
+    /// Free space on the volume at the moment the scan started. Combined with
+    /// `volumeTotalBytes` it powers the "X free before, Y after" pill on
+    /// `HistoryScanCard` and the home screen's status card.
+    var freeBytesBefore: Int64
+    /// Free space on the volume after every cleanup action attached to this
+    /// scan has run. `0` when no cleanup ran on this scan (e.g. the user only
+    /// scanned and never deleted anything, or the volume attributes couldn't
+    /// be re-read after the cleanup).
+    var freeBytesAfter: Int64
 
     @Relationship(deleteRule: .cascade)
     var findings: [StoredFinding]
@@ -24,6 +38,9 @@ final class StoredScan {
         scannedItemCount: Int = 0,
         reclaimableBytes: Int64 = 0,
         cleanedBytes: Int64 = 0,
+        volumeTotalBytes: Int64 = 0,
+        freeBytesBefore: Int64 = 0,
+        freeBytesAfter: Int64 = 0,
         findings: [StoredFinding] = [],
         cleanupActions: [StoredCleanupAction] = []
     ) {
@@ -32,6 +49,9 @@ final class StoredScan {
         self.scannedItemCount = scannedItemCount
         self.reclaimableBytes = reclaimableBytes
         self.cleanedBytes = cleanedBytes
+        self.volumeTotalBytes = volumeTotalBytes
+        self.freeBytesBefore = freeBytesBefore
+        self.freeBytesAfter = freeBytesAfter
         self.findings = findings
         self.cleanupActions = cleanupActions
     }
@@ -49,6 +69,7 @@ final class StoredFinding {
     /// JSON-encoded `[DuplicateGroup]`; non-nil only for duplicate findings. Optional so existing
     /// stores migrate without a value (SwiftData lightweight migration).
     var duplicateGroupsJSON: String?
+    var pathBytesJSON: String?
 
     var scan: StoredScan?
 
@@ -63,6 +84,9 @@ final class StoredFinding {
         self.duplicateGroupsJSON = finding.duplicateGroups.isEmpty
             ? nil
             : (try? JSONEncoder().encode(finding.duplicateGroups)).flatMap { String(data: $0, encoding: .utf8) }
+        self.pathBytesJSON = finding.pathBytes.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(finding.pathBytes)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
     var kind: StorageFindingKind? {
@@ -82,6 +106,9 @@ final class StoredFinding {
         let groups = duplicateGroupsJSON
             .flatMap { $0.data(using: .utf8) }
             .flatMap { try? JSONDecoder().decode([DuplicateGroup].self, from: $0) } ?? []
+        let pathBytes = pathBytesJSON
+            .flatMap { $0.data(using: .utf8) }
+            .flatMap { try? JSONDecoder().decode([URL: Int64].self, from: $0) } ?? [:]
         return StorageFinding(
             kind: kind,
             domain: domain,
@@ -90,6 +117,7 @@ final class StoredFinding {
             safety: safety,
             examples: examples,
             filePaths: filePaths,
+            pathBytes: pathBytes,
             duplicateGroups: groups
         )
     }

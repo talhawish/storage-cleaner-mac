@@ -4,6 +4,7 @@ struct AppContainer: Sendable {
     let storageScanner: any StorageScanning
     let permissionHandler: any StoragePermissionHandling
     let cleanupService: CleanupService
+    let diskSpaceReader: any DiskSpaceReading
 
     static var live: AppContainer {
         let permissionHandler = FileSystemPermissionService()
@@ -13,7 +14,8 @@ struct AppContainer: Sendable {
                 permissionHandler: permissionHandler
             ),
             permissionHandler: permissionHandler,
-            cleanupService: FileManagerCleanupService()
+            cleanupService: FileManagerCleanupService(),
+            diskSpaceReader: LiveDiskSpaceService.shared
         )
     }
 
@@ -24,7 +26,8 @@ struct AppContainer: Sendable {
                     completesImmediately: arguments.contains("--complete-demo-scan-immediately")
                 ),
                 permissionHandler: DemoPermissionHandler(),
-                cleanupService: DemoCleanupService()
+                cleanupService: DemoCleanupService(),
+                diskSpaceReader: DemoDiskSpaceService()
             )
         }
 
