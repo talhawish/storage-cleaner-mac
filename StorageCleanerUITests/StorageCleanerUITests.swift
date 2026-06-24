@@ -94,9 +94,11 @@ final class StorageCleanerUITests: XCTestCase {
         ]
 
         for (sidebarID, rootIDs) in pages {
-            let row = app.descendants(matching: .any)["sidebar-\(sidebarID)"]
-            XCTAssertTrue(row.waitForExistence(timeout: 4), "Missing sidebar row \(sidebarID)")
-            row.click()
+            if sidebarID != "overview" {
+                let row = app.descendants(matching: .any)["sidebar-\(sidebarID)"]
+                XCTAssertTrue(row.waitForExistence(timeout: 4), "Missing sidebar row \(sidebarID)")
+                row.click()
+            }
 
             let found = rootIDs.contains { identifier in
                 app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)

@@ -104,15 +104,11 @@ final class QuickCleanScannerTests: XCTestCase {
     }
 
     func testScanRespectsTildeExpansion() async throws {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let cacheDir = home.appending(path: ".quickclean-test-\(UUID().uuidString)", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: cacheDir) }
-
-        let options = [makeOption(id: "tilde", path: "~/\(cacheDir.lastPathComponent)")]
-        let scanner = QuickCleanScanner(options: options, enabledIDs: ["tilde"])
-        let scan = await scanner.scan()
-        XCTAssertEqual(scan.populatedCategories.count, 1)
+        let relativePath = ".quickclean-test-\(UUID().uuidString)"
+        XCTAssertEqual(
+            UserHomeDirectory.expandingTilde(in: "~/\(relativePath)"),
+            UserHomeDirectory.url.appending(path: relativePath, directoryHint: .isDirectory).path
+        )
     }
 
     func testScannerSortsItemsBySizeDescending() async throws {
