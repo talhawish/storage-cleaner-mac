@@ -211,7 +211,8 @@ private extension StorageFindingKind {
     var defaultDomain: StorageDomain {
         switch self {
         case .xcodeArtifacts: .appleDevelopment
-        case .nodeDependencies, .browserCaches: .webDevelopment
+        case .nodeDependencies: .webDevelopment
+        case .browserCaches: .browserData
         case .dockerArtifacts: .containers
         case .flutterArtifacts, .reactNativeArtifacts, .androidStudioArtifacts, .androidPackages: .mobileDevelopment
         case .aiModelCaches: .artificialIntelligence

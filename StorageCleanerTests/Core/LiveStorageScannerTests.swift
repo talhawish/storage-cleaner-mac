@@ -112,6 +112,35 @@ final class LiveStorageScannerTests: XCTestCase {
         XCTAssertNotNil(snapshot, "Live scanner must complete even if no system junk is present")
     }
 
+    func testLiveScannerIncludesBrowserCacheScanner() async {
+        let scanner = LiveStorageScanner.live()
+
+        var scannedKinds: Set<StorageFindingKind> = []
+        var snapshot: ScanSnapshot?
+
+        for await event in scanner.scanEvents(for: [.browserCaches]) {
+            switch event {
+            case let .progress(_, _, _, progress):
+                scannedKinds.formUnion(progress.map(\.kind))
+            case let .completed(result):
+                snapshot = result
+            case .failed:
+                XCTFail("Browser scan should not fail")
+            }
+        }
+
+        XCTAssertTrue(scannedKinds.contains(.browserCaches))
+        let browserFinding = snapshot?.findings.first { $0.kind == .browserCaches }
+        XCTAssertEqual(browserFinding?.domain, .browserData)
+        XCTAssertEqual(browserFinding?.safety, .safe)
+    }
+
+    func testBrowserCacheScannerConfiguration() {
+        let scanner = BrowserCacheScanner(collector: FileSystemCollector())
+        XCTAssertEqual(scanner.kind, .browserCaches)
+        XCTAssertEqual(scanner.title, StorageFindingKind.browserCaches.title)
+    }
+
     func testSystemJunkSectionAggregatesAllFiveKinds() {
         XCTAssertEqual(
             AppSection.systemJunk.filterKinds,

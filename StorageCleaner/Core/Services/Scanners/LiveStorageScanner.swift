@@ -172,45 +172,55 @@ struct LiveStorageScanner: StorageScanning {
 
 extension LiveStorageScanner {
     static func live() -> LiveStorageScanner {
+        live(permissionHandler: nil)
+    }
+
+    static func live(permissionHandler: (any StoragePermissionHandling)?) -> LiveStorageScanner {
         let collector = FileSystemCollector()
         let appCatalog = InstalledAppCatalog()
+        let scanners: [any StorageCategoryScanning] = [
+            XcodeStorageScanner(collector: collector),
+            DockerStorageScanner(collector: collector),
+            FlutterStorageScanner(collector: collector),
+            ReactNativeStorageScanner(collector: collector),
+            AndroidStudioStorageScanner(collector: collector),
+            AndroidPackageScanner(collector: collector),
+            NodeDependencyScanner(collector: collector),
+            PythonDependencyScanner(collector: collector),
+            RustDependencyScanner(collector: collector),
+            GoDependencyScanner(collector: collector),
+            PHPDependencyScanner(collector: collector),
+            RubyDependencyScanner(collector: collector),
+            DotNetCacheScanner(collector: collector),
+            GradleCacheScanner(collector: collector),
+            AIModelCacheScanner(collector: collector),
+            BrowserCacheScanner(collector: collector),
+            LargeFileScanner(collector: collector),
+            LargeVideoScanner(collector: collector),
+            ScreenRecordingScanner(collector: collector),
+            LargePhotoScanner(collector: collector),
+            DuplicatePhotoScanner(collector: collector),
+            DuplicateVideoScanner(collector: collector),
+            DuplicateDocumentScanner(collector: collector),
+            ScreenshotStorageScanner(collector: collector),
+            JunkFileScanner(collector: collector),
+            LeftoversScanner(collector: collector),
+            CLIAppScanner(collector: collector),
+            RuntimeVersionScanner(),
+            OrphanedAppSupportScanner(collector: collector, catalog: appCatalog),
+            OrphanedAppCachesScanner(collector: collector, catalog: appCatalog),
+            OrphanedAppContainersScanner(collector: collector, catalog: appCatalog),
+            OrphanedPreferencesScanner(catalog: appCatalog, collector: collector),
+            OldCrashReportsScanner(collector: collector),
+            TrashStorageScanner(collector: collector)
+        ]
+
+        let scopedScanners = permissionHandler.map { handler in
+            scanners.map { SecurityScopedCategoryScanner(scanner: $0, permissionHandler: handler) }
+        } ?? scanners
 
         return LiveStorageScanner(
-            scanners: [
-                XcodeStorageScanner(collector: collector),
-                DockerStorageScanner(collector: collector),
-                FlutterStorageScanner(collector: collector),
-                ReactNativeStorageScanner(collector: collector),
-                AndroidStudioStorageScanner(collector: collector),
-                AndroidPackageScanner(collector: collector),
-                NodeDependencyScanner(collector: collector),
-                PythonDependencyScanner(collector: collector),
-                RustDependencyScanner(collector: collector),
-                GoDependencyScanner(collector: collector),
-                PHPDependencyScanner(collector: collector),
-                RubyDependencyScanner(collector: collector),
-                DotNetCacheScanner(collector: collector),
-                GradleCacheScanner(collector: collector),
-                AIModelCacheScanner(collector: collector),
-                LargeFileScanner(collector: collector),
-                LargeVideoScanner(collector: collector),
-                ScreenRecordingScanner(collector: collector),
-                LargePhotoScanner(collector: collector),
-                DuplicatePhotoScanner(collector: collector),
-                DuplicateVideoScanner(collector: collector),
-                DuplicateDocumentScanner(collector: collector),
-                ScreenshotStorageScanner(collector: collector),
-                JunkFileScanner(collector: collector),
-                LeftoversScanner(collector: collector),
-                CLIAppScanner(collector: collector),
-                RuntimeVersionScanner(),
-                OrphanedAppSupportScanner(collector: collector, catalog: appCatalog),
-                OrphanedAppCachesScanner(collector: collector, catalog: appCatalog),
-                OrphanedAppContainersScanner(collector: collector, catalog: appCatalog),
-                OrphanedPreferencesScanner(catalog: appCatalog, collector: collector),
-                OldCrashReportsScanner(collector: collector),
-                TrashStorageScanner(collector: collector)
-            ]
+            scanners: scopedScanners
         )
     }
 }

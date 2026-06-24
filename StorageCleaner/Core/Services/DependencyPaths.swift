@@ -353,6 +353,8 @@ enum DependencyPaths {
             "~/Library/Caches/Microsoft Edge",
             "~/Library/Caches/Firefox",
             "~/Library/Caches/company.thebrowser.Browser",
+            "~/Library/Caches/BraveSoftware",
+            "~/Library/Caches/Chromium",
             "~/.Trash"
         ]
     }
