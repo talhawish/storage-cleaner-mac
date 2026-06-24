@@ -61,6 +61,9 @@ struct HistoryScanCard: View {
                 Spacer(minLength: 0)
                 scanMeta
             }
+            if summary.hasDiskSnapshot {
+                FreeSpacePill(summary: summary)
+            }
             categoryChips
         }
     }
@@ -155,11 +158,95 @@ struct HistoryScanCard: View {
         } else {
             parts.append("No items removed")
         }
+        if let freed = summary.freedBytesByCleanup {
+            parts.append("Free space grew by \(StorageFormatting.bytes(freed))")
+        }
         parts.append(
             "\(summary.categoriesFound) categories detected, "
                 + "scan duration \(StorageFormatting.duration(.seconds(summary.durationSeconds)))"
         )
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Compact "X free before → Y free after" pill rendered inside a
+/// ``HistoryScanCard``. Shown only when the persisted scan captured both
+/// volume snapshots; older scans (and scan-only events without a follow-up
+/// cleanup) hide the pill.
+private struct FreeSpacePill: View {
+    let summary: CleanupScanSummary
+
+    private var tint: Color {
+        guard let freed = summary.freedBytesByCleanup else { return .secondary }
+        return freed > 0 ? AppTheme.mint : .secondary
+    }
+
+    private var freedLabel: String? {
+        guard let freed = summary.freedBytesByCleanup, freed > 0 else { return nil }
+        return "+\(StorageFormatting.bytes(freed))"
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "internaldrive")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+
+            Text("Free before")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+            Text(StorageFormatting.bytes(summary.freeBytesBefore))
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Image(systemName: "arrow.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Free after")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+            Text(StorageFormatting.bytes(summary.freeBytesAfter))
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(tint)
+                .lineLimit(1)
+            if let freedLabel {
+                Text(freedLabel)
+                    .font(.caption2.weight(.bold).monospacedDigit())
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(tint.opacity(0.12), in: Capsule())
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AppTheme.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        let before = StorageFormatting.bytes(summary.freeBytesBefore)
+        let after = StorageFormatting.bytes(summary.freeBytesAfter)
+        if let freed = summary.freedBytesByCleanup, freed > 0 {
+            return "Free space \(before) before, \(after) after, grew by "
+                + "\(StorageFormatting.bytes(freed))"
+        }
+        return "Free space \(before) before, \(after) after"
     }
 }
 

@@ -6,6 +6,11 @@ import SwiftUI
 struct QuickCleanView: View {
     let onClean: @MainActor ([URL]) async -> CleanupResult
     var onOpenSettings: (() -> Void)?
+    /// Closure the modal calls whenever it needs the latest free-bytes
+    /// snapshot for the volume. Defaults to a no-op so callers that don't
+    /// care about disk-space telemetry (UI tests, previews) keep working
+    /// unchanged.
+    var freeBytesProvider: (@MainActor () async -> Int64?)?
 
     @Environment(\.dismiss)
     private var dismiss
@@ -15,11 +20,18 @@ struct QuickCleanView: View {
 
     init(
         onClean: @escaping @MainActor ([URL]) async -> CleanupResult,
-        onOpenSettings: (() -> Void)? = nil
+        onOpenSettings: (() -> Void)? = nil,
+        freeBytesProvider: (@MainActor () async -> Int64?)? = nil
     ) {
         self.onClean = onClean
         self.onOpenSettings = onOpenSettings
-        _viewModel = State(initialValue: QuickCleanViewModel(onClean: onClean))
+        self.freeBytesProvider = freeBytesProvider
+        _viewModel = State(
+            initialValue: QuickCleanViewModel(
+                onClean: onClean,
+                volumeProvider: freeBytesProvider ?? { nil }
+            )
+        )
     }
 
     var body: some View {
@@ -165,6 +177,8 @@ struct QuickCleanView: View {
         QuickCleanSuccessView(
             result: viewModel.lastResult,
             cleanedCategories: cleanedCategories(),
+            freeBytesBefore: viewModel.freeBytesAtStart,
+            freeBytesAfter: viewModel.freeBytesAtEnd,
             onScanAgain: { viewModel.startScan() },
             onClose: { dismiss() }
         )

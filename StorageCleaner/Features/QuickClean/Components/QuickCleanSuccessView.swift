@@ -2,12 +2,31 @@ import SwiftUI
 
 /// The terminal state of Quick Clean: either "Clean Complete!", "Nothing to
 /// clean", or "Cleanup failed". Includes an optional per-category breakdown
-/// of what was actually removed.
+/// of what was actually removed, and an optional "free before / after" pill
+/// when the caller captured disk-space snapshots.
 struct QuickCleanSuccessView: View {
     let result: CleanupResult?
     let cleanedCategories: [QuickCleanCategory]
+    let freeBytesBefore: Int64?
+    let freeBytesAfter: Int64?
     let onScanAgain: () -> Void
     let onClose: () -> Void
+
+    init(
+        result: CleanupResult?,
+        cleanedCategories: [QuickCleanCategory],
+        freeBytesBefore: Int64? = nil,
+        freeBytesAfter: Int64? = nil,
+        onScanAgain: @escaping () -> Void,
+        onClose: @escaping () -> Void
+    ) {
+        self.result = result
+        self.cleanedCategories = cleanedCategories
+        self.freeBytesBefore = freeBytesBefore
+        self.freeBytesAfter = freeBytesAfter
+        self.onScanAgain = onScanAgain
+        self.onClose = onClose
+    }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -34,6 +53,14 @@ struct QuickCleanSuccessView: View {
                     .padding(.top, 4)
             }
 
+            if showsDiskImpact {
+                FreeSpaceImpactPill(
+                    freeBytesBefore: freeBytesBefore ?? 0,
+                    freeBytesAfter: freeBytesAfter ?? 0
+                )
+                .padding(.top, 4)
+            }
+
             HStack(spacing: 12) {
                 Button("Close") { onClose() }
                     .buttonStyle(.bordered)
@@ -55,6 +82,11 @@ struct QuickCleanSuccessView: View {
             Spacer()
         }
         .padding(28)
+    }
+
+    private var showsDiskImpact: Bool {
+        guard let before = freeBytesBefore, let after = freeBytesAfter else { return false }
+        return before > 0 && after > 0
     }
 
     private var iconName: String {
@@ -110,5 +142,73 @@ struct QuickCleanSuccessView: View {
             )
         }
         .frame(maxWidth: 420)
+    }
+}
+
+/// Pill rendered inside the Quick Clean success view when the caller passed
+/// free-bytes snapshots. Shows the volume's free space before the cleanup
+/// and the freshly-captured free space after, plus a green "grew by X" call-out.
+private struct FreeSpaceImpactPill: View {
+    let freeBytesBefore: Int64
+    let freeBytesAfter: Int64
+
+    private var delta: Int64 {
+        freeBytesAfter - freeBytesBefore
+    }
+
+    private var tint: Color { delta > 0 ? AppTheme.mint : .secondary }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "internaldrive")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            Text("Free before")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+            Text(StorageFormatting.bytes(freeBytesBefore))
+                .font(.caption.weight(.semibold).monospacedDigit())
+            Image(systemName: "arrow.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Free after")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+            Text(StorageFormatting.bytes(freeBytesAfter))
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(tint)
+            if delta > 0 {
+                Text("+\(StorageFormatting.bytes(delta))")
+                    .font(.caption2.weight(.bold).monospacedDigit())
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(tint.opacity(0.12), in: Capsule())
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AppTheme.hairline, lineWidth: 1)
+        }
+        .frame(maxWidth: 420)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Free space \(StorageFormatting.bytes(freeBytesBefore)) before, "
+                + "\(StorageFormatting.bytes(freeBytesAfter)) after"
+                + (delta > 0 ? ", grew by \(StorageFormatting.bytes(delta))" : "")
+        )
     }
 }

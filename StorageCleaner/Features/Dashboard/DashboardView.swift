@@ -15,6 +15,12 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: AppTheme.contentSpacing) {
                     header
 
+                    StorageStatusCard(
+                        volume: viewModel.volumeSnapshot,
+                        totalReclaimableBytes: viewModel.totalReclaimableBytes,
+                        title: statusTitle
+                    )
+
                     switch viewModel.phase {
                     case .idle:
                         WelcomeHeroView(startScan: viewModel.startScan)
@@ -43,9 +49,10 @@ struct DashboardView: View {
                         ErrorStateView(message: message, retry: viewModel.startScan)
                     }
                 }
-                .padding(28)
+                .padding(20)
                 .animation(reduceMotion ? nil : .snappy(duration: 0.42), value: viewModel.phase)
             }
+            .onAppear { viewModel.refreshVolumeSnapshot() }
         }
         .navigationTitle("Overview")
         .toolbar {
@@ -71,23 +78,54 @@ struct DashboardView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                         onOpenSettings?()
                     }
+                },
+                freeBytesProvider: {
+                    viewModel.refreshVolumeSnapshot()
+                    return viewModel.volumeSnapshot.isAvailable
+                        ? viewModel.volumeSnapshot.freeBytes
+                        : nil
                 }
             )
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(greeting)
-                .font(.largeTitle.bold())
-            Text("Understand what is using space before deciding what to clean.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Label(viewModel.permissionSummary, systemImage: "lock.shield")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+                .font(.title.weight(.semibold))
+            if let permissionBanner {
+                Label(permissionBanner, systemImage: permissionBannerIcon)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(permissionBannerTint)
+            }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Permission banner copy. `nil` when every required scope is already
+    /// accessible — the banner only renders when there is something to act on,
+    /// so a healthy state stays quiet instead of repeating "Home Folder access
+    /// ready" on every visit.
+    private var permissionBanner: String? {
+        if viewModel.phase == .permissionRequired { return nil }
+        guard viewModel.hasPermissionIssues || !viewModel.warningPermissions.isEmpty else { return nil }
+        return viewModel.permissionSummary
+    }
+
+    private var permissionBannerIcon: String {
+        viewModel.hasPermissionIssues ? "lock.shield.fill" : "exclamationmark.shield"
+    }
+
+    private var permissionBannerTint: Color {
+        viewModel.hasPermissionIssues ? AppTheme.orange : AppTheme.orange
+    }
+
+    private var statusTitle: String {
+        switch viewModel.phase {
+        case .scanning: "Storage · Scanning…"
+        case .results: "Storage · After Cleanup"
+        default: "Storage"
+        }
     }
 
     @ViewBuilder

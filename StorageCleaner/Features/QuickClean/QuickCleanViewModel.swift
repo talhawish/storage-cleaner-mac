@@ -38,12 +38,24 @@ final class QuickCleanViewModel {
     private(set) var scan: QuickCleanScan = QuickCleanScan(categories: [])
     private(set) var selection: Set<URL> = []
     private(set) var lastResult: CleanupResult?
+    /// Free-bytes snapshot captured the moment the user opens the modal. Drives
+    /// the "free before / after" pill in the success view when a cleanup ran.
+    private(set) var freeBytesAtStart: Int64?
+    /// Free-bytes snapshot captured after the cleanup returns. Lets the success
+    /// view show the volume's actual free space after the move to Trash, even
+    /// when other apps are still writing.
+    private(set) var freeBytesAtEnd: Int64?
 
     private let onClean: @MainActor ([URL]) async -> CleanupResult
+    private let volumeProvider: @MainActor () async -> Int64?
     private var scanTask: Task<Void, Never>?
 
-    init(onClean: @escaping @MainActor ([URL]) async -> CleanupResult) {
+    init(
+        onClean: @escaping @MainActor ([URL]) async -> CleanupResult,
+        volumeProvider: @escaping @MainActor () async -> Int64? = { nil }
+    ) {
         self.onClean = onClean
+        self.volumeProvider = volumeProvider
     }
 
     // MARK: - Derived state
@@ -76,6 +88,11 @@ final class QuickCleanViewModel {
         scan = QuickCleanScan(categories: [])
         selection = []
         lastResult = nil
+        freeBytesAtStart = nil
+        freeBytesAtEnd = nil
+        Task { @MainActor [weak self] in
+            self?.freeBytesAtStart = await self?.volumeProvider()
+        }
 
         let scanner = QuickCleanScanner()
         scanTask = Task { [weak self] in
@@ -102,10 +119,11 @@ final class QuickCleanViewModel {
         guard !urls.isEmpty else { return }
         phase = .cleaning
 
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             let result = await onClean(urls)
             lastResult = result
+            freeBytesAtEnd = await self.volumeProvider()
             phase = .success
         }
     }

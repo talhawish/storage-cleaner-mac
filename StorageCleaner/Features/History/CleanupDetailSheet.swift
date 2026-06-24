@@ -64,26 +64,75 @@ struct CleanupDetailSheet: View {
     // MARK: - Sections
 
     private var summaryStats: some View {
-        HStack(spacing: AppTheme.Spacing.mediumLarge) {
-            AppModalStat(
-                title: "Storage Cleaned",
-                value: StorageFormatting.bytes(summary.totalBytesCleaned),
-                systemImage: "checkmark.circle.fill",
-                tint: AppTheme.mint
-            )
-            AppModalStat(
-                title: "Items Removed",
-                value: StorageFormatting.items(summary.totalItemsCleaned),
-                systemImage: "trash.fill",
-                tint: AppTheme.rose
-            )
-            AppModalStat(
-                title: "Scan Duration",
-                value: StorageFormatting.duration(.seconds(summary.durationSeconds)),
-                systemImage: "clock.fill",
-                tint: AppTheme.accent
-            )
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+            HStack(spacing: AppTheme.Spacing.mediumLarge) {
+                AppModalStat(
+                    title: "Storage Cleaned",
+                    value: StorageFormatting.bytes(summary.totalBytesCleaned),
+                    systemImage: "checkmark.circle.fill",
+                    tint: AppTheme.mint
+                )
+                AppModalStat(
+                    title: "Items Removed",
+                    value: StorageFormatting.items(summary.totalItemsCleaned),
+                    systemImage: "trash.fill",
+                    tint: AppTheme.rose
+                )
+                AppModalStat(
+                    title: "Scan Duration",
+                    value: StorageFormatting.duration(.seconds(summary.durationSeconds)),
+                    systemImage: "clock.fill",
+                    tint: AppTheme.accent
+                )
+            }
+            if summary.hasDiskSnapshot {
+                diskSpaceRow
+            }
         }
+    }
+
+    @ViewBuilder private var diskSpaceRow: some View {
+        let before = StorageFormatting.bytes(summary.freeBytesBefore)
+        let after = StorageFormatting.bytes(summary.freeBytesAfter)
+        let freed = summary.freedBytesByCleanup
+        HStack(spacing: AppTheme.Spacing.medium) {
+            Image(systemName: "internaldrive")
+                .foregroundStyle(AppTheme.cyan)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Free space")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+                if let freed, freed > 0 {
+                    Text(
+                        "\(before) → \(after) "
+                            + "(+\(StorageFormatting.bytes(freed)))"
+                    )
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                } else {
+                    Text("\(before) → \(after)")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(AppTheme.Spacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppTheme.cyan.opacity(0.08))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppTheme.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            freed.map { "Free space \(before) before, \(after) after, grew by \(StorageFormatting.bytes($0))" }
+                ?? "Free space \(before) before, \(after) after"
+        )
     }
 
     private var cleanupBreakdown: some View {

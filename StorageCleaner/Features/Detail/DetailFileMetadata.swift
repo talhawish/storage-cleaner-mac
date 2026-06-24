@@ -7,7 +7,7 @@ struct DetailFileMetadata: Equatable, Sendable {
     let displayName: String?
     let parentDisplayName: String?
 
-    static func load(for url: URL) -> DetailFileMetadata {
+    static func load(for url: URL, precomputedBytes: Int64? = nil) -> DetailFileMetadata {
         let fileManager = FileManager.default
         let exists = fileManager.fileExists(atPath: url.path)
         guard exists else {
@@ -20,10 +20,11 @@ struct DetailFileMetadata: Equatable, Sendable {
             )
         }
 
+        let bytes: Int64 = precomputedBytes ?? StorageFormatting.itemSize(at: url)
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
         return DetailFileMetadata(
             exists: true,
-            bytes: StorageFormatting.itemSize(at: url),
+            bytes: bytes,
             modifiedAt: values?.contentModificationDate,
             displayName: simulatorDisplayName(at: url),
             parentDisplayName: simulatorRuntimeName(at: url)

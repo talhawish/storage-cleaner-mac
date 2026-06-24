@@ -365,9 +365,10 @@ struct CategoryDetailView: View {
 
     private func loadFileMetadata() async {
         let urls = currentURLs
+        let pathBytes = finding.pathBytes
         let loaded = await Task.detached(priority: .utility) {
             let metadata = Dictionary(
-                urls.map { ($0, DetailFileMetadata.load(for: $0)) },
+                urls.map { ($0, DetailFileMetadata.load(for: $0, precomputedBytes: pathBytes[$0])) },
                 uniquingKeysWith: { first, _ in first }
             )
             let levels = Dictionary(

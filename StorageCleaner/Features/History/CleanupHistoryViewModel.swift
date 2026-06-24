@@ -28,9 +28,30 @@ struct CleanupScanSummary: Identifiable, Equatable, Sendable {
     let categories: [CleanupCategorySummary]
     let totalItemsCleaned: Int
     let totalBytesCleaned: Int64
+    /// Free bytes on the volume when the scan started. `0` for legacy scans
+    /// that pre-date the disk-tracking field.
+    let freeBytesBefore: Int64
+    /// Free bytes on the volume after every cleanup action for this scan ran.
+    /// `0` when no cleanup ran (a scan-only event) or the volume attributes
+    /// couldn't be re-read after the cleanup.
+    let freeBytesAfter: Int64
+    /// Total capacity of the volume the scan was run against. Used to render
+    /// the usage fraction and to gate the "free before / after" pill behind
+    /// `hasDiskSnapshot`.
+    let volumeTotalBytes: Int64
 
     var id: Int { scanID }
     var hasCleanup: Bool { !categories.isEmpty }
+    /// `true` when the persisted scan captured enough disk information to
+    /// render the "free before / after" pill. Older scans (and scans run
+    /// without FDA) leave this `false` so the UI gracefully omits the pill.
+    var hasDiskSnapshot: Bool { volumeTotalBytes > 0 }
+    /// Bytes the cleanup made available on the volume. `nil` until a cleanup
+    /// has actually run *and* the post-cleanup free bytes were captured.
+    var freedBytesByCleanup: Int64? {
+        guard hasCleanup, hasDiskSnapshot, freeBytesAfter > 0, freeBytesBefore > 0 else { return nil }
+        return max(0, freeBytesAfter - freeBytesBefore)
+    }
 }
 
 /// One row in the lifetime "Top Cleaned Categories" roll-up. Aggregates bytes and item counts for a
@@ -176,7 +197,10 @@ final class CleanupHistoryViewModel {
             reclaimableBytes: scan.reclaimableBytes,
             categories: categories,
             totalItemsCleaned: totalItems,
-            totalBytesCleaned: totalBytes
+            totalBytesCleaned: totalBytes,
+            freeBytesBefore: scan.freeBytesBefore,
+            freeBytesAfter: scan.freeBytesAfter,
+            volumeTotalBytes: scan.volumeTotalBytes
         )
     }
 }
