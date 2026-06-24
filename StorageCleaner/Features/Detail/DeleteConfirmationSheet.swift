@@ -9,16 +9,38 @@ struct DeleteConfirmationSheet: View {
 
     @State private var confirmed = false
 
+    private var allInTrash: Bool {
+        let trashPrefix = NSHomeDirectory() + "/.Trash/"
+        return selectedURLs.allSatisfy { $0.path.hasPrefix(trashPrefix) }
+    }
+
+    private var titleText: String {
+        if allInTrash {
+            return "Delete \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") permanently"
+        }
+        return "Move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") to Trash"
+    }
+
+    private var confirmLabel: String {
+        allInTrash ? "Delete Permanently" : "Move to Trash"
+    }
+
+    private var confirmIcon: String {
+        allInTrash ? "xmark.bin.fill" : "trash.fill"
+    }
+
     var body: some View {
         ConfirmationModal(
             variant: .destructive,
-            title: "Move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") to Trash",
-            subtitle: "Review the selected files before cleanup",
+            title: titleText,
+            subtitle: allInTrash
+                ? "These items are already in the Trash and will be permanently removed."
+                : "Review the selected files before cleanup",
             trailing: .sizeBadge(value: StorageFormatting.bytes(totalBytes), tint: AppTheme.rose),
             showsCloseButton: false,
             confirm: AppModalActionBar.Action(
-                title: "Move to Trash",
-                systemImage: "trash.fill",
+                title: confirmLabel,
+                systemImage: confirmIcon,
                 isProminent: true,
                 isDestructive: true,
                 isDisabled: confirmed,

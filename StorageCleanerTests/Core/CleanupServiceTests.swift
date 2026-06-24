@@ -40,4 +40,25 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.deletedItems.first?.bytesReclaimed ?? 0, 12_288)
         XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 12_288)
     }
+
+    func testDeletePermanentlyRemovesItemAlreadyInTrash() async throws {
+        let file = temporaryDirectory.appending(path: "trash-me.bin")
+        try Data(repeating: 3, count: 4_096).write(to: file)
+
+        var trashURL: NSURL?
+        try FileManager.default.trashItem(at: file, resultingItemURL: &trashURL)
+        guard let trashed = trashURL as? URL else {
+            return XCTFail("trashItem returned nil")
+        }
+
+        let result = await FileManagerCleanupService().delete(urls: [trashed])
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.deletedCount, 0)
+        XCTAssertEqual(result.deletedItems.count, 1)
+        XCTAssertEqual(result.deletedItems.first?.originalURL, trashed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: trashed.path))
+        XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 4_096)
+    }
 }

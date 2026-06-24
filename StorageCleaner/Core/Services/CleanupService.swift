@@ -75,14 +75,24 @@ struct FileManagerCleanupService: CleanupService {
             guard let size = sizeOfItem(at: url, fileManager: fileManager) else { break }
             guard !Task.isCancelled else { break }
 
-            do {
-                var resultingURL: NSURL?
-                try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
-                trashed.append(resultingURL as? URL ?? url)
-                deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
-                totalBytes += size
-            } catch {
-                failed.append((url, error))
+            if url.path.hasPrefix(NSHomeDirectory() + "/.Trash/") {
+                do {
+                    try fileManager.removeItem(at: url)
+                    deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
+                    totalBytes += size
+                } catch {
+                    failed.append((url, error))
+                }
+            } else {
+                do {
+                    var resultingURL: NSURL?
+                    try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
+                    trashed.append(resultingURL as? URL ?? url)
+                    deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
+                    totalBytes += size
+                } catch {
+                    failed.append((url, error))
+                }
             }
         }
 
