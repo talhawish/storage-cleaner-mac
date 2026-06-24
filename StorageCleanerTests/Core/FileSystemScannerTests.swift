@@ -338,8 +338,16 @@ final class FileSystemScannerTests: XCTestCase {
 
         let statuses = service.currentStatuses()
 
-        XCTAssertEqual(statuses.map(\.scope), StoragePermissionScope.allCases)
-        XCTAssertFalse(statuses.isEmpty)
+        XCTAssertEqual(statuses.map(\.scope), [.home])
+        XCTAssertEqual(statuses.first?.url, UserHomeDirectory.url)
+    }
+
+    func testPermissionServiceValidatesActualHomeFolder() {
+        let home = URL(filePath: "/Users/test", directoryHint: .isDirectory)
+        let downloads = home.appending(path: "Downloads", directoryHint: .isDirectory)
+
+        XCTAssertTrue(FileSystemPermissionService.isHomeFolder(home, homeDirectory: home))
+        XCTAssertFalse(FileSystemPermissionService.isHomeFolder(downloads, homeDirectory: home))
     }
 
     func testCLIAppScannerDetectsRustupViaHomePath() async throws {

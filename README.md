@@ -134,6 +134,80 @@ periphery scan --strict --disable-update-check --skip-build --index-store-path .
 Before opening a pull request, all checks must pass. New business logic and services require tests; critical
 cleanup and deletion workflows require complete branch coverage.
 
+## Distribution
+
+Build a signed, notarized `.app` for sharing with other developers.
+
+### Prerequisites
+
+- Apple Developer Program account
+- [Developer ID Application](https://developer.apple.com/account) certificate installed in your Keychain
+
+### One-time credential setup
+
+Create an [app-specific password](https://appleid.apple.com) named `StorageCleaner Notarization`,
+then store it for `notarytool`:
+
+```bash
+xcrun notarytool store-credentials "StorageCleaner" \
+  --apple-id "muhammadrizwan5040@gmail.com" \
+  --team-id "848R6Y8374"
+```
+
+### Archive, notarize, and staple
+
+```bash
+# 1. Archive with Developer ID signing
+xcodebuild archive -project StorageCleaner.xcodeproj \
+  -scheme StorageCleaner -configuration Release \
+  -archivePath ~/Desktop/StorageCleaner.xcarchive \
+  CODE_SIGN_IDENTITY="Developer ID Application" \
+  CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=848R6Y8374
+
+# 2. Export the signed app
+cat > /tmp/ExportOptions.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>teamID</key>
+    <string>848R6Y8374</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+</dict>
+</plist>
+EOF
+
+xcodebuild -exportArchive \
+  -archivePath ~/Desktop/StorageCleaner.xcarchive \
+  -exportPath ~/Desktop/StorageCleaner-Exported \
+  -exportOptionsPlist /tmp/ExportOptions.plist
+
+# 3. Create a zip for notarization
+ditto -c -k --sequesterRsrc --keepParent \
+  ~/Desktop/StorageCleaner-Exported/StorageCleaner.app \
+  ~/Desktop/StorageCleaner.zip
+
+# 4. Submit to Apple's notary service
+xcrun notarytool submit ~/Desktop/StorageCleaner.zip \
+  --keychain-profile "StorageCleaner" \
+  --wait
+
+# 5. Staple the ticket to the app
+xcrun stapler staple ~/Desktop/StorageCleaner-Exported/StorageCleaner.app
+
+# 6. Re-zip the stapled app (the final distributable)
+ditto -c -k --sequesterRsrc --keepParent \
+  ~/Desktop/StorageCleaner-Exported/StorageCleaner.app \
+  ~/Desktop/StorageCleaner-Notarized.zip
+```
+
+The final `StorageCleaner-Notarized.zip` opens normally on any Mac without Gatekeeper warnings.
+Share it with your friend — they just unzip and drag to `/Applications`.
+
 ## Project structure
 
 ```text

@@ -37,7 +37,7 @@ struct DashboardView: View {
                         PermissionRequiredView(
                             blockedPermissions: viewModel.blockedPermissions,
                             onOpenSettings: viewModel.openSystemSettings,
-                            onRetry: viewModel.retryAfterPermission
+                            onGrantAccess: viewModel.grantHomeFolderAccess
                         )
                     case let .failed(message):
                         ErrorStateView(message: message, retry: viewModel.startScan)

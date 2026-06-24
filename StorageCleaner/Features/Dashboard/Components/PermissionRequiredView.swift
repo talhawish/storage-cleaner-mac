@@ -1,120 +1,195 @@
 import SwiftUI
 
+/// "Allow Home Folder Access" hero shown on the Overview and every section
+/// that needs Home access to start a scan.
+///
+/// Replaces the old text-heavy modal-style card with an inviting
+/// graphic-first composition: an animated folder orb with six
+/// developer-domain chips orbiting around it, a single primary CTA, and a
+/// tiny security pill. Copy is reduced to one headline + one sentence + one
+/// trust line, so the user can grasp the ask in a glance.
 struct PermissionRequiredView: View {
     let blockedPermissions: [StoragePermissionStatus]
     let onOpenSettings: () -> Void
-    let onRetry: () -> Void
+    let onGrantAccess: () -> Void
 
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
-    @State private var isPulsing = false
-    @State private var retryAttempt = 0
 
     var body: some View {
-        VStack(spacing: 26) {
-            animatedIcon
+        VStack(spacing: AppTheme.Spacing.extraLarge) {
+            PermissionRequiredHero(reduceMotion: reduceMotion)
+                .padding(.top, AppTheme.Spacing.medium)
+                .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
-                Text("Storage Cleaner needs access")
-                    .font(.title2.weight(.semibold))
-                    .accessibilityAddTraits(.isHeader)
+            headline
 
-                Text("Some storage locations couldn't be read. Grant Full Disk Access "
-                    + "so the scanner can inspect developer folders, caches, and media.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 440)
-            }
+            CoveredScopeRow()
+                .padding(.horizontal, AppTheme.Spacing.small)
 
-            blockedLocationsList
+            actions
 
-            guidanceSteps
-
-            HStack(spacing: 12) {
-                Button(action: onRetry) {
-                    Label("Retry", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .accessibilityIdentifier("permission-retry-button")
-
-                Button(action: onOpenSettings) {
-                    Label("Open System Settings", systemImage: "gearshape.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("permission-open-settings-button")
-            }
+            TrustPill()
         }
-        .padding(40)
-        .frame(maxWidth: .infinity, minHeight: 440)
-        .cardSurface()
-        .id(retryAttempt)
-        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        .padding(.horizontal, 48)
+        .padding(.vertical, 56)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("permission-guide-card")
     }
 
-    private var animatedIcon: some View {
-        ZStack {
-            Circle()
-                .fill(AppTheme.orange.opacity(0.06))
-                .frame(width: 132, height: 132)
-                .scaleEffect(isPulsing ? 1.12 : 1.0)
+    // MARK: - Headline
 
-            Circle()
-                .fill(AppTheme.orange.opacity(0.12))
-                .frame(width: 104, height: 104)
-                .scaleEffect(isPulsing ? 1.06 : 1.0)
+    private var headline: some View {
+        VStack(spacing: AppTheme.Spacing.small) {
+            Text("Grant Home access")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
 
-            Image(systemName: "lock.shield.fill")
-                .font(.system(size: 46, weight: .medium))
-                .foregroundStyle(AppTheme.orange)
-        }
-        .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
+            Text("One permission lets Storage Cleaner see your Mac — and find what to clean.")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .frame(maxWidth: 480)
         }
     }
 
-    private var blockedLocationsList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(blockedPermissions) { permission in
-                HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(AppTheme.orange)
-                        .accessibilityHidden(true)
+    // MARK: - Actions
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(permission.scope.title)
-                            .font(.subheadline.weight(.medium))
-                        Text(permission.state.guidance)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+    private var actions: some View {
+        VStack(spacing: AppTheme.Spacing.small) {
+            Button(action: onGrantAccess) {
+                Label("Choose Home Folder", systemImage: "folder.badge.plus")
+                    .font(.headline)
+                    .frame(minWidth: 240)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.defaultAction)
+            .accessibilityIdentifier("permission-choose-home")
+            .accessibilityHint("Opens Finder so you can select your Home folder")
+
+            Button("Open System Settings", systemImage: "gearshape", action: onOpenSettings)
+                .buttonStyle(.link)
+                .controlSize(.small)
+                .accessibilityIdentifier("permission-open-system-settings")
+        }
+    }
+}
+
+// MARK: - Covered scope row
+
+/// One row of small, breathing icon chips that names the locations the Home
+/// permission covers. Each chip pairs an SF Symbol with a short label
+/// (Desktop, Documents, …), so the visual inventory reads as a glance-able
+/// promise rather than a paragraph of explanation.
+private struct CoveredScopeRow: View {
+    private struct Item: Identifiable {
+        let id: String
+        let symbol: String
+        let color: Color
+    }
+
+    private let items: [Item] = [
+        Item(id: "Desktop", symbol: "desktopcomputer", color: AppTheme.accent),
+        Item(id: "Documents", symbol: "doc.fill", color: AppTheme.cyan),
+        Item(id: "Downloads", symbol: "arrow.down.circle.fill", color: AppTheme.violet),
+        Item(id: "Movies", symbol: "film.fill", color: AppTheme.pink),
+        Item(id: "Pictures", symbol: "photo.fill", color: AppTheme.orange),
+        Item(id: "Library", symbol: "books.vertical.fill", color: AppTheme.indigo)
+    ]
+
+    var body: some View {
+        HStack(spacing: AppTheme.Spacing.small) {
+            ForEach(items) { item in
+                CoveredScopeChip(symbol: item.symbol, color: item.color, title: item.id)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Home access covers Desktop, Documents, Downloads, Movies, Pictures, and Library.")
+    }
+}
+
+/// A small icon + label pill used in the `CoveredScopeRow`. Each chip
+/// breathes gently to keep the row feeling alive.
+private struct CoveredScopeChip: View {
+    let symbol: String
+    let color: Color
+    let title: String
+
+    @Environment(\.accessibilityReduceMotion)
+    private var reduceMotion
+    @State private var isBreathing = false
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(isBreathing ? 0.20 : 0.12))
+                    .frame(width: 42, height: 42)
+                    .scaleEffect(isBreathing ? 1.04 : 1.0)
+
+                Circle()
+                    .fill(.regularMaterial)
+                    .frame(width: 34, height: 34)
+                    .overlay {
+                        Circle().strokeBorder(color.opacity(0.25), lineWidth: 0.5)
                     }
 
-                    Spacer()
-                }
-                .padding(12)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(permission.scope.title), \(permission.state.guidance)")
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(color)
+                    .accessibilityHidden(true)
+            }
+
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                isBreathing = true
             }
         }
-        .frame(maxWidth: 480)
     }
+}
 
-    private var guidanceSteps: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Open System Settings → Privacy & Security", systemImage: "1.circle.fill")
-            Label("Enable Full Disk Access for Storage Cleaner", systemImage: "2.circle.fill")
-            Label("Click Retry to scan again", systemImage: "3.circle.fill")
+// MARK: - Trust pill
+
+/// A small mint-tinted pill that reassures the user the Home bookmark is
+/// stored by macOS — never uploaded, never persisted outside the app's
+/// security scope.
+/// A small mint-tinted pill that reassures the user — Apple style — that
+/// the grant stays on their Mac and they can revoke it whenever. Wording
+/// is deliberately non-technical: the user doesn't need to know what a
+/// security-scoped bookmark is, only that nothing leaves their machine and
+/// they stay in control.
+private struct TrustPill: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "lock.shield.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.mint)
+                .accessibilityHidden(true)
+            Text("Your files stay on your Mac. You can revoke this any time.")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
         }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: 480, alignment: .leading)
-        .accessibilityElement(children: .contain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(AppTheme.mint.opacity(0.10), in: Capsule())
+        .overlay {
+            Capsule().stroke(AppTheme.mint.opacity(0.22), lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Your files stay on your Mac. You can revoke this any time.")
     }
 }

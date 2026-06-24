@@ -65,7 +65,7 @@ actor AppInventoryService {
 
         let searchPaths = [
             "/Applications",
-            NSHomeDirectory() + "/Applications"
+            UserHomeDirectory.url.appendingPathComponent("Applications").path
         ]
 
         for searchPath in searchPaths {

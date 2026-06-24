@@ -11,21 +11,16 @@ struct LeftoversView: View {
     @State private var typeFilter: LeftoverTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
     @State private var showDeleteConfirmation = false
+    @State private var allRecords: [FindingFileRecord] = []
+    @State private var isLoadingRecords = false
 
-    private var allRecords: [LeftoverRecord] {
-        findings.flatMap { finding in
-            finding.filePaths.map { url in
-                LeftoverRecord(
-                    url: url,
-                    kind: finding.kind,
-                    bytes: StorageFormatting.itemSize(at: url)
-                )
-            }
-        }
-    }
+    private var recordsIdentity: FindingFileRecordsIdentity { FindingFileRecordsIdentity(findings: findings) }
+    private var hasScannedPaths: Bool { findings.contains { !$0.filePaths.isEmpty } }
+    private var loadedRecords: [FindingFileRecord] { hasScannedPaths ? allRecords : [] }
+    private var isPreparingRecords: Bool { hasScannedPaths && (isLoadingRecords || loadedRecords.isEmpty) }
 
-    private var filteredRecords: [LeftoverRecord] {
-        allRecords
+    private var filteredRecords: [FindingFileRecord] {
+        loadedRecords
             .filter { typeFilter.contains($0.kind) }
             .sorted { $0.bytes > $1.bytes }
     }
@@ -35,14 +30,14 @@ struct LeftoversView: View {
     }
 
     private var totalSelectedBytes: Int64 {
-        selectedURLs.reduce(Int64(0)) { total, url in
-            total + StorageFormatting.itemSize(at: url)
-        }
+        FindingFileRecordBuilder.totalSelectedBytes(selectedURLs: selectedURLs, records: loadedRecords)
     }
 
     var body: some View {
         Group {
-            if allRecords.isEmpty {
+            if isPreparingRecords {
+                preparingRecordsView
+            } else if allRecords.isEmpty {
                 EmptyStateView(
                     title: "Nothing to clean here",
                     message: "No leftover disk images, packages, or app bundles turned up in the "
@@ -59,6 +54,9 @@ struct LeftoversView: View {
         .navigationTitle("Leftovers")
         .navigationSubtitle("\(filteredRecords.count) items · \(StorageFormatting.bytes(totalBytes))")
         .accessibilityIdentifier("leftovers-root")
+        .task(id: recordsIdentity) {
+            await loadRecords()
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {
@@ -106,6 +104,21 @@ struct LeftoversView: View {
         }
     }
 
+    private var preparingRecordsView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.large)
+            Text("Calculating leftover sizes")
+                .font(.headline)
+            Text("Installer packages are measured in the background before filtering.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Calculating leftover sizes")
+    }
+
     private var content: some View {
         List {
             typeSection
@@ -139,6 +152,7 @@ struct LeftoversView: View {
                     url: record.url,
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
+                    metadata: record.detailMetadata,
                     onToggle: { toggle(record.url) }
                 )
             }
@@ -179,14 +193,19 @@ struct LeftoversView: View {
             selectedURLs.insert(url)
         }
     }
-}
 
-private struct LeftoverRecord: Identifiable, Equatable {
-    let url: URL
-    let kind: StorageFindingKind
-    let bytes: Int64
+    private func loadRecords() async {
+        let findings = findings
+        isLoadingRecords = true
+        let records = await Task.detached(priority: .utility) {
+            FindingFileRecordBuilder.records(from: findings)
+        }.value
+        guard !Task.isCancelled else { return }
 
-    var id: URL { url }
+        allRecords = records
+        selectedURLs.formIntersection(Set(records.map(\.url)))
+        isLoadingRecords = false
+    }
 }
 
 private enum LeftoverTypeFilter: String, CaseIterable {

@@ -28,7 +28,7 @@ extension AppShellView {
             PermissionRequiredView(
                 blockedPermissions: viewModel.blockedPermissions,
                 onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
+                onGrantAccess: viewModel.grantHomeFolderAccess
             )
             .padding(28)
         case let .failed(message):
@@ -96,7 +96,7 @@ extension AppShellView {
             PermissionRequiredView(
                 blockedPermissions: viewModel.blockedPermissions,
                 onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
+                onGrantAccess: viewModel.grantHomeFolderAccess
             )
             .padding(28)
         case let .failed(message):
@@ -146,7 +146,7 @@ extension AppShellView {
             PermissionRequiredView(
                 blockedPermissions: viewModel.blockedPermissions,
                 onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
+                onGrantAccess: viewModel.grantHomeFolderAccess
             )
             .padding(28)
         case let .failed(message):
@@ -196,7 +196,7 @@ extension AppShellView {
             PermissionRequiredView(
                 blockedPermissions: viewModel.blockedPermissions,
                 onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
+                onGrantAccess: viewModel.grantHomeFolderAccess
             )
             .padding(28)
         case let .failed(message):
@@ -247,7 +247,7 @@ extension AppShellView {
             PermissionRequiredView(
                 blockedPermissions: viewModel.blockedPermissions,
                 onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
+                onGrantAccess: viewModel.grantHomeFolderAccess
             )
             .padding(28)
         case let .failed(message):
@@ -299,7 +299,7 @@ extension AppShellView {
             PermissionRequiredView(
                 blockedPermissions: viewModel.blockedPermissions,
                 onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
+                onGrantAccess: viewModel.grantHomeFolderAccess
             )
             .padding(28)
         case let .failed(message):
@@ -350,7 +350,7 @@ extension AppShellView {
             PermissionRequiredView(
                 blockedPermissions: viewModel.blockedPermissions,
                 onOpenSettings: viewModel.openSystemSettings,
-                onRetry: viewModel.retryAfterPermission
+                onGrantAccess: viewModel.grantHomeFolderAccess
             )
             .padding(28)
         case let .failed(message):

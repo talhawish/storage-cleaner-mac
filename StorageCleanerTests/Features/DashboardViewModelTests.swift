@@ -59,8 +59,8 @@ final class DashboardViewModelTests: XCTestCase {
         let handler = StubPermissionHandler(
             statuses: [
                 StoragePermissionStatus(
-                    scope: .downloads,
-                    url: URL(filePath: "/Users/test/Downloads"),
+                    scope: .home,
+                    url: URL(filePath: "/Users/test"),
                     state: .denied
                 )
             ]
@@ -74,7 +74,7 @@ final class DashboardViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.phase, .permissionRequired)
         XCTAssertEqual(viewModel.blockedPermissions.count, 1)
-        XCTAssertEqual(viewModel.blockedPermissions.first?.scope, .downloads)
+        XCTAssertEqual(viewModel.blockedPermissions.first?.scope, .home)
         XCTAssertTrue(viewModel.hasPermissionIssues)
     }
 
@@ -82,8 +82,8 @@ final class DashboardViewModelTests: XCTestCase {
         let handler = StubPermissionHandler(
             statuses: [
                 StoragePermissionStatus(
-                    scope: .downloads,
-                    url: URL(filePath: "/Users/test/Downloads"),
+                    scope: .home,
+                    url: URL(filePath: "/Users/test"),
                     state: .denied
                 )
             ]
@@ -98,8 +98,8 @@ final class DashboardViewModelTests: XCTestCase {
 
         handler.statuses = [
             StoragePermissionStatus(
-                scope: .downloads,
-                url: URL(filePath: "/Users/test/Downloads"),
+                scope: .home,
+                url: URL(filePath: "/Users/test"),
                 state: .accessible
             )
         ]
@@ -120,7 +120,7 @@ final class DashboardViewModelTests: XCTestCase {
                 StoragePermissionStatus(
                     scope: scope,
                     url: URL(filePath: "/Users/test/\(scope.rawValue)"),
-                    state: scope == .downloads ? .denied : .accessible
+                    state: scope == .home ? .denied : .accessible
                 )
             }
         )
@@ -130,8 +130,8 @@ final class DashboardViewModelTests: XCTestCase {
         )
 
         let summary = viewModel.permissionSummary
-        XCTAssertTrue(summary.contains("6 of 7"))
-        XCTAssertTrue(summary.contains("Downloads"))
+        XCTAssertTrue(summary.contains("Home Folder access required"))
+        XCTAssertTrue(summary.contains("/Users/test/home"))
         XCTAssertTrue(viewModel.hasPermissionIssues)
     }
 

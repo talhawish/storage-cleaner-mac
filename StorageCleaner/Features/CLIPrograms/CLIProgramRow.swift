@@ -92,7 +92,7 @@ struct CLIProgramRow: View {
 
 /// Shared helper for rendering filesystem paths with `~` for the home directory.
 enum StoragePathFormatting {
-    private static let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+    private static let homePath = UserHomeDirectory.path
 
     static func abbreviatingHome(_ url: URL) -> String {
         let path = url.path

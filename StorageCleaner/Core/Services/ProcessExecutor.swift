@@ -35,52 +35,134 @@ protocol ProcessExecuting: Sendable {
     func run(executable: URL, arguments: [String]) async throws -> ProcessRunResult
 }
 
-/// Runs `/usr/bin/ditto` synchronously on a background thread and collects both
-/// output streams. `Process` itself is single-shot and not `Sendable`, so the
-/// work is dispatched off the main actor and the result is returned as a value
-/// type.
+/// Runs a subprocess and collects both output streams while the process is
+/// still executing so a verbose child cannot block on a full pipe buffer.
 struct SystemProcessExecutor: ProcessExecuting {
     func run(executable: URL, arguments: [String]) async throws -> ProcessRunResult {
         try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = executable
-                process.arguments = arguments
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
 
-                let stdoutPipe = Pipe()
-                let stderrPipe = Pipe()
-                process.standardOutput = stdoutPipe
-                process.standardError = stderrPipe
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            let stdout = LockedDataBuffer()
+            let stderr = LockedDataBuffer()
+            let state = RunningProcessState(
+                process: process,
+                stdoutPipe: stdoutPipe,
+                stderrPipe: stderrPipe,
+                stdout: stdout,
+                stderr: stderr
+            )
 
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: error)
-                    return
-                }
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
 
-                process.waitUntilExit()
-                let outData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let result = ProcessRunResult(
-                    exitCode: process.terminationStatus,
-                    standardOutput: outData,
-                    standardError: errData
+            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                stdout.append(handle.availableData)
+            }
+            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+                stderr.append(handle.availableData)
+            }
+            process.terminationHandler = { finishedProcess in
+                state.closePipeHandlers()
+                state.drainRemainingPipeData()
+                state.finish(
+                    executable: executable,
+                    arguments: arguments,
+                    terminationStatus: finishedProcess.terminationStatus,
+                    terminationReason: finishedProcess.terminationReason,
+                    continuation: continuation
                 )
-                if process.terminationReason == .uncaughtSignal {
-                    continuation.resume(
-                        throwing: ProcessRunError(
-                            executable: executable.path,
-                            arguments: arguments,
-                            exitCode: process.terminationStatus,
-                            standardError: errData
-                        )
-                    )
-                    return
-                }
-                continuation.resume(returning: result)
+            }
+
+            do {
+                try process.run()
+            } catch {
+                state.closePipeHandlers()
+                continuation.resume(throwing: error)
             }
         }
+    }
+}
+
+private final class RunningProcessState: @unchecked Sendable {
+    private let process: Process
+    private let stdoutPipe: Pipe
+    private let stderrPipe: Pipe
+    private let stdout: LockedDataBuffer
+    private let stderr: LockedDataBuffer
+
+    init(
+        process: Process,
+        stdoutPipe: Pipe,
+        stderrPipe: Pipe,
+        stdout: LockedDataBuffer,
+        stderr: LockedDataBuffer
+    ) {
+        self.process = process
+        self.stdoutPipe = stdoutPipe
+        self.stderrPipe = stderrPipe
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+
+    func closePipeHandlers() {
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        process.terminationHandler = nil
+    }
+
+    func drainRemainingPipeData() {
+        stdout.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+        stderr.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+    }
+
+    func finish(
+        executable: URL,
+        arguments: [String],
+        terminationStatus: Int32,
+        terminationReason: Process.TerminationReason,
+        continuation: CheckedContinuation<ProcessRunResult, any Error>
+    ) {
+        let outData = stdout.data()
+        let errData = stderr.data()
+        if terminationReason == .uncaughtSignal {
+            continuation.resume(
+                throwing: ProcessRunError(
+                    executable: executable.path,
+                    arguments: arguments,
+                    exitCode: terminationStatus,
+                    standardError: errData
+                )
+            )
+            return
+        }
+
+        continuation.resume(
+            returning: ProcessRunResult(
+                exitCode: terminationStatus,
+                standardOutput: outData,
+                standardError: errData
+            )
+        )
+    }
+}
+
+private final class LockedDataBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = Data()
+
+    func append(_ data: Data) {
+        guard !data.isEmpty else { return }
+        lock.withLock {
+            storage.append(data)
+        }
+    }
+
+    func data() -> Data {
+        lock.withLock { storage }
     }
 }
 

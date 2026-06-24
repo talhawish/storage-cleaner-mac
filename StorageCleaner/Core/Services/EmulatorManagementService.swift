@@ -256,7 +256,7 @@ extension EmulatorManagementService {
             for key in ["ANDROID_SDK_ROOT", "ANDROID_HOME"] where environment[key] != nil {
                 if let path = environment[key] { roots.append(URL(fileURLWithPath: path)) }
             }
-            roots.append(fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Android/sdk"))
+            roots.append(UserHomeDirectory.url.appendingPathComponent("Library/Android/sdk"))
             for root in roots {
                 let images = root.appendingPathComponent("system-images")
                 if fileManager.fileExists(atPath: images.path) { return images }

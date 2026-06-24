@@ -42,23 +42,38 @@ protocol CleanupService: Sendable {
 
 struct FileManagerCleanupService: CleanupService {
     func delete(urls: [URL]) async -> CleanupResult {
+        guard !urls.isEmpty else {
+            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+        }
+
+        let task = Task.detached(priority: .userInitiated) {
+            Self.deleteSynchronously(urls: urls)
+        }
+
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private static func deleteSynchronously(urls: [URL]) -> CleanupResult {
         let fileManager = FileManager.default
         var trashed: [URL] = []
         var deletedItems: [DeletedItem] = []
         var failed: [(URL, Error)] = []
         var totalBytes: Int64 = 0
 
-        guard !urls.isEmpty else {
-            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
-        }
-
         for url in urls {
+            guard !Task.isCancelled else { break }
+
             guard fileManager.fileExists(atPath: url.path) else {
                 failed.append((url, CleanupError.fileNotFound(url)))
                 continue
             }
 
-            let size = sizeOfItem(at: url, fileManager: fileManager)
+            guard let size = sizeOfItem(at: url, fileManager: fileManager) else { break }
+            guard !Task.isCancelled else { break }
 
             do {
                 var resultingURL: NSURL?
@@ -79,7 +94,9 @@ struct FileManagerCleanupService: CleanupService {
         )
     }
 
-    private func sizeOfItem(at url: URL, fileManager: FileManager) -> Int64 {
+    private static func sizeOfItem(at url: URL, fileManager: FileManager) -> Int64? {
+        guard !Task.isCancelled else { return nil }
+
         let resourceKeys: [URLResourceKey] = [.fileAllocatedSizeKey, .fileSizeKey, .isDirectoryKey]
         let values = try? url.resourceValues(forKeys: Set(resourceKeys))
 
@@ -90,7 +107,7 @@ struct FileManagerCleanupService: CleanupService {
         return Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
     }
 
-    private func directorySize(at url: URL, fileManager: FileManager) -> Int64 {
+    private static func directorySize(at url: URL, fileManager: FileManager) -> Int64? {
         let resourceKeys: [URLResourceKey] = [.fileAllocatedSizeKey, .fileSizeKey, .isRegularFileKey]
         guard let enumerator = fileManager.enumerator(
             at: url,
@@ -102,6 +119,7 @@ struct FileManagerCleanupService: CleanupService {
 
         var total: Int64 = 0
         for case let childURL as URL in enumerator {
+            guard !Task.isCancelled else { return nil }
             let values = try? childURL.resourceValues(forKeys: Set(resourceKeys))
             guard values?.isRegularFile == true else { continue }
             total += Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)

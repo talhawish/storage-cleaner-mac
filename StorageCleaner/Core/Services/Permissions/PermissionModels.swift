@@ -46,7 +46,7 @@ enum StoragePermissionState: Equatable, Sendable {
         switch self {
         case .accessible: "Accessible"
         case .missing: "Folder does not exist"
-        case .denied: "Needs Full Disk Access in System Settings"
+        case .denied: "Choose your Home folder to grant access"
         }
     }
 }

@@ -104,7 +104,7 @@ enum CLIProgramCatalog {
     /// Canonical install locations probed regardless of scan state. Mirrors the
     /// roots in `DependencyPaths.CLI` but owned here so discovery is self-contained.
     static let canonicalRoots: [URL] = {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = UserHomeDirectory.url
         func at(_ path: String) -> URL { home.appendingPathComponent(path) }
         return [
             // Homebrew (both Apple Silicon and Intel prefixes).

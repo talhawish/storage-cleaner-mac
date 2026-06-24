@@ -52,78 +52,6 @@ final class DashboardViewModel {
         permissionStatuses = permissionHandler.currentStatuses()
     }
 
-    var isScanning: Bool {
-        phase == .scanning
-    }
-
-    var blockedPermissions: [StoragePermissionStatus] {
-        permissionStatuses.filter { $0.state == .denied && $0.scope.isBlocking }
-    }
-
-    var hasPermissionIssues: Bool {
-        !blockedPermissions.isEmpty
-    }
-
-    var warningPermissions: [StoragePermissionStatus] {
-        permissionStatuses.filter { $0.state == .denied && !$0.scope.isBlocking }
-    }
-
-    var permissionSummary: String {
-        let accessibleCount = permissionStatuses.filter { $0.state == .accessible }.count
-        if let blockedStatus = permissionStatuses.first(where: { $0.state != .accessible && $0.scope.isBlocking }) {
-            return "\(accessibleCount) of \(permissionStatuses.count) locations accessible; "
-                + "\(blockedStatus.scope.title) needs review at \(blockedStatus.url.lastPathComponent)"
-        }
-
-        let warningCount = warningPermissions.count
-        if warningCount > 0 {
-            let locationWord = warningCount == 1 ? "location" : "locations"
-            let needWord = warningCount == 1 ? "needs" : "need"
-            return "\(accessibleCount) of \(permissionStatuses.count) locations accessible; "
-                + "\(warningCount) \(locationWord) \(needWord) Full Disk Access"
-        }
-
-        return "All \(permissionStatuses.count) storage locations accessible"
-    }
-
-    func startScan() {
-        startScan(kinds: nil)
-    }
-
-    func startScan(for kinds: [StorageFindingKind]) {
-        startScan(kinds: kinds)
-    }
-
-    private func startScan(kinds: [StorageFindingKind]?) {
-        guard !isScanning else { return }
-        pendingScanKinds = kinds.map(Set.init)
-        selectedFinding = nil
-
-        permissionStatuses = permissionHandler.currentStatuses()
-
-        guard !hasPermissionIssues else {
-            phase = .permissionRequired
-            return
-        }
-
-        beginScanning(for: pendingScanKinds)
-    }
-
-    func retryAfterPermission() {
-        permissionStatuses = permissionHandler.currentStatuses()
-
-        guard !hasPermissionIssues else {
-            return
-        }
-
-        beginScanning(for: pendingScanKinds)
-    }
-
-    func openSystemSettings() {
-        guard let url = SystemSettingsPane.fullDiskAccess.url else { return }
-        NSWorkspace.shared.open(url)
-    }
-
     func cancelScan() {
         scanTask?.cancel()
         scanTask = nil
@@ -314,9 +242,6 @@ final class DashboardViewModel {
         historyStore.recordCleanupActions(entries)
     }
 
-    /// Cap the number of sample paths persisted per audit entry. The full list is in the
-    /// live `DeletedItem` records (and ultimately Trash); the audit just needs enough
-    /// representative paths to be useful in the Cleanup History detail sheet.
     private static let samplePathLimit = 5
 
     private static func samplePaths<S: Sequence>(from paths: S) -> [URL] where S.Element == URL {
@@ -362,12 +287,6 @@ final class DashboardViewModel {
         }
     }
 
-    /// `true` when the most recent scan covered every kind in `kinds`. Used
-    /// by per-section views to distinguish "we scanned this section, no
-    /// results" (empty state) from "we haven't scanned this section yet"
-    /// (initial state) when the snapshot happens to have no findings for
-    /// this section — e.g. a Developer-only scan leaving Screenshots empty
-    /// in the global snapshot.
     func hasScanned(_ kinds: [StorageFindingKind]) -> Bool {
         guard !kinds.isEmpty else { return false }
         switch lastCompletedScan {
@@ -435,7 +354,89 @@ final class DashboardViewModel {
     }
 }
 
-// MARK: - Overview aggregation
+// MARK: - Scan controls and permissions
+
+extension DashboardViewModel {
+    var isScanning: Bool {
+        phase == .scanning
+    }
+
+    var blockedPermissions: [StoragePermissionStatus] {
+        permissionStatuses.filter { $0.state == .denied && $0.scope.isBlocking }
+    }
+
+    var hasPermissionIssues: Bool {
+        !blockedPermissions.isEmpty
+    }
+
+    var warningPermissions: [StoragePermissionStatus] {
+        permissionStatuses.filter { $0.state == .denied && !$0.scope.isBlocking }
+    }
+
+    var permissionSummary: String {
+        let accessibleCount = permissionStatuses.filter { $0.state == .accessible }.count
+        if let blockedStatus = permissionStatuses.first(where: { $0.state != .accessible && $0.scope.isBlocking }) {
+            return "\(blockedStatus.scope.title) access required; choose \(blockedStatus.url.path)"
+        }
+
+        let warningCount = warningPermissions.count
+        if warningCount > 0 {
+            let locationWord = warningCount == 1 ? "location" : "locations"
+            let needWord = warningCount == 1 ? "needs" : "need"
+            return "\(accessibleCount) of \(permissionStatuses.count) locations accessible; "
+                + "\(warningCount) \(locationWord) \(needWord) Full Disk Access"
+        }
+
+        return "Home Folder access ready"
+    }
+
+    func startScan() {
+        startScan(kinds: nil)
+    }
+
+    func startScan(for kinds: [StorageFindingKind]) {
+        startScan(kinds: kinds)
+    }
+
+    private func startScan(kinds: [StorageFindingKind]?) {
+        guard !isScanning else { return }
+        pendingScanKinds = kinds.map(Set.init)
+        selectedFinding = nil
+
+        permissionStatuses = permissionHandler.currentStatuses()
+
+        guard !hasPermissionIssues else {
+            phase = .permissionRequired
+            return
+        }
+
+        beginScanning(for: pendingScanKinds)
+    }
+
+    func retryAfterPermission() {
+        permissionStatuses = permissionHandler.currentStatuses()
+
+        if hasPermissionIssues {
+            _ = permissionHandler.requestHomeFolderAccess()
+            permissionStatuses = permissionHandler.currentStatuses()
+        }
+
+        guard !hasPermissionIssues else {
+            return
+        }
+
+        beginScanning(for: pendingScanKinds)
+    }
+
+    func grantHomeFolderAccess() {
+        retryAfterPermission()
+    }
+
+    func openSystemSettings() {
+        guard let url = SystemSettingsPane.fullDiskAccess.url else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
 
 extension DashboardViewModel {
     /// Top domains for the Overview breakdown grid, with the long tail folded into "Other".
@@ -466,9 +467,6 @@ extension DashboardViewModel {
         snapshot?.findings.first { $0.kind == kind }
     }
 
-    /// Best-effort stale detection: samples a few paths per developer-storage finding off the main
-    /// thread and flags domains whose newest sampled file is older than the threshold. Degrades
-    /// silently — if sampling finds nothing, the stale tip simply never appears.
     func refreshStaleHints() {
         staleTask?.cancel()
         let samples = (snapshot?.findings ?? [])
@@ -494,7 +492,6 @@ extension DashboardViewModel {
         }
     }
 
-    /// Inputs for stale sampling, captured up front so the background work touches no view-model state.
     private struct StaleSample: Sendable {
         let kind: StorageFindingKind
         let domain: StorageDomain

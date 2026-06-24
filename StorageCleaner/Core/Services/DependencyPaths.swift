@@ -1,7 +1,7 @@
 import Foundation
 
 enum DependencyPaths {
-    private static let home = FileManager.default.homeDirectoryForCurrentUser
+    private static let home = UserHomeDirectory.url
 
     static func home(_ path: String) -> URL {
         home.appendingPathComponent(path)

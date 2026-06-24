@@ -24,7 +24,7 @@ struct InstalledAppCatalog: Sendable {
         var roots: [URL] = []
         roots.append(URL(fileURLWithPath: "/Applications", isDirectory: true))
         roots.append(URL(fileURLWithPath: "/Applications/Utilities", isDirectory: true))
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = UserHomeDirectory.url
         roots.append(home.appending(path: "Applications", directoryHint: .isDirectory))
         return roots
     }()

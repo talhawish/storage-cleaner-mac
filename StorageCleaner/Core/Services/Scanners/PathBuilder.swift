@@ -3,7 +3,7 @@ import Foundation
 struct PathBuilder: Sendable {
     private let homeDirectory: URL
 
-    init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    init(homeDirectory: URL = UserHomeDirectory.url) {
         self.homeDirectory = homeDirectory
     }
 

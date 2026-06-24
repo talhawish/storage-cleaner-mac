@@ -53,7 +53,7 @@ struct QuickCleanScanner: Sendable {
             if Task.isCancelled { break }
 
             let urls = option.paths.map { pathString -> URL in
-                let expanded = NSString(string: pathString).expandingTildeInPath
+                let expanded = UserHomeDirectory.expandingTilde(in: pathString)
                 return URL(fileURLWithPath: expanded)
             }
 

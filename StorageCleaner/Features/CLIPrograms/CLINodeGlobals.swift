@@ -56,7 +56,7 @@ enum NodeGlobalCatalog {
     /// named after the tool it ran.
     static func npxCachedPrograms(root: URL? = nil) -> [CLIProgram] {
         let fileManager = FileManager.default
-        let npxRoot = root ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".npm/_npx")
+        let npxRoot = root ?? UserHomeDirectory.url.appendingPathComponent(".npm/_npx")
 
         return childDirectories(of: npxRoot).compactMap { cacheDirectory in
             guard let name = primaryDependency(in: cacheDirectory, fileManager: fileManager) else { return nil }
@@ -88,7 +88,7 @@ enum NodeGlobalCatalog {
 
     static func globalNodeModulesDirectories() -> [URL] {
         let fileManager = FileManager.default
-        let home = fileManager.homeDirectoryForCurrentUser
+        let home = UserHomeDirectory.url
 
         var candidates: [URL] = [
             // Homebrew / nodejs.org installer / common custom prefixes.

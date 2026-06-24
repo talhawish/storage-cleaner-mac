@@ -205,7 +205,6 @@ final class StorageCleanerUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--use-demo-scanner"] + extraArguments
         app.launch()
-        app.activate()
         return app
     }
 

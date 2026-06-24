@@ -31,7 +31,7 @@ struct LeftoversScanner: StorageCategoryScanning {
     /// is not hidden, inside an app bundle, or inside a build/dependency directory.
     static func isLeftover(_ url: URL) -> Bool {
         guard !url.lastPathComponent.hasPrefix(".") else { return false }
-        let components = Set(url.standardizedFileURL.pathComponents)
+        let components = PathSafetyComponents.relevantComponents(for: url)
         guard components.isDisjoint(with: DependencyPaths.Leftovers.blockedPathComponents) else { return false }
         return DependencyPaths.Leftovers.installerExtensions.contains(url.pathExtension.lowercased())
     }

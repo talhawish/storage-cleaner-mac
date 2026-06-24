@@ -11,32 +11,24 @@ struct LargeFilesView: View {
     @State private var selectedURLs: Set<URL> = []
     @State private var showDeleteConfirmation = false
     @State private var previewURL: URL?
+    @State private var allLargeFileRecords: [FindingFileRecord] = []
+    @State private var isLoadingRecords = false
 
     private var thresholdBytes: Int64 { Int64(largeFileThresholdMB) * 1_000_000 }
+    private var recordsIdentity: FindingFileRecordsIdentity { FindingFileRecordsIdentity(findings: findings) }
+    private var hasScannedPaths: Bool { findings.contains { !$0.filePaths.isEmpty } }
+    private var loadedLargeFileRecords: [FindingFileRecord] { hasScannedPaths ? allLargeFileRecords : [] }
+    private var isPreparingRecords: Bool { hasScannedPaths && (isLoadingRecords || loadedLargeFileRecords.isEmpty) }
 
-    private var largeFileRecords: [LargeFileRecord] {
+    private var largeFileRecords: [FindingFileRecord] {
         locationFilteredRecords
             .filter { $0.bytes >= thresholdBytes }
             .sorted { $0.bytes > $1.bytes }
     }
 
-    private var locationFilteredRecords: [LargeFileRecord] {
-        allLargeFileRecords
+    private var locationFilteredRecords: [FindingFileRecord] {
+        loadedLargeFileRecords
             .filter { locationFilter.contains($0.url) }
-    }
-
-    private var allLargeFileRecords: [LargeFileRecord] {
-        findings
-            .flatMap { finding in
-                finding.filePaths.map { url in
-                    LargeFileRecord(
-                        url: url,
-                        kind: finding.kind,
-                        domain: finding.domain,
-                        bytes: StorageFormatting.itemSize(at: url)
-                    )
-                }
-            }
     }
 
     private var totalBytes: Int64 {
@@ -44,14 +36,14 @@ struct LargeFilesView: View {
     }
 
     private var totalSelectedBytes: Int64 {
-        selectedURLs.reduce(Int64(0)) { total, url in
-            total + StorageFormatting.itemSize(at: url)
-        }
+        FindingFileRecordBuilder.totalSelectedBytes(selectedURLs: selectedURLs, records: loadedLargeFileRecords)
     }
 
     var body: some View {
         Group {
-            if allLargeFileRecords.isEmpty {
+            if isPreparingRecords {
+                preparingRecordsView
+            } else if allLargeFileRecords.isEmpty {
                 EmptyStateView(
                     title: "Nothing to clean here",
                     message: "No review-safe large files turned up in the selected locations. "
@@ -68,6 +60,9 @@ struct LargeFilesView: View {
         .navigationTitle("Large Files")
         .navigationSubtitle("\(largeFileRecords.count) items · \(StorageFormatting.bytes(totalBytes))")
         .accessibilityIdentifier("large-files-root")
+        .task(id: recordsIdentity) {
+            await loadRecords()
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {
@@ -123,6 +118,21 @@ struct LargeFilesView: View {
         }
     }
 
+    private var preparingRecordsView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.large)
+            Text("Calculating file sizes")
+                .font(.headline)
+            Text("Large folders are measured in the background before filtering.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Calculating large file sizes")
+    }
+
     private var largeFilesContent: some View {
         List {
             locationSection
@@ -173,6 +183,7 @@ struct LargeFilesView: View {
                     url: record.url,
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
+                    metadata: record.detailMetadata,
                     onToggle: { toggle(record.url) },
                     onPreview: { previewURL = record.url }
                 )
@@ -222,15 +233,19 @@ struct LargeFilesView: View {
             selectedURLs.insert(url)
         }
     }
-}
 
-private struct LargeFileRecord: Identifiable, Equatable {
-    let url: URL
-    let kind: StorageFindingKind
-    let domain: StorageDomain
-    let bytes: Int64
+    private func loadRecords() async {
+        let findings = findings
+        isLoadingRecords = true
+        let records = await Task.detached(priority: .utility) {
+            FindingFileRecordBuilder.records(from: findings)
+        }.value
+        guard !Task.isCancelled else { return }
 
-    var id: URL { url }
+        allLargeFileRecords = records
+        selectedURLs.formIntersection(Set(records.map(\.url)))
+        isLoadingRecords = false
+    }
 }
 
 private enum LargeFileLocationFilter: String, CaseIterable {

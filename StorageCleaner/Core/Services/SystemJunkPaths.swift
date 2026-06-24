@@ -13,7 +13,7 @@ enum SystemJunkPaths {
     static let diagnosticReports = SystemJunkPaths.home("Library/Logs/DiagnosticReports")
     static let crashReporter = SystemJunkPaths.home("Library/Logs/CrashReporter")
 
-    private static let home = FileManager.default.homeDirectoryForCurrentUser
+    private static let home = UserHomeDirectory.url
 
     private static func home(_ path: String) -> URL {
         home.appendingPathComponent(path)

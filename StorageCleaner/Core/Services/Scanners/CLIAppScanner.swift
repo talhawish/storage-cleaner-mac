@@ -18,7 +18,7 @@ struct CLIAppScanner: StorageCategoryScanning {
     init(homeDirectory: URL, collector: FileSystemCollector) {
         let homeDirs = DependencyPaths.CLI.homeDirs.map { homeDir in
             let relativePath = homeDir.path.replacingOccurrences(
-                of: FileManager.default.homeDirectoryForCurrentUser.path,
+                of: UserHomeDirectory.path,
                 with: ""
             )
             return homeDirectory.appendingPathComponent(relativePath)

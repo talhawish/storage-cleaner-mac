@@ -407,7 +407,7 @@ extension CLIRemovalService {
         isExecutable: { FileManager.default.isExecutableFile(atPath: $0.path) },
         userBinDirectories: {
             let fileManager = FileManager.default
-            let home = fileManager.homeDirectoryForCurrentUser
+            let home = UserHomeDirectory.url
             let candidates = [
                 home.appendingPathComponent(".local/bin"),
                 home.appendingPathComponent("bin"),

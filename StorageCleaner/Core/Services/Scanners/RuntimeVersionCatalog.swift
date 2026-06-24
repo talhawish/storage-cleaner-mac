@@ -30,7 +30,7 @@ enum RuntimeVersionCatalog {
         var jvmDirectory: URL
 
         static var live: Environment {
-            let home = FileManager.default.homeDirectoryForCurrentUser
+            let home = UserHomeDirectory.url
             return Environment(
                 home: home,
                 homebrewCellars: [

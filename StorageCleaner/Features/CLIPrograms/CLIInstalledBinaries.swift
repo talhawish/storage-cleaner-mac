@@ -74,7 +74,7 @@ enum InstalledBinaryCatalog {
 
     static func binDirectories() -> [URL] {
         let fileManager = FileManager.default
-        let home = fileManager.homeDirectoryForCurrentUser
+        let home = UserHomeDirectory.url
         func at(_ path: String) -> URL { home.appendingPathComponent(path) }
 
         var directories: [URL] = [

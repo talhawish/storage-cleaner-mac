@@ -5,11 +5,17 @@ struct AppContainer: Sendable {
     let permissionHandler: any StoragePermissionHandling
     let cleanupService: CleanupService
 
-    static let live = AppContainer(
-        storageScanner: LiveStorageScanner.live(),
-        permissionHandler: FileSystemPermissionService(),
-        cleanupService: FileManagerCleanupService()
-    )
+    static var live: AppContainer {
+        let permissionHandler = FileSystemPermissionService()
+        return AppContainer(
+            storageScanner: SecurityScopedStorageScanner(
+                scanner: LiveStorageScanner.live(),
+                permissionHandler: permissionHandler
+            ),
+            permissionHandler: permissionHandler,
+            cleanupService: FileManagerCleanupService()
+        )
+    }
 
     static func current(arguments: [String] = CommandLine.arguments) -> AppContainer {
         if arguments.contains("--use-demo-scanner") {
@@ -176,10 +182,10 @@ private struct DemoStorageScanner: StorageScanning {
 
 private struct DemoPermissionHandler: StoragePermissionHandling {
     func currentStatuses() -> [StoragePermissionStatus] {
-        StoragePermissionScope.allCases.map { scope in
+        [.home].map { scope in
             StoragePermissionStatus(
                 scope: scope,
-                url: FileManager.default.homeDirectoryForCurrentUser,
+                url: UserHomeDirectory.url,
                 state: .accessible
             )
         }

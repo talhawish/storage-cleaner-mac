@@ -90,7 +90,7 @@ extension AppBundleUninstaller {
 
         let allowedRoots = [
             URL(fileURLWithPath: "/Applications", isDirectory: true),
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+            UserHomeDirectory.url.appendingPathComponent(
                 "Applications",
                 isDirectory: true
             )

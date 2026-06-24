@@ -45,7 +45,7 @@ struct LargeFileSafetyPolicy: Sendable {
     ]
 
     func isReviewSafeCandidate(_ url: URL) -> Bool {
-        let components = Set(url.standardizedFileURL.pathComponents)
+        let components = PathSafetyComponents.relevantComponents(for: url)
         guard components.isDisjoint(with: blockedPathComponents) else { return false }
         guard !url.lastPathComponent.hasPrefix(".") else { return false }
         if DependencyPaths.Leftovers.largeFilePackageExtensions.contains(url.pathExtension.lowercased()) {
