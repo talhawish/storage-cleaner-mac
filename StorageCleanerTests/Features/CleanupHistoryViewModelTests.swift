@@ -19,6 +19,9 @@ final class CleanupHistoryViewModelTests: XCTestCase {
         date: Date = .now,
         duration: Double = 10,
         reclaimableBytes: Int64 = 1_000,
+        volumeTotalBytes: Int64 = 0,
+        freeBytesBefore: Int64 = 0,
+        freeBytesAfter: Int64 = 0,
         findingKinds: [StorageFindingKind] = [.xcodeArtifacts]
     ) -> StoredScan {
         let findings = findingKinds.map { kind in
@@ -37,6 +40,9 @@ final class CleanupHistoryViewModelTests: XCTestCase {
             durationSeconds: duration,
             scannedItemCount: findingKinds.count,
             reclaimableBytes: reclaimableBytes,
+            volumeTotalBytes: volumeTotalBytes,
+            freeBytesBefore: freeBytesBefore,
+            freeBytesAfter: freeBytesAfter,
             findings: findings
         )
         context.insert(scan)
@@ -235,5 +241,67 @@ final class CleanupHistoryViewModelTests: XCTestCase {
         viewModel.update(with: scans)
 
         XCTAssertEqual(viewModel.lastCleanupDate, Date(timeIntervalSince1970: 100))
+    }
+
+    func testSummaryExposesDiskSnapshotsWhenPersisted() throws {
+        let fixture = makeFixture()
+        let scan = makeScan(
+            in: fixture.context,
+            volumeTotalBytes: 1_000_000_000_000,
+            freeBytesBefore: 500_000_000_000,
+            freeBytesAfter: 600_000_000_000
+        )
+        makeCleanup(
+            in: fixture.context,
+            scan: scan,
+            kind: .xcodeArtifacts,
+            bytes: 100_000_000_000,
+            items: 1
+        )
+        try fixture.context.save()
+
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
+        let viewModel = CleanupHistoryViewModel()
+        viewModel.update(with: scans)
+
+        let summary = try XCTUnwrap(viewModel.summaries.first)
+        XCTAssertTrue(summary.hasDiskSnapshot)
+        XCTAssertEqual(summary.freeBytesBefore, 500_000_000_000)
+        XCTAssertEqual(summary.freeBytesAfter, 600_000_000_000)
+        XCTAssertEqual(summary.freedBytesByCleanup, 100_000_000_000)
+    }
+
+    func testSummaryHidesDiskInfoWhenTotalCapacityMissing() throws {
+        let fixture = makeFixture()
+        // Legacy scan without disk info persisted.
+        _ = makeScan(in: fixture.context)
+        try fixture.context.save()
+
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
+        let viewModel = CleanupHistoryViewModel()
+        viewModel.update(with: scans)
+
+        let summary = try XCTUnwrap(viewModel.summaries.first)
+        XCTAssertFalse(summary.hasDiskSnapshot)
+        XCTAssertNil(summary.freedBytesByCleanup)
+    }
+
+    func testSummaryFreedBytesNilWhenNoCleanup() throws {
+        let fixture = makeFixture()
+        _ = makeScan(
+            in: fixture.context,
+            volumeTotalBytes: 1_000_000_000_000,
+            freeBytesBefore: 500_000_000_000,
+            freeBytesAfter: 0
+        )
+        try fixture.context.save()
+
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
+        let viewModel = CleanupHistoryViewModel()
+        viewModel.update(with: scans)
+
+        let summary = try XCTUnwrap(viewModel.summaries.first)
+        XCTAssertTrue(summary.hasDiskSnapshot)
+        XCTAssertNil(summary.freedBytesByCleanup)
     }
 }

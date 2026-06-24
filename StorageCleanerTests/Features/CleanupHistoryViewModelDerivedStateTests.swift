@@ -68,7 +68,10 @@ final class CleanupHistoryViewModelDerivedStateTests: XCTestCase {
             reclaimableBytes: 100,
             categories: [category],
             totalItemsCleaned: items,
-            totalBytesCleaned: bytes
+            totalBytesCleaned: bytes,
+            freeBytesBefore: 0,
+            freeBytesAfter: 0,
+            volumeTotalBytes: 0
         )
     }
 

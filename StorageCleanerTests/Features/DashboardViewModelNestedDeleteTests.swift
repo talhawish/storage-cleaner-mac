@@ -84,9 +84,9 @@ private struct NestedDeleteCleanupService: CleanupService {
 private final class NestedDeleteSpyHistoryStore: ScanHistoryStore {
     private(set) var recordedCleanups: [[CleanupAuditEntry]] = []
 
-    func recordCompletedScan(_ snapshot: ScanSnapshot) {}
+    func recordCompletedScan(_ snapshot: ScanSnapshot, disk: ScanDiskSnapshot) {}
 
-    func recordCleanupActions(_ entries: [CleanupAuditEntry]) {
+    func recordCleanupActions(_ entries: [CleanupAuditEntry], disk: ScanDiskSnapshot) {
         recordedCleanups.append(entries)
     }
 }

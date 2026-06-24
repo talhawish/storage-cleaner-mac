@@ -108,14 +108,18 @@ struct StubCleanupService: CleanupService {
 @MainActor
 final class SpyHistoryStore: ScanHistoryStore {
     private(set) var recordedScans: [ScanSnapshot] = []
+    private(set) var recordedScanDisks: [ScanDiskSnapshot] = []
     private(set) var recordedCleanups: [[CleanupAuditEntry]] = []
+    private(set) var recordedCleanupDisks: [ScanDiskSnapshot] = []
 
-    func recordCompletedScan(_ snapshot: ScanSnapshot) {
+    func recordCompletedScan(_ snapshot: ScanSnapshot, disk: ScanDiskSnapshot) {
         recordedScans.append(snapshot)
+        recordedScanDisks.append(disk)
     }
 
-    func recordCleanupActions(_ entries: [CleanupAuditEntry]) {
+    func recordCleanupActions(_ entries: [CleanupAuditEntry], disk: ScanDiskSnapshot) {
         recordedCleanups.append(entries)
+        recordedCleanupDisks.append(disk)
     }
 }
 

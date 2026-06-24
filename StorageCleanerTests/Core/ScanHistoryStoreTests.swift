@@ -36,7 +36,8 @@ final class ScanHistoryStoreTests: XCTestCase {
                 ],
                 scannedItemCount: 1,
                 duration: .seconds(1)
-            )
+            ),
+            disk: .unavailable
         )
     }
 
@@ -57,8 +58,9 @@ final class ScanHistoryStoreTests: XCTestCase {
             scannedItemCount: 12,
             duration: .seconds(5)
         )
+        let disk = ScanDiskSnapshot(totalBytes: 1_000_000_000_000, freeBytes: 500_000_000_000)
 
-        fixture.store.recordCompletedScan(snapshot)
+        fixture.store.recordCompletedScan(snapshot, disk: disk)
 
         let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
         XCTAssertEqual(scans.count, 1)
@@ -68,12 +70,18 @@ final class ScanHistoryStoreTests: XCTestCase {
         XCTAssertEqual(scan.durationSeconds, 5, accuracy: 0.001)
         XCTAssertEqual(scan.findings.count, 1)
         XCTAssertEqual(scan.findings.first?.kind, .xcodeArtifacts)
+        XCTAssertEqual(scan.volumeTotalBytes, 1_000_000_000_000)
+        XCTAssertEqual(scan.freeBytesBefore, 500_000_000_000)
+        XCTAssertEqual(scan.freeBytesAfter, 0)
     }
 
     func testEmptyScanIsNotRecorded() throws {
         let fixture = makeStore()
 
-        fixture.store.recordCompletedScan(ScanSnapshot(findings: [], scannedItemCount: 0, duration: .seconds(1)))
+        fixture.store.recordCompletedScan(
+            ScanSnapshot(findings: [], scannedItemCount: 0, duration: .seconds(1)),
+            disk: .unavailable
+        )
 
         XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredScan>()).isEmpty)
     }
@@ -95,10 +103,14 @@ final class ScanHistoryStoreTests: XCTestCase {
                 ],
                 scannedItemCount: 1,
                 duration: .seconds(1)
-            )
+            ),
+            disk: .unavailable
         )
 
-        fixture.store.recordCleanupActions([CleanupAuditEntry(kind: .trash, bytesReclaimed: 10, itemCount: 1)])
+        fixture.store.recordCleanupActions(
+            [CleanupAuditEntry(kind: .trash, bytesReclaimed: 10, itemCount: 1)],
+            disk: .unavailable
+        )
 
         let actions = try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>())
         XCTAssertEqual(actions.count, 1)
@@ -138,7 +150,7 @@ final class ScanHistoryStoreTests: XCTestCase {
             duration: .seconds(1)
         )
 
-        fixture.store.recordCompletedScan(snapshot)
+        fixture.store.recordCompletedScan(snapshot, disk: .unavailable)
 
         let stored = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredFinding>()).first)
         let restored = try XCTUnwrap(stored.toStorageFinding())
@@ -151,7 +163,7 @@ final class ScanHistoryStoreTests: XCTestCase {
     func testEmptyCleanupActionsAreNoOp() throws {
         let fixture = makeStore()
 
-        fixture.store.recordCleanupActions([])
+        fixture.store.recordCleanupActions([], disk: .unavailable)
 
         XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>()).isEmpty)
     }
@@ -173,7 +185,8 @@ final class ScanHistoryStoreTests: XCTestCase {
                 ],
                 scannedItemCount: 1,
                 duration: .seconds(1)
-            )
+            ),
+            disk: .unavailable
         )
 
         let paths = [
@@ -187,7 +200,7 @@ final class ScanHistoryStoreTests: XCTestCase {
                 itemCount: 2,
                 samplePaths: paths
             )
-        ])
+        ], disk: .unavailable)
 
         let action = try XCTUnwrap(
             try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>()).first
@@ -221,7 +234,8 @@ final class ScanHistoryStoreTests: XCTestCase {
                 ],
                 scannedItemCount: 3,
                 duration: .seconds(2)
-            )
+            ),
+            disk: .unavailable
         )
 
         fixture.store.recordCleanupActions([
@@ -231,7 +245,7 @@ final class ScanHistoryStoreTests: XCTestCase {
                 itemCount: 1,
                 samplePaths: [URL(filePath: "/tmp/node_modules")]
             )
-        ])
+        ], disk: .unavailable)
         fixture.store.recordCleanupActions([
             CleanupAuditEntry(
                 kind: .junkFiles,
@@ -239,7 +253,7 @@ final class ScanHistoryStoreTests: XCTestCase {
                 itemCount: 1,
                 samplePaths: [URL(filePath: "/tmp/junk")]
             )
-        ])
+        ], disk: .unavailable)
 
         let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
         XCTAssertEqual(scan.cleanedBytes, 5_000)
@@ -254,7 +268,7 @@ final class ScanHistoryStoreTests: XCTestCase {
 
         fixture.store.recordCleanupActions([
             CleanupAuditEntry(kind: .trash, bytesReclaimed: 100, itemCount: 1)
-        ])
+        ], disk: .unavailable)
 
         XCTAssertEqual(scan.cleanedBytes, Int64.max)
     }
@@ -266,7 +280,7 @@ final class ScanHistoryStoreTests: XCTestCase {
         fixture.store.recordCleanupActions([
             CleanupAuditEntry(kind: .trash, bytesReclaimed: Int64.max, itemCount: 1),
             CleanupAuditEntry(kind: .trash, bytesReclaimed: 1, itemCount: 1)
-        ])
+        ], disk: .unavailable)
 
         let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
         XCTAssertEqual(scan.cleanedBytes, Int64.max)
@@ -289,10 +303,57 @@ final class ScanHistoryStoreTests: XCTestCase {
                 ],
                 scannedItemCount: 1,
                 duration: .seconds(1)
-            )
+            ),
+            disk: .unavailable
         )
 
         let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
         XCTAssertEqual(scan.cleanedBytes, 0)
+    }
+
+    func testCleanupActionsRecordFreeBytesAfter() throws {
+        let fixture = makeStore()
+        let disk = ScanDiskSnapshot(totalBytes: 1_000_000_000_000, freeBytes: 500_000_000_000)
+        fixture.store.recordCompletedScan(
+            ScanSnapshot(
+                findings: [
+                    StorageFinding(
+                        kind: .xcodeArtifacts,
+                        domain: .appleDevelopment,
+                        bytes: 1_000,
+                        itemCount: 1,
+                        safety: .safe,
+                        examples: [],
+                        filePaths: [URL(filePath: "/tmp/DerivedData")]
+                    )
+                ],
+                scannedItemCount: 1,
+                duration: .seconds(1)
+            ),
+            disk: disk
+        )
+
+        let after = ScanDiskSnapshot(totalBytes: 1_000_000_000_000, freeBytes: 600_000_000_000)
+        fixture.store.recordCleanupActions(
+            [CleanupAuditEntry(kind: .xcodeArtifacts, bytesReclaimed: 1_000, itemCount: 1)],
+            disk: after
+        )
+
+        let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
+        XCTAssertEqual(scan.freeBytesBefore, 500_000_000_000)
+        XCTAssertEqual(scan.freeBytesAfter, 600_000_000_000)
+    }
+
+    func testCleanupActionsKeepFreeBytesAfterZeroWhenDiskUnavailable() throws {
+        let fixture = makeStore()
+        recordMinimalScan(in: fixture.store)
+
+        fixture.store.recordCleanupActions(
+            [CleanupAuditEntry(kind: .trash, bytesReclaimed: 1, itemCount: 1)],
+            disk: .unavailable
+        )
+
+        let scan = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredScan>()).first)
+        XCTAssertEqual(scan.freeBytesAfter, 0)
     }
 }
