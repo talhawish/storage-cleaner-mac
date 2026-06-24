@@ -10,7 +10,7 @@ struct AppContainer: Sendable {
         let permissionHandler = FileSystemPermissionService()
         return AppContainer(
             storageScanner: SecurityScopedStorageScanner(
-                scanner: LiveStorageScanner.live(),
+                scanner: LiveStorageScanner.live(permissionHandler: permissionHandler),
                 permissionHandler: permissionHandler
             ),
             permissionHandler: permissionHandler,

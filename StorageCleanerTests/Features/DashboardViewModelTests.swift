@@ -327,6 +327,51 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertEqual(finding?.itemCount, 1)
     }
 
+    func testDeletePrunesPathBytesSoDetailViewSizesStayConsistent() async {
+        let fileA = URL(filePath: "/tmp/c.bin")
+        let fileB = URL(filePath: "/tmp/d.bin")
+        let snapshot = ScanSnapshot(
+            findings: [
+                StorageFinding(
+                    kind: .largeFiles,
+                    domain: .media,
+                    bytes: 150,
+                    itemCount: 2,
+                    safety: .safe,
+                    examples: [],
+                    filePaths: [fileA, fileB],
+                    pathBytes: [fileA: 50, fileB: 100]
+                )
+            ],
+            scannedItemCount: 2,
+            duration: .seconds(1)
+        )
+        let viewModel = DashboardViewModel(
+            scanner: FixedSnapshotScanner(snapshot: snapshot),
+            permissionHandler: StubPermissionHandler(statuses: allAccessibleStatuses),
+            cleanupService: StubCleanupService(reclaimedBytesByURL: [fileA: 50])
+        )
+
+        viewModel.startScan()
+        for _ in 0..<20 where viewModel.phase != .results {
+            await Task.yield()
+        }
+
+        _ = await viewModel.deleteFiles([fileA])
+
+        let finding = viewModel.snapshot?.findings.first
+        XCTAssertEqual(
+            finding?.pathBytes,
+            [fileB: 100],
+            "pathBytes must be pruned after deletion so detail views don't show stale sizes"
+        )
+        XCTAssertEqual(
+            finding?.pathBytes.values.reduce(0, +),
+            finding?.bytes,
+            "Sum of remaining pathBytes must equal the pruned aggregate bytes"
+        )
+    }
+
 }
 
 /// Duplicate-group delete/prune behavior. Split into its own class so each test type stays under

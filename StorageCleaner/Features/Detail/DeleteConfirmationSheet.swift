@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct DeleteConfirmationSheet: View {
+    private static var trashPrefix: String { UserHomeDirectory.path + "/.Trash/" }
+
     let finding: StorageFinding
     let selectedURLs: [URL]
     let totalBytes: Int64
@@ -10,8 +12,7 @@ struct DeleteConfirmationSheet: View {
     @State private var confirmed = false
 
     private var allInTrash: Bool {
-        let trashPrefix = NSHomeDirectory() + "/.Trash/"
-        return selectedURLs.allSatisfy { $0.path.hasPrefix(trashPrefix) }
+        selectedURLs.allSatisfy { $0.path.hasPrefix(Self.trashPrefix) }
     }
 
     private var titleText: String {

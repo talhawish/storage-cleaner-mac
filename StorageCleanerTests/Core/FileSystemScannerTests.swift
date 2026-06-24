@@ -40,6 +40,16 @@ final class FileSystemScannerTests: XCTestCase {
         XCTAssertEqual(result.finding?.kind, .xcodeArtifacts)
         XCTAssertEqual(result.finding?.bytes, 20_480)
         XCTAssertEqual(result.inspectedItemCount, 1)
+        XCTAssertEqual(
+            result.finding?.pathBytes[cacheDirectory],
+            20_480,
+            "pathBytes must carry per-path scan sizes so detail views don't recompute"
+        )
+        XCTAssertEqual(
+            result.finding?.pathBytes.values.reduce(0, +),
+            result.finding?.bytes,
+            "Sum of pathBytes must equal the aggregate bytes"
+        )
     }
 
     func testPHPDependencyScannerFindsNestedComposerVendorFolders() async throws {
@@ -223,6 +233,7 @@ final class FileSystemScannerTests: XCTestCase {
         XCTAssertEqual(result.finding?.kind, .largeFiles)
         XCTAssertEqual(Set(paths), Set(expectedLargeFiles.map(\.standardizedFileURL)))
         XCTAssertEqual(result.inspectedItemCount, 16)
+        XCTAssertEqual(result.finding?.pathBytes.values.reduce(0, +) ?? 0, result.finding?.bytes ?? 0)
     }
 
     func testLargeFileScannerExcludesAppAndDependencyInternals() async throws {
@@ -404,4 +415,5 @@ final class FileSystemScannerTests: XCTestCase {
         XCTAssertEqual(result.finding?.kind, .cliApps)
         XCTAssertEqual(result.finding?.domain, .cliTooling)
     }
+
 }

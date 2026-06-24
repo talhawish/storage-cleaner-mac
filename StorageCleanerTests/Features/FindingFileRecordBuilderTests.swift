@@ -64,6 +64,36 @@ final class FindingFileRecordBuilderTests: XCTestCase {
         XCTAssertNotEqual(records[0].id, records[1].id)
     }
 
+    func testPathBytesFlowsThroughAsPrecomputedBytes() {
+        let first = URL(filePath: "/Users/test/Downloads/installer.dmg")
+        let second = URL(filePath: "/Users/test/Downloads/app.apk")
+
+        let records = FindingFileRecordBuilder.records(from: [
+            StorageFinding(
+                kind: .installerLeftovers,
+                domain: .leftovers,
+                bytes: 300,
+                itemCount: 2,
+                safety: .review,
+                examples: [],
+                filePaths: [first, second],
+                pathBytes: [first: 100, second: 200]
+            )
+        ]) { _, precomputed in
+            FindingFileRecordMetadata(
+                exists: true,
+                bytes: precomputed ?? 0,
+                modifiedAt: nil
+            )
+        }
+
+        XCTAssertEqual(
+            records.map(\.bytes),
+            [100, 200],
+            "pathBytes must flow through as precomputedBytes so rows show correct sizes"
+        )
+    }
+
     func testTotalSelectedBytesDoesNotRemeasureOrDoubleCountDuplicateURLs() {
         let url = URL(filePath: "/Users/test/Downloads/package.zip")
         let otherURL = URL(filePath: "/Users/test/Downloads/other.zip")

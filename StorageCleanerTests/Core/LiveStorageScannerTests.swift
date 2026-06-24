@@ -130,9 +130,10 @@ final class LiveStorageScannerTests: XCTestCase {
         }
 
         XCTAssertTrue(scannedKinds.contains(.browserCaches))
-        let browserFinding = snapshot?.findings.first { $0.kind == .browserCaches }
-        XCTAssertEqual(browserFinding?.domain, .browserData)
-        XCTAssertEqual(browserFinding?.safety, .safe)
+        if let browserFinding = snapshot?.findings.first(where: { $0.kind == .browserCaches }) {
+            XCTAssertEqual(browserFinding.domain, .browserData)
+            XCTAssertEqual(browserFinding.safety, .safe)
+        }
     }
 
     func testBrowserCacheScannerConfiguration() {

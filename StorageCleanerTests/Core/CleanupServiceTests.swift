@@ -50,6 +50,7 @@ final class CleanupServiceTests: XCTestCase {
         guard let trashed = trashURL as? URL else {
             return XCTFail("trashItem returned nil")
         }
+        trashedURLs.append(trashed)
 
         let result = await FileManagerCleanupService().delete(urls: [trashed])
 

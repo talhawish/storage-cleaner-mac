@@ -41,6 +41,8 @@ protocol CleanupService: Sendable {
 }
 
 struct FileManagerCleanupService: CleanupService {
+    private static var trashPrefix: String { UserHomeDirectory.path + "/.Trash/" }
+
     func delete(urls: [URL]) async -> CleanupResult {
         guard !urls.isEmpty else {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
@@ -75,25 +77,25 @@ struct FileManagerCleanupService: CleanupService {
             guard let size = sizeOfItem(at: url, fileManager: fileManager) else { break }
             guard !Task.isCancelled else { break }
 
-            if url.path.hasPrefix(NSHomeDirectory() + "/.Trash/") {
+            if url.path.hasPrefix(Self.trashPrefix) {
                 do {
                     try fileManager.removeItem(at: url)
-                    deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
-                    totalBytes += size
                 } catch {
                     failed.append((url, error))
+                    continue
                 }
             } else {
                 do {
                     var resultingURL: NSURL?
                     try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
                     trashed.append(resultingURL as? URL ?? url)
-                    deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
-                    totalBytes += size
                 } catch {
                     failed.append((url, error))
+                    continue
                 }
             }
+            deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
+            totalBytes += size
         }
 
         return CleanupResult(

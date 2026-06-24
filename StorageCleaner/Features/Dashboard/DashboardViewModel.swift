@@ -244,7 +244,8 @@ final class DashboardViewModel {
             itemCount: remainingPaths.count,
             safety: finding.safety,
             examples: finding.examples,
-            filePaths: remainingPaths
+            filePaths: remainingPaths,
+            pathBytes: finding.pathBytes.filter { remainingPaths.contains($0.key) }
         )
     }
 

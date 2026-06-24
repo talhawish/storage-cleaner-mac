@@ -222,7 +222,7 @@ enum CleanupOptionsRegistry {
         CleanupOption(
             id: "browser-cache",
             name: "Browser Caches",
-            description: "Safari, Chrome, Edge, Firefox, Arc, and Brave caches",
+            description: "Safari, Chrome, Edge, Firefox, Arc, Brave, and Chromium caches",
             icon: "safari.fill",
             iconColor: "teal",
             domain: .browserData,

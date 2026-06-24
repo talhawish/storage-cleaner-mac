@@ -148,7 +148,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .duplicateVideos: "Likely duplicate video exports, recordings, and repeated captures"
         case .duplicateDocuments: "Likely duplicate PDFs, spreadsheets, archives, and repeated downloads"
         case .screenshots: "Desktop screenshots, simulator screenshots, and old review captures"
-        case .browserCaches: "Safari, Chrome, Edge, Firefox, and Arc cache folders"
+        case .browserCaches: "Safari, Chrome, Edge, Firefox, Arc, Brave, and Chromium cache folders"
         case .pythonDependencies: "pip, Poetry, conda, pyenv, and virtual environment caches"
         case .rustDependencies: "Cargo registry, build artifacts, and installed toolchains"
         case .goDependencies: "Go module cache and downloaded packages"

@@ -10,6 +10,18 @@ struct SecurityScopedResourceAccess: @unchecked Sendable {
         }
     }
 
+    init(accesses: [SecurityScopedResourceAccess]) {
+        stopAccessing = {
+            for access in accesses.reversed() {
+                access.stop()
+            }
+        }
+    }
+
+    init(onStop: @escaping @Sendable () -> Void) {
+        stopAccessing = onStop
+    }
+
     func stop() {
         stopAccessing()
     }
