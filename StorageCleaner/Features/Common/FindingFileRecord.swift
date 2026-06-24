@@ -31,16 +31,17 @@ struct FindingFileRecordMetadata: Equatable, Sendable {
     let bytes: Int64
     let modifiedAt: Date?
 
-    static func load(for url: URL) -> FindingFileRecordMetadata {
+    static func load(for url: URL, precomputedBytes: Int64? = nil) -> FindingFileRecordMetadata {
         let fileManager = FileManager.default
         let exists = fileManager.fileExists(atPath: url.path)
         guard exists else {
             return FindingFileRecordMetadata(exists: false, bytes: 0, modifiedAt: nil)
         }
 
+        let bytes: Int64 = precomputedBytes ?? StorageFormatting.itemSize(at: url)
         return FindingFileRecordMetadata(
             exists: true,
-            bytes: StorageFormatting.itemSize(at: url),
+            bytes: bytes,
             modifiedAt: StorageFormatting.modificationDate(at: url)
         )
     }
@@ -49,11 +50,11 @@ struct FindingFileRecordMetadata: Equatable, Sendable {
 enum FindingFileRecordBuilder {
     static func records(
         from findings: [StorageFinding],
-        loadMetadata: (URL) -> FindingFileRecordMetadata = FindingFileRecordMetadata.load(for:)
+        loadMetadata: (URL, Int64?) -> FindingFileRecordMetadata = FindingFileRecordMetadata.load(for:precomputedBytes:)
     ) -> [FindingFileRecord] {
         findings.flatMap { finding in
             finding.filePaths.map { url in
-                let metadata = loadMetadata(url)
+                let metadata = loadMetadata(url, finding.pathBytes[url])
                 return FindingFileRecord(
                     url: url,
                     kind: finding.kind,

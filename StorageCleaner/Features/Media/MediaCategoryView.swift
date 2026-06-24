@@ -24,10 +24,17 @@ struct MediaCategoryView: View {
     }
 
     private var allRecords: [MediaFileRecord] {
-        allFilePaths.map { url in
-            MediaFileRecord(
+        let pathBytes = Dictionary(
+            findings.flatMap { finding in
+                finding.pathBytes.map { ($0.key, $0.value) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return allFilePaths.map { url in
+            let size = pathBytes[url] ?? StorageFormatting.fileSize(at: url)
+            return MediaFileRecord(
                 url: url,
-                size: StorageFormatting.fileSize(at: url),
+                size: size,
                 modificationDate: StorageFormatting.modificationDate(at: url),
                 isVideo: DependencyPaths.Media.videoExtensions.contains(url.pathExtension.lowercased())
             )
@@ -220,6 +227,7 @@ struct MediaCategoryView: View {
                 ForEach(visibleRecords) { record in
                     MediaGridItem(
                         url: record.url,
+                        size: record.size,
                         isSelected: selectedURLs.contains(record.url),
                         onToggle: { toggle(record.url) },
                         onPreview: { previewURL = record.url }
@@ -244,6 +252,7 @@ struct MediaCategoryView: View {
             ForEach(visibleRecords) { record in
                 MediaListRow(
                     url: record.url,
+                    size: record.size,
                     isSelected: selectedURLs.contains(record.url),
                     onToggle: { toggle(record.url) },
                     onPreview: { previewURL = record.url }

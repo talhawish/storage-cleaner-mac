@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MediaGridItem: View {
     let url: URL
+    let size: Int64
     let isSelected: Bool
     let onToggle: () -> Void
     let onPreview: () -> Void
@@ -119,7 +120,7 @@ struct MediaGridItem: View {
                 .font(.caption2)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Text(StorageFormatting.bytes(StorageFormatting.fileSize(at: url)))
+            Text(StorageFormatting.bytes(size))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

@@ -17,7 +17,7 @@ final class FindingFileRecordBuilderTests: XCTestCase {
                 examples: [],
                 filePaths: [first, second]
             )
-        ]) { url in
+        ]) { url, _ in
             measuredURLs.append(url)
             return FindingFileRecordMetadata(
                 exists: true,
@@ -56,7 +56,7 @@ final class FindingFileRecordBuilderTests: XCTestCase {
                 examples: [],
                 filePaths: [url]
             )
-        ]) { _ in
+        ]) { _, _ in
             FindingFileRecordMetadata(exists: true, bytes: 100, modifiedAt: nil)
         }
 

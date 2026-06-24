@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MediaListRow: View {
     let url: URL
+    let size: Int64
     let isSelected: Bool
     let onToggle: () -> Void
     let onPreview: () -> Void
@@ -29,7 +30,7 @@ struct MediaListRow: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(StorageFormatting.bytes(StorageFormatting.fileSize(at: url)))
+                    Text(StorageFormatting.bytes(size))
                         .font(.callout.monospacedDigit().weight(.medium))
                     Text(dateString)
                         .font(.caption)
