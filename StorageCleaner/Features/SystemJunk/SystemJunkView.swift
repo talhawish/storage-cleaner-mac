@@ -42,14 +42,12 @@ struct SystemJunkView: View {
     }
 
     /// Flat list of every URL we know about, kept for the per-row `FileRowView` and the
-    /// per-URL selection summary. Per-URL bytes are an even split of the parent finding's
-    /// bytes (the scanner doesn't preserve individual `FileCandidate` bytes on the finding
-    /// itself); the row's own async metadata load will surface the real size in the list.
+    /// per-URL selection summary. Per-URL bytes come from the scan's precomputed
+    /// `pathBytes` dictionary so the list shows accurate sizes immediately.
     private var allRecords: [SystemJunkRecord] {
         findings.flatMap { finding in
-            let perItem = finding.itemCount > 0 ? finding.bytes / Int64(finding.itemCount) : 0
-            return finding.filePaths.map { url in
-                SystemJunkRecord(url: url, kind: finding.kind, bytes: perItem)
+            finding.filePaths.map { url in
+                SystemJunkRecord(url: url, kind: finding.kind, bytes: finding.pathBytes[url] ?? 0)
             }
         }
     }
@@ -273,6 +271,7 @@ struct SystemJunkView: View {
                     url: record.url,
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
+                    precomputedBytes: record.bytes,
                     onToggle: { toggle(record.url) }
                 )
             }

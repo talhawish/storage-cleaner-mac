@@ -10,6 +10,7 @@ struct FileRowView: View {
     let isSelected: Bool
     let pathDisplayMode: PathDisplayMode
     let metadata: DetailFileMetadata?
+    let precomputedBytes: Int64?
     let canOpen: Bool
     let onToggle: () -> Void
     let onPreview: (() -> Void)?
@@ -24,6 +25,7 @@ struct FileRowView: View {
         isSelected: Bool,
         pathDisplayMode: PathDisplayMode = .parentName,
         metadata: DetailFileMetadata? = nil,
+        precomputedBytes: Int64? = nil,
         canOpen: Bool = false,
         onToggle: @escaping () -> Void,
         onPreview: (() -> Void)? = nil,
@@ -33,6 +35,7 @@ struct FileRowView: View {
         self.isSelected = isSelected
         self.pathDisplayMode = pathDisplayMode
         self.metadata = metadata
+        self.precomputedBytes = precomputedBytes
         self.canOpen = canOpen
         self.onToggle = onToggle
         self.onPreview = onPreview
@@ -219,8 +222,9 @@ struct FileRowView: View {
     private func loadMetadataIfNeeded() async {
         guard metadata == nil else { return }
         let url = url
+        let precomputed = precomputedBytes
         let loaded = await Task.detached(priority: .utility) {
-            DetailFileMetadata.load(for: url)
+            DetailFileMetadata.load(for: url, precomputedBytes: precomputed)
         }.value
         guard !Task.isCancelled else { return }
         loadedMetadata = loaded
