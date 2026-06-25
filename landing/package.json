@@ -1,0 +1,38 @@
+{
+  "name": "storage-cleaner-landing",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Landing site for Storage Cleaner for Developers",
+  "scripts": {
+    "build": "npm run og:image && nuxt build --preset=static",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "og:image": "node scripts/og-image.mjs",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@nuxt/image": "^2.0.0",
+    "@nuxtjs/sitemap": "^8.2.1",
+    "@takumi-rs/core": "^2.0.0-beta.11",
+    "@vueuse/core": "^14.3.0",
+    "@vueuse/nuxt": "^14.3.0",
+    "better-sqlite3": "^11.10.0",
+    "nuxt": "^4.4.8",
+    "nuxt-og-image": "^6.7.0",
+    "vue": "^3.5.18",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@resvg/resvg-js": "^2.6.2",
+    "@tailwindcss/vite": "^4.3.1",
+    "satori": "^0.26.0",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^5.7.0",
+    "vue-tsc": "^2.2.0"
+  }
+}
