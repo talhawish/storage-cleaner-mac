@@ -10,7 +10,6 @@ export default defineNuxtConfig({
     '@nuxt/fonts',
     '@nuxtjs/sitemap',
     '@nuxt/image',
-    'nuxt-og-image',
     '@vueuse/nuxt'
   ],
 
@@ -45,8 +44,7 @@ export default defineNuxtConfig({
   },
 
   ogImage: {
-    enabled: true,
-    colorScheme: 'light'
+    enabled: false
   },
 
   fonts: {
