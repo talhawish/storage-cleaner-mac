@@ -90,7 +90,7 @@ struct SubscriptionPlan: Sendable, Identifiable, Equatable {
 protocol SubscriptionService: AnyObject, Sendable {
     /// The current entitlement as known by the service at call time.
     /// Prefer `entitlementUpdates()` for live UI.
-    func currentEntitlement() -> SubscriptionEntitlement
+    func currentEntitlement() async -> SubscriptionEntitlement
 
     /// A hot stream of entitlement changes. The store starts in `.free`
     /// and emits a new value whenever a transaction is verified (initial

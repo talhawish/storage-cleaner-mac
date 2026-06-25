@@ -50,17 +50,15 @@ final class PaywallViewModel {
 
     private let service: any SubscriptionService
     private let onEntitlementUpgraded: (@MainActor () -> Void)?
-    private let onDismiss: (@MainActor () -> Void)?
     private var entitlementTask: Task<Void, Never>?
+    private var hasReceivedInitialEntitlement = false
 
     init(
         service: any SubscriptionService,
-        onEntitlementUpgraded: (@MainActor () -> Void)? = nil,
-        onDismiss: (@MainActor () -> Void)? = nil
+        onEntitlementUpgraded: (@MainActor () -> Void)? = nil
     ) {
         self.service = service
         self.onEntitlementUpgraded = onEntitlementUpgraded
-        self.onDismiss = onDismiss
         subscribeToEntitlementStream()
     }
 
@@ -147,10 +145,6 @@ final class PaywallViewModel {
         }
     }
 
-    func dismiss() {
-        onDismiss?()
-    }
-
     func clearBanner() {
         banner = .none
     }
@@ -171,14 +165,19 @@ final class PaywallViewModel {
         entitlementTask = Task { [weak self] in
             for await entitlement in stream {
                 guard let self else { return }
+                let previous = self.currentEntitlement
                 self.currentEntitlement = entitlement
-                if entitlement != .free {
-                    self.banner = .success(
-                        message: self.successMessage(for: entitlement)
-                    )
-                    if self.shouldAutoDismissOnPurchase {
-                        self.onEntitlementUpgraded?()
-                    }
+
+                guard self.hasReceivedInitialEntitlement else {
+                    self.hasReceivedInitialEntitlement = true
+                    continue
+                }
+
+                guard entitlement != previous, entitlement != .free else { continue }
+
+                self.banner = .success(message: self.successMessage(for: entitlement))
+                if self.shouldAutoDismissOnPurchase {
+                    self.onEntitlementUpgraded?()
                 }
             }
         }

@@ -30,7 +30,7 @@ struct AppContainer: Sendable {
                 permissionHandler: DemoPermissionHandler(),
                 cleanupService: DemoCleanupService(),
                 diskSpaceReader: DemoDiskSpaceService(),
-                subscriptionService: StoreKitSubscriptionService()
+                subscriptionService: DemoSubscriptionService()
             )
         }
 
@@ -230,4 +230,33 @@ private struct DemoCleanupService: CleanupService {
         }
         return finding.itemCount > 0 ? finding.bytes / Int64(finding.itemCount) : finding.bytes
     }
+}
+
+/// A subscription service that never contacts StoreKit. Using this in demo /
+/// UI-test mode means cleanup is always unlocked and the paywall always shows
+/// placeholder products — no StoreKit session configuration needed.
+///
+/// The service starts with `.lifetime` entitlement so all demo cleanup flows
+/// are unblocked out of the box. A UI test that needs to exercise the free
+/// gate can inject a `MockSubscriptionService` (test target) instead.
+private actor DemoSubscriptionService: SubscriptionService {
+    func currentEntitlement() async -> SubscriptionEntitlement { .lifetime }
+
+    nonisolated func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
+        AsyncStream { continuation in
+            continuation.yield(.lifetime)
+            continuation.finish()
+        }
+    }
+
+    func loadProducts() async throws -> [SubscriptionPlan] { [] }
+
+    func purchase(productID: String) async throws -> PurchaseOutcome {
+        .purchased(.lifetime)
+    }
+
+    func restore() async throws -> SubscriptionEntitlement { .lifetime }
+
+    @MainActor
+    func showManageSubscriptions() {}
 }

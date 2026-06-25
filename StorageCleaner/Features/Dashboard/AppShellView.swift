@@ -249,9 +249,6 @@ private struct PaywallSheet: View {
                 service: controller.service,
                 onEntitlementUpgraded: { [weak controller] in
                     controller?.dismissPaywall()
-                },
-                onDismiss: { [weak controller] in
-                    controller?.dismissPaywall()
                 }
             ),
             onTermsTapped: { openURL(AppLinks.terms) },

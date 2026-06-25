@@ -58,8 +58,7 @@ final class PaywallViewModelTests: XCTestCase {
         let failingService = ThrowingLoadService()
         let failingViewModel = PaywallViewModel(
             service: failingService,
-            onEntitlementUpgraded: nil,
-            onDismiss: nil
+            onEntitlementUpgraded: nil
         )
         await failingViewModel.loadProducts()
         XCTAssertFalse(failingViewModel.isLoadingProducts)
@@ -228,8 +227,7 @@ final class PaywallViewModelTests: XCTestCase {
             service: service,
             onEntitlementUpgraded: { [weak self] in
                 self?.upgradedCallbackCount += 1
-            },
-            onDismiss: nil
+            }
         )
     }
 }
@@ -237,7 +235,7 @@ final class PaywallViewModelTests: XCTestCase {
 /// Test double that always throws from `loadProducts()`. Used to
 /// verify the paywall's fallback-catalog behavior.
 private final class ThrowingLoadService: SubscriptionService, @unchecked Sendable {
-    func currentEntitlement() -> SubscriptionEntitlement { .free }
+    func currentEntitlement() async -> SubscriptionEntitlement { .free }
     func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
         AsyncStream { $0.yield(.free); $0.finish() }
     }
@@ -248,7 +246,7 @@ private final class ThrowingLoadService: SubscriptionService, @unchecked Sendabl
         throw LoadBoom()
     }
     func purchase(productID: String) async throws -> PurchaseOutcome { .cancelled }
-    func restore() async throws -> SubscriptionEntitlement { .free }
+    func restore() async throws -> SubscriptionEntitlement { await currentEntitlement() }
 
     @MainActor
     func showManageSubscriptions() {}

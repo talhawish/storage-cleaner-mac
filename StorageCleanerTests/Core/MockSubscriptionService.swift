@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import os
 @testable import StorageCleaner
 
 /// A controllable `SubscriptionService` for unit tests. The test
@@ -13,7 +14,7 @@ import Foundation
 /// purchase flow, restore, entitlement stream behavior) where
 /// spinning up a TestStore would be overkill.
 final class MockSubscriptionService: SubscriptionService, @unchecked Sendable {
-    private let lock = NSLock()
+    private let lock = OSAllocatedUnfairLock()
     private var entitlement: SubscriptionEntitlement
     private var continuations: [UUID: AsyncStream<SubscriptionEntitlement>.Continuation] = [:]
     let productCatalog: [SubscriptionPlan]
@@ -43,10 +44,8 @@ final class MockSubscriptionService: SubscriptionService, @unchecked Sendable {
         }
     }
 
-    func currentEntitlement() -> SubscriptionEntitlement {
-        lock.lock()
-        defer { lock.unlock() }
-        return entitlement
+    func currentEntitlement() async -> SubscriptionEntitlement {
+        lock.withLock { entitlement }
     }
 
     func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
@@ -58,9 +57,10 @@ final class MockSubscriptionService: SubscriptionService, @unchecked Sendable {
             self.lock.unlock()
             continuation.yield(initial)
             continuation.onTermination = { [weak self] _ in
-                self?.lock.lock()
-                self?.continuations.removeValue(forKey: id)
-                self?.lock.unlock()
+                guard let self else { return }
+                self.lock.lock()
+                self.continuations.removeValue(forKey: id)
+                self.lock.unlock()
             }
         }
     }
@@ -91,7 +91,7 @@ final class MockSubscriptionService: SubscriptionService, @unchecked Sendable {
         if purchaseDelay > .zero {
             try? await Task.sleep(for: purchaseDelay)
         }
-        return currentEntitlement()
+        return await currentEntitlement()
     }
 
     @MainActor

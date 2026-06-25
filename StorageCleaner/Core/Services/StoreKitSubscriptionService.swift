@@ -98,16 +98,9 @@ actor StoreKitSubscriptionService: SubscriptionService {
 
     // MARK: - SubscriptionService
 
-    nonisolated func currentEntitlement() -> SubscriptionEntitlement {
-        // Snapshot read of an actor-isolated property. Safe to call
-        // from any context; the read is just a pointer copy.
-        // We can't await on the actor from a non-async context, so we
-        // hand back the most recent value we know about. The live
-        // stream is the source of truth for UI.
-        // (See `entitlementUpdates()` for the hot stream.)
-        // The actual current value is fetched asynchronously via the
-        // stream's first emission.
-        .free
+    func currentEntitlement() async -> SubscriptionEntitlement {
+        await startIfNeeded()
+        return current
     }
 
     nonisolated func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
