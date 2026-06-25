@@ -15,16 +15,21 @@ import SwiftUI
 ///   "Lifetime") with a status pill, a "Manage Subscription" button
 ///   that hands control to AppKit, and a "Change Plan" button that
 ///   opens the paywall sheet.
+///
+/// Visually the panel uses a subtle gradient border (matching the
+/// paywall's `PlanCard.featured` rhythm) so the subscription section
+/// reads as a premium surface, not a plain settings row.
 struct SubscriptionSettingsSection: View {
     @Bindable var controller: SubscriptionController
 
     var body: some View {
-        SettingsPanel(
+        SettingsSectionCard(
             title: "Subscription",
+            subtitle: "Manage your plan and unlock Pro features.",
             icon: "sparkles",
-            color: AppTheme.accent
+            tint: AppTheme.accent
         ) {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.mediumLarge) {
                 currentPlanRow
                 actionRow
                 footerNote
@@ -36,13 +41,13 @@ struct SubscriptionSettingsSection: View {
     // MARK: - Subviews
 
     private var currentPlanRow: some View {
-        HStack(spacing: AppTheme.Spacing.medium) {
-            SettingsIcon(symbol: planIconName, color: planIconColor)
+        HStack(alignment: .center, spacing: AppTheme.Spacing.medium) {
+            planIcon
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text("Current plan")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                     if controller.currentEntitlement.isPro {
                         Text("Pro")
@@ -50,9 +55,7 @@ struct SubscriptionSettingsSection: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(
-                                Capsule().fill(AppTheme.accent)
-                            )
+                            .background(Capsule().fill(AppTheme.accent))
                     }
                 }
                 Text(planTitle)
@@ -64,9 +67,15 @@ struct SubscriptionSettingsSection: View {
 
             if controller.currentEntitlement.isPro {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("Active")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(AppTheme.mint)
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(AppTheme.mint)
+                            .frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
+                        Text("Active")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.mint)
+                    }
                     Text(planSubtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -78,6 +87,18 @@ struct SubscriptionSettingsSection: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(AppTheme.subtleSurface)
         )
+    }
+
+    private var planIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(planIconColor.opacity(0.14))
+            Image(systemName: planIconName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(planIconColor)
+        }
+        .frame(width: 36, height: 36)
+        .accessibilityHidden(true)
     }
 
     private var actionRow: some View {
@@ -164,58 +185,5 @@ struct SubscriptionSettingsSection: View {
 
     private var planIconColor: Color {
         controller.currentEntitlement.isPro ? AppTheme.mint : .gray
-    }
-}
-
-// Re-export the SettingsPanel / SettingsIcon from the same module
-// so this file stands alone. The originals are fileprivate in
-// InAppSettingsView.swift; we re-implement the visual primitives
-// inline so the paywall module can ship independently.
-private struct SettingsPanel<Content: View>: View {
-    let title: String
-    let icon: String
-    let color: Color
-    let content: Content
-
-    init(title: String, icon: String, color: Color, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.icon = icon
-        self.color = color
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.mediumLarge) {
-            HStack(spacing: AppTheme.Spacing.small) {
-                SettingsIcon(symbol: icon, color: color)
-                Text(title)
-                    .font(.headline)
-            }
-
-            content
-        }
-        .padding(AppTheme.Spacing.mediumLarge)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(AppTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
-                .stroke(AppTheme.hairline, lineWidth: 1)
-        }
-        .shadow(color: Color.primary.opacity(0.045), radius: 10, y: 4)
-    }
-}
-
-private struct SettingsIcon: View {
-    let symbol: String
-    let color: Color
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(color)
-            .frame(width: 30, height: 30)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-            .accessibilityHidden(true)
     }
 }

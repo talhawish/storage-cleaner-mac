@@ -87,7 +87,7 @@ enum AppTheme {
 struct CardSurface: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(AppTheme.surface)
+            .background(AppTheme.subtleSurface)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)

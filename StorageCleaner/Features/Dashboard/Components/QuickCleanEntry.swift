@@ -23,7 +23,7 @@ struct QuickCleanEntry: View {
             .padding(AppTheme.Spacing.large)
             .background(
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
-                    .fill(.regularMaterial)
+                    .fill(AppTheme.subtleSurface)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)

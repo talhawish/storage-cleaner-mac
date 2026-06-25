@@ -265,6 +265,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
 				SDKROOT = macosx;
+				DEVELOPMENT_TEAM = 848R6Y8374;
 			};
 			name = Release;
 		};
@@ -488,6 +489,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
 				SDKROOT = macosx;
+				DEVELOPMENT_TEAM = 848R6Y8374;
 			};
 			name = Debug;
 		};

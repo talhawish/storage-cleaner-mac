@@ -17,7 +17,9 @@ struct FileSystemPermissionService: StoragePermissionHandling {
     private let homeDirectory: URL
 
     init(
-        bookmarkStore: any BookmarkDataStoring = UserDefaultsBookmarkDataStore(userDefaults: .standard),
+        bookmarkStore: any BookmarkDataStoring = UserDefaultsBookmarkDataStore(
+            userDefaults: UserDefaults(suiteName: "com.storagecleaner.developer") ?? .standard
+        ),
         picker: any HomeFolderPicking = NSOpenPanelHomeFolderPicker(),
         homeDirectory: URL = UserHomeDirectory.url
     ) {
@@ -92,6 +94,17 @@ struct FileSystemPermissionService: StoragePermissionHandling {
 
     func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
         guard let home = resolveBookmarkedHome() else { return nil }
+
+        // Probe actual directory access while the security scope is active.
+        // Bookmark resolution can succeed even when TCC denies access
+        // (e.g. user revoked Home Folder permission in System Settings
+        // without clearing the bookmark). The opendir-based probe surfaces
+        // TCC's EPERM denial, which is the only reliable signal.
+        if DirectoryAccessProbe.state(of: home) == .denied {
+            home.stopAccessingSecurityScopedResource()
+            removeStoredBookmarks()
+            return nil
+        }
 
         var accesses: [SecurityScopedResourceAccess] = []
         // Scope is already started by resolveBookmarkedHome's .withSecurityScope.

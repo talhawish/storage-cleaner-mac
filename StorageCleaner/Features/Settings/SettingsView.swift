@@ -1,5 +1,9 @@
 import SwiftUI
 
+/// The system Preferences window's Settings tab. Mirrors the most
+/// impactful preferences from `InAppSettingsView` so the user sees the
+/// same controls whether they open the in-app Settings page or the
+/// standard `Settings` (⌘,) window.
 struct SettingsView: View {
     @AppStorage("includeExternalVolumes")
     private var includeExternalVolumes = false

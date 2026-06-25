@@ -52,6 +52,8 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.appBackground)
         .task {
             isDockerInstalled = DockerService.live.isInstalled
         }

@@ -53,6 +53,36 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         XCTAssertNotNil(service.beginHomeFolderAccess())
     }
 
+    func testStaleBookmarkIsDetectedViaDirectoryProbe() throws {
+        let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let store = InMemoryBookmarkDataStore()
+        let homeBookmark = try home.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        store.set(homeBookmark, forKey: "HomeFolderSecurityScopedBookmark")
+        let service = FileSystemPermissionService(
+            bookmarkStore: store,
+            picker: FixedHomeFolderPicker(selectedURL: home),
+            homeDirectory: home
+        )
+
+        // Sanity check: access works when directory is readable.
+        XCTAssertNotNil(service.beginHomeFolderAccess())
+
+        // Revoke access by making the directory unreadable.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: home.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: home.path) }
+
+        // beginHomeFolderAccess must detect the denial and return nil.
+        XCTAssertNil(service.beginHomeFolderAccess())
+
+        // Stale bookmarks must be cleaned up.
+        XCTAssertNil(store.data(forKey: "HomeFolderSecurityScopedBookmark"))
+    }
+
     @MainActor
     func testRequestSucceedsWhenStandardChildFoldersAreMissing() throws {
         let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
