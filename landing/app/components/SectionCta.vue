@@ -24,8 +24,8 @@
               forever, no account, no telemetry — the way Mac apps should be.
             </p>
             <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href="#" class="btn-primary px-6 py-3 text-[15px]">
-                <svg viewBox="0 0 24 24" class="h-4 w-4" aria-hidden="true">
+              <a href="#" class="btn-primary shrink-0 px-6 py-3 text-[15px]">
+                <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" aria-hidden="true">
                   <path
                     fill="currentColor"
                     d="M17.05 12.04c-.03-2.74 2.24-4.06 2.34-4.12-1.27-1.86-3.26-2.12-3.97-2.15-1.69-.17-3.3 1-4.16 1-.86 0-2.18-.97-3.59-.94-1.85.03-3.55 1.08-4.5 2.73-1.92 3.32-.49 8.23 1.38 10.92.91 1.32 2 2.81 3.41 2.76 1.37-.06 1.89-.89 3.54-.89 1.65 0 2.12.89 3.57.86 1.47-.03 2.41-1.34 3.31-2.67 1.05-1.53 1.48-3.02 1.5-3.1-.03-.01-2.88-1.11-2.91-4.4ZM14.32 4.06c.74-.91 1.25-2.17 1.11-3.43-1.07.05-2.38.72-3.16 1.62-.69.8-1.31 2.09-1.15 3.32 1.2.09 2.43-.61 3.2-1.51Z"
@@ -35,7 +35,7 @@
               </a>
               <a
                 href="https://github.com/talhawish/storage-cleaner-mac"
-                class="btn-secondary px-6 py-3 text-[15px]"
+                class="btn-secondary shrink-0 px-6 py-3 text-[15px]"
               >
                 Star on GitHub
               </a>

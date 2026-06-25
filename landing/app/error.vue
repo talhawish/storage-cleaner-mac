@@ -27,7 +27,7 @@ const handleHome = () => clearError({ redirect: '/' })
         {{ title }}
       </h1>
       <p class="lede mx-auto mt-3 max-w-md">{{ subtitle }}</p>
-      <button type="button" class="btn-primary mt-8 px-5 py-2.5" @click="handleHome">
+      <button type="button" class="btn-primary mt-8 shrink-0 px-5 py-2.5" @click="handleHome">
         Back to home
       </button>
     </div>

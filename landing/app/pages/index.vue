@@ -45,9 +45,8 @@ usePageSeo({
           </p>
 
           <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <a href="#download" class="btn-primary px-6 py-3 text-[15px]">
-              <span>Download for macOS</span>
-              <svg viewBox="0 0 20 20" class="h-4 w-4" aria-hidden="true">
+            <a href="#download" class="btn-primary shrink-0 px-6 py-3 text-[15px]">
+              <svg viewBox="0 0 20 20" class="h-4 w-4 shrink-0" aria-hidden="true">
                 <path
                   fill="currentColor"
                   d="M10.75 3a.75.75 0 0 0-1.5 0v9.69l-2.47-2.47a.75.75 0 1 0-1.06 1.06l3.75 3.75a.75.75 0 0 0 1.06 0l3.75-3.75a.75.75 0 1 0-1.06-1.06l-2.47 2.47V3Z"
@@ -57,8 +56,9 @@ usePageSeo({
                   d="M3.75 15a.75.75 0 0 0-.75.75v.75h14v-.75a.75.75 0 0 1 1.5 0v1.5A1.5 1.5 0 0 1 17 18.5H3a1.5 1.5 0 0 1-1.5-1.5v-1.5a.75.75 0 0 1 .75-.75Z"
                 />
               </svg>
+              <span>Download for macOS</span>
             </a>
-            <a href="#features" class="btn-secondary px-6 py-3 text-[15px]">
+            <a href="#features" class="btn-secondary shrink-0 px-6 py-3 text-[15px]">
               See what's inside
             </a>
           </div>

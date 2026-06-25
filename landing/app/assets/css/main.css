@@ -206,6 +206,8 @@
     padding: 0.625rem 1.25rem;
     font-size: 0.875rem;
     font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
     transition:
       transform 150ms ease,
       background-color 150ms ease,

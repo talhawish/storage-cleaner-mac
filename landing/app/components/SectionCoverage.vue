@@ -113,7 +113,7 @@ const dotClass: Record<Tone, string> = {
         </div>
         <NuxtLink
           to="https://github.com/talhawish/storage-cleaner-mac"
-          class="btn-secondary self-end"
+          class="btn-secondary shrink-0 self-end"
         >
           View on GitHub
         </NuxtLink>

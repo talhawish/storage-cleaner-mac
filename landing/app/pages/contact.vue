@@ -92,7 +92,7 @@ const channels = [
             <p class="mt-2 text-sm leading-relaxed text-ink-600">{{ channel.body }}</p>
             <a
               :href="`mailto:${channel.email}`"
-              class="btn-secondary mt-4 py-2 text-[12px]"
+              class="btn-secondary mt-4 shrink-0 py-2 text-[12px]"
             >
               {{ channel.cta }}
             </a>
@@ -206,7 +206,7 @@ const channels = [
             </p>
             <button
               type="submit"
-              class="btn-primary px-5 py-2.5 text-sm"
+              class="btn-primary shrink-0 px-5 py-2.5 text-sm"
               :disabled="status === 'sending'"
             >
               {{ status === 'sending' ? 'Opening\u2026' : 'Send message' }}

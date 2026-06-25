@@ -8,17 +8,13 @@ const year = new Date().getFullYear()
       <div class="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <div class="flex items-center gap-2.5">
-            <span
-              class="grid h-8 w-8 place-items-center rounded-lg bg-ink-900 text-white"
-              aria-hidden="true"
-            >
-              <svg viewBox="0 0 24 24" class="h-4 w-4">
-                <path
-                  fill="currentColor"
-                  d="M4 7a3 3 0 0 1 3-3h7l5 5v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7Zm12 .5V4l4 4h-3.5A.5.5 0 0 1 16 7.5ZM7 11.5a.75.75 0 0 0 0 1.5h6a.75.75 0 0 0 0-1.5H7Zm0 3.5a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H7Z"
-                />
-              </svg>
-            </span>
+            <img
+              src="/icon-128.png"
+              alt=""
+              width="32"
+              height="32"
+              class="h-8 w-8 rounded-[8px] shadow-[0_4px_12px_-4px_rgba(15,23,42,0.25)]"
+            />
             <span class="text-[15px] font-semibold tracking-[-0.01em] text-ink-900">
               Storage Cleaner
               <span class="ml-1 text-ink-500 font-normal">for Developers</span>
