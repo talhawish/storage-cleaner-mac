@@ -349,7 +349,9 @@ final class FileSystemScannerTests: XCTestCase {
 
         let statuses = service.currentStatuses()
 
-        XCTAssertEqual(statuses.map(\.scope), [.home])
+        let scopes = statuses.map(\.scope)
+        XCTAssertEqual(scopes.sorted(by: { $0.rawValue < $1.rawValue }),
+                       StoragePermissionScope.allCases.sorted(by: { $0.rawValue < $1.rawValue }))
         XCTAssertEqual(statuses.first?.url, UserHomeDirectory.url)
     }
 

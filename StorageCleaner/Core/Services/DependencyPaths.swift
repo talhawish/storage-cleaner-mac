@@ -240,10 +240,21 @@ enum DependencyPaths {
     // MARK: - Media Roots
 
     enum Media {
+        /// Raster image formats whose pixel data `NSImage` (and QuickLook) can decode
+        /// without any extra plumbing. Used by thumbnail and preview code paths.
         static let imageExtensions: Set<String> = [
             "png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif",
             "webp", "heic", "heif", "raw", "dng"
         ]
+        /// Vector formats that require a separate renderer (WKWebView) because
+        /// `NSImage(contentsOf:)` only handles them on macOS 14+ and even then can
+        /// produce inconsistently-sized bitmaps.
+        static let vectorImageExtensions: Set<String> = [
+            "svg"
+        ]
+        /// Combined set used by the screenshot scanner and other file-pattern scanners
+        /// that should accept both raster and vector images.
+        static let allImageExtensions: Set<String> = imageExtensions.union(vectorImageExtensions)
         static let videoExtensions: Set<String> = [
             "mov", "mp4", "m4v", "avi", "mkv", "webm"
         ]
@@ -252,8 +263,9 @@ enum DependencyPaths {
     // MARK: - Document & Archive Roots
 
     /// File types surfaced by duplicate-document detection: office documents, spreadsheets,
-    /// presentations, vector/markup files, e-books, and the common compressed-archive formats.
-    /// `svg` lives here (not under `Media`) so vector exports are classified as documents.
+    /// presentations, markup files, e-books, and the common compressed-archive formats.
+    /// SVG is intentionally excluded — it lives under `Media.vectorImageExtensions` so it gets
+    /// a real preview and thumbnail in the media views.
     enum Documents {
         static let documentExtensions: Set<String> = [
             // Documents
@@ -262,8 +274,8 @@ enum DependencyPaths {
             "csv", "tsv", "xls", "xlsx", "numbers", "ods",
             // Presentations
             "ppt", "pptx", "key", "odp",
-            // Vector & markup
-            "svg",
+            // Markup
+            "html", "htm", "xml", "json", "yaml", "yml",
             // Compressed archives
             "zip", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz", "zst", "7z", "rar"
         ]

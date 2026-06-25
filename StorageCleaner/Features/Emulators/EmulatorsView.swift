@@ -25,6 +25,12 @@ struct EmulatorsView: View {
                 emptyState
             case .loaded:
                 content
+            case .permissionRequired:
+                PermissionRequiredView(
+                    blockedPermissions: viewModel.blockedPermissions,
+                    onOpenSettings: viewModel.openSystemSettings,
+                    onGrantAccess: viewModel.grantAccessAndRetry
+                )
             }
         }
         .navigationTitle("Simulators & Emulators")

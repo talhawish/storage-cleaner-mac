@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -23,10 +24,11 @@ final class EmulatorsViewModel {
         case loading
         case empty
         case loaded
+        case permissionRequired
     }
 
     private let service: any EmulatorsServicing
-    private let permissionHandler: any StoragePermissionHandling
+    let permissionHandler: any StoragePermissionHandling
 
     private(set) var images: [EmulatorImage] = []
     private(set) var state: State = .loading
@@ -51,6 +53,10 @@ final class EmulatorsViewModel {
 
     var totalBytes: Int64 { images.reduce(0) { $0 + $1.bytes } }
 
+    var blockedPermissions: [StoragePermissionStatus] {
+        permissionHandler.currentStatuses().filter { $0.state == .denied && $0.scope.isBlocking }
+    }
+
     var selectedImages: [EmulatorImage] {
         images.filter { selectedIDs.contains($0.id) }
     }
@@ -74,9 +80,29 @@ final class EmulatorsViewModel {
         loadTask?.cancel()
         state = .loading
         loadStartedAt = Date()
+        let statuses = permissionHandler.currentStatuses()
+        let blocked = statuses.filter { $0.state == .denied && $0.scope.isBlocking }
+        guard blocked.isEmpty else {
+            state = .permissionRequired
+            return
+        }
         loadTask = Task { [weak self] in
             await self?.load()
         }
+    }
+
+    /// Attempts to grant home folder access via the system permission picker,
+    /// then retries discovery. Call from the permission-required UI.
+    func grantAccessAndRetry() {
+        let granted = permissionHandler.requestHomeFolderAccess()
+        guard granted else { return }
+        start()
+    }
+
+    /// Opens System Settings to the Full Disk Access pane.
+    func openSystemSettings() {
+        guard let url = SystemSettingsPane.fullDiskAccess.url else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Removes the supplied images using the injected service. Returns the service's

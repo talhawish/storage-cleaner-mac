@@ -240,7 +240,7 @@ struct LargePhotoScanner: StorageCategoryScanning {
             safety: .review,
             collector: collector
         ) { url in
-            DependencyPaths.Media.imageExtensions.contains(url.pathExtension.lowercased())
+            DependencyPaths.Media.allImageExtensions.contains(url.pathExtension.lowercased())
         }
     }
 
@@ -264,7 +264,7 @@ struct DuplicatePhotoScanner: StorageCategoryScanning {
             kind: .duplicatePhotos,
             domain: .photos,
             roots: mediaRoots,
-            extensions: DependencyPaths.Media.imageExtensions,
+            extensions: DependencyPaths.Media.allImageExtensions,
             minimumBytes: 250_000,
             collector: collector
         )

@@ -1,6 +1,10 @@
-import QuickLookThumbnailing
+import AppKit
 import SwiftUI
 
+/// Renders a square thumbnail for a media file. The view owns its own
+/// `MediaThumbnailLoadingState` and asks `MediaThumbnailProvider` for the bitmap
+/// on first appearance, falling back to a typographic system icon when the file
+/// can't be decoded.
 struct MediaThumbnailView: View {
     let url: URL
     let sideLength: CGFloat
@@ -8,8 +12,8 @@ struct MediaThumbnailView: View {
     let cornerRadius: CGFloat
     let contentMode: ContentMode
 
-    @State private var thumbnail: NSImage?
-    @State private var isLoading = true
+    @State private var state: ThumbnailState = .loading
+    @State private var fileType: MediaFileType
 
     init(
         url: URL,
@@ -23,6 +27,7 @@ struct MediaThumbnailView: View {
         self.displaySideLength = displaySideLength
         self.cornerRadius = cornerRadius
         self.contentMode = contentMode
+        _fileType = State(initialValue: MediaFileType.classify(url: url))
     }
 
     /// When `displaySideLength` is set the view is a fixed square (list rows).
@@ -31,24 +36,14 @@ struct MediaThumbnailView: View {
 
     var body: some View {
         Group {
-            if let thumbnail {
-                Image(nsImage: thumbnail)
+            switch state {
+            case let .loaded(image):
+                Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
-            } else {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.quaternary.opacity(0.45))
-                    .overlay {
-                        if isLoading {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: fallbackSystemImage)
-                                .font(.system(size: sideLength * 0.28))
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                        }
-                    }
+                    .accessibilityHidden(true)
+            case .loading, .failed:
+                placeholder
             }
         }
         .frame(width: displaySideLength, height: displaySideLength)
@@ -57,79 +52,56 @@ struct MediaThumbnailView: View {
             maxHeight: fillsContainer ? .infinity : nil
         )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .task(id: url) {
-            isLoading = true
-            thumbnail = await MediaThumbnailProvider.shared.thumbnail(for: url, sideLength: sideLength)
-            isLoading = false
-        }
+        .task(id: thumbnailCacheKey) { await load() }
         .accessibilityHidden(true)
     }
 
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(.quaternary.opacity(0.45))
+            .overlay {
+                if case .loading = state {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: fallbackSystemImage)
+                        .font(.system(size: sideLength * 0.28))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+
     private var fallbackSystemImage: String {
-        switch url.pathExtension.lowercased() {
-        case let ext where DependencyPaths.Media.videoExtensions.contains(ext):
-            "film"
-        case let ext where DependencyPaths.Media.imageExtensions.contains(ext):
-            "photo"
-        case "pdf":
-            "doc.richtext"
-        case "mp3", "wav", "m4a", "aac", "flac":
-            "waveform"
-        case "zip", "tar", "gz", "7z", "rar", "xz", "zst":
-            "archivebox"
-        case "dmg", "iso":
-            "opticaldisc"
-        case "sql", "sqlite", "sqlite3", "db", "mmdb":
-            "cylinder.split.1x2"
-        case "swift", "py", "js", "ts", "go", "rs", "java", "kt", "rb", "json", "xml", "yaml", "yml":
-            "chevron.left.forwardslash.chevron.right"
-        default:
-            "doc"
+        fileType.symbolName
+    }
+
+    private var thumbnailCacheKey: String {
+        "\(url.path)|\(Int(sideLength))"
+    }
+
+    private func load() async {
+        state = .loading
+        let image = await MediaThumbnailProvider.shared.thumbnail(for: url, sideLength: sideLength)
+        if let image {
+            state = .loaded(image)
+        } else {
+            state = .failed
         }
     }
 }
 
-actor MediaThumbnailProvider {
-    static let shared = MediaThumbnailProvider()
+private enum ThumbnailState: Equatable {
+    case loading
+    case loaded(NSImage)
+    case failed
 
-    private let cache = NSCache<NSString, NSImage>()
-
-    func thumbnail(for url: URL, sideLength: CGFloat) async -> NSImage? {
-        let scale = await screenScale()
-        let pixelSize = Int(sideLength * scale)
-        let key = "\(url.path)|\(pixelSize)" as NSString
-
-        if let cachedImage = cache.object(forKey: key) {
-            return cachedImage
-        }
-
-        guard let image = await generateThumbnail(for: url, sideLength: sideLength) else {
-            return nil
-        }
-
-        cache.setObject(image, forKey: key)
-        return image
-    }
-
-    private func generateThumbnail(for url: URL, sideLength: CGFloat) async -> NSImage? {
-        let scale = await screenScale()
-        let request = QLThumbnailGenerator.Request(
-            fileAt: url,
-            size: CGSize(width: sideLength, height: sideLength),
-            scale: scale,
-            representationTypes: .thumbnail
-        )
-
-        return await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { thumbnail, _ in
-                continuation.resume(returning: thumbnail?.nsImage)
-            }
-        }
-    }
-
-    private func screenScale() async -> CGFloat {
-        await MainActor.run {
-            NSScreen.main?.backingScaleFactor ?? 2
+    static func == (lhs: ThumbnailState, rhs: ThumbnailState) -> Bool {
+        switch (lhs, rhs) {
+        case (.loading, .loading): return true
+        case (.failed, .failed): return true
+        case let (.loaded(lhsImage), .loaded(rhsImage)): return lhsImage === rhsImage
+        default: return false
         }
     }
 }

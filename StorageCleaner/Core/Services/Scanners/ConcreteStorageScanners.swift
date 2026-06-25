@@ -154,7 +154,8 @@ struct ScreenshotStorageScanner: StorageCategoryScanning {
             safety: .review,
             collector: collector
         ) { url in
-            guard DependencyPaths.Media.imageExtensions.contains(url.pathExtension.lowercased()) else { return false }
+            let ext = url.pathExtension.lowercased()
+            guard DependencyPaths.Media.allImageExtensions.contains(ext) else { return false }
             let name = url.lastPathComponent.lowercased()
             return name.contains("screenshot") || name.contains("screen shot") || name.contains("simulator screen shot")
         }

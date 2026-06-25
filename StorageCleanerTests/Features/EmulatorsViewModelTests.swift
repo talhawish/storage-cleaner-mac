@@ -60,6 +60,10 @@ final class EmulatorsViewModelTests: XCTestCase {
         )
     }
 
+    private func grantedHandler() -> StoragePermissionHandling {
+        GrantedPermissionHandler()
+    }
+
     // MARK: - Initial state
 
     /// The view should always start in `.loading` so the spinner is visible the moment the
@@ -77,7 +81,7 @@ final class EmulatorsViewModelTests: XCTestCase {
         let service = FakeEmulatorService()
         service.nextDiscover = [runtime(), deviceSupport()]
 
-        let viewModel = EmulatorsViewModel(service: service)
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
         viewModel.start()
 
         // Wait for the load to complete (the view model holds the loading state for at least
@@ -92,7 +96,7 @@ final class EmulatorsViewModelTests: XCTestCase {
         let service = FakeEmulatorService()
         service.nextDiscover = []
 
-        let viewModel = EmulatorsViewModel(service: service)
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
         viewModel.start()
 
         try? await Task.sleep(for: .milliseconds(700))
@@ -106,7 +110,7 @@ final class EmulatorsViewModelTests: XCTestCase {
     func testLoadingStateIsVisibleForAtLeastFourHundredMilliseconds() async {
         let service = FakeEmulatorService()
         service.nextDiscover = [runtime()]
-        let viewModel = EmulatorsViewModel(service: service)
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
 
         let started = Date()
         viewModel.start()
@@ -127,7 +131,7 @@ final class EmulatorsViewModelTests: XCTestCase {
         let service = FakeEmulatorService()
         service.nextDiscover = [runtime()]
 
-        let viewModel = EmulatorsViewModel(service: service)
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
         viewModel.start()
         try? await Task.sleep(for: .milliseconds(700))
 
@@ -183,7 +187,7 @@ final class EmulatorsViewModelTests: XCTestCase {
             lastUsed: nil
         )
         service.nextDiscover = [simulator, runtime, device]
-        let viewModel = EmulatorsViewModel(service: service)
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
         viewModel.start()
         try? await Task.sleep(for: .milliseconds(700))
 
@@ -196,7 +200,7 @@ final class EmulatorsViewModelTests: XCTestCase {
     func testDeleteForwardsToServiceAndClearsSelection() async {
         let service = FakeEmulatorService()
         service.nextDiscover = [runtime(), deviceSupport()]
-        let viewModel = EmulatorsViewModel(service: service)
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
         viewModel.start()
         try? await Task.sleep(for: .milliseconds(700))
 
@@ -278,9 +282,65 @@ final class EmulatorsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .loaded)
         XCTAssertEqual(viewModel.images.count, 2)
     }
+
+    // MARK: - Permission-required state
+
+    func testStartShowsPermissionRequiredWhenHomeAccessDenied() async {
+        let service = FakeEmulatorService()
+        service.nextDiscover = [runtime()]
+        let handler = BlockedPermissionHandler()
+        let viewModel = EmulatorsViewModel(
+            service: service,
+            permissionHandler: handler
+        )
+        viewModel.start()
+
+        // Should transition directly to permissionRequired without loading.
+        XCTAssertEqual(viewModel.state, .permissionRequired)
+        XCTAssertTrue(viewModel.images.isEmpty)
+        XCTAssertEqual(service.discoverCalls, 0, "discover must not be called when permission is blocked")
+    }
+
+    func testGrantAccessAndRetryResumesLoading() async {
+        let service = FakeEmulatorService()
+        service.nextDiscover = [runtime()]
+        let homeURL = URL(fileURLWithPath: "/Users/test")
+        let deniedStatuses: [StoragePermissionStatus] = [
+            StoragePermissionStatus(scope: .home, url: homeURL, state: .denied)
+        ]
+        let handler = SimulatedHomeGrantHandler(statuses: deniedStatuses)
+        let viewModel = EmulatorsViewModel(
+            service: service,
+            permissionHandler: handler
+        )
+        viewModel.start()
+        XCTAssertEqual(viewModel.state, .permissionRequired)
+
+        // Simulate the user granting access, then retry.
+        handler.granted = true
+        handler.statuses = [
+            StoragePermissionStatus(scope: .home, url: homeURL, state: .accessible)
+        ]
+        viewModel.grantAccessAndRetry()
+
+        try? await Task.sleep(for: .milliseconds(700))
+        XCTAssertEqual(viewModel.state, .loaded)
+        XCTAssertEqual(service.discoverCalls, 1)
+    }
 }
 
 // MARK: - Permission handlers
+
+/// Reports home as accessible so `start()` proceeds to discovery. Used by tests that need
+/// the load path but don't care about permission gating.
+private final class GrantedPermissionHandler: StoragePermissionHandling, @unchecked Sendable {
+    func currentStatuses() -> [StoragePermissionStatus] {
+        [StoragePermissionStatus(scope: .home, url: URL(fileURLWithPath: "/Users/test"), state: .accessible)]
+    }
+
+    func requestHomeFolderAccess() -> Bool { false }
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? { nil }
+}
 
 /// Records every call so tests can assert the view model actually goes through the permission
 /// handler. Returns `nil` for the access (mirrors the unsandboxed / test path).
@@ -300,4 +360,31 @@ private final class DenyingPermissionHandler: StoragePermissionHandling, @unchec
     func currentStatuses() -> [StoragePermissionStatus] { [] }
     func requestHomeFolderAccess() -> Bool { false }
     func beginHomeFolderAccess() -> SecurityScopedResourceAccess? { nil }
+}
+
+/// Reports the home scope as `.denied` so `start()` transitions to `.permissionRequired`.
+private final class BlockedPermissionHandler: StoragePermissionHandling, @unchecked Sendable {
+    func currentStatuses() -> [StoragePermissionStatus] {
+        [StoragePermissionStatus(scope: .home, url: URL(fileURLWithPath: "/Users/test"), state: .denied)]
+    }
+
+    func requestHomeFolderAccess() -> Bool { false }
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? { nil }
+}
+
+/// Simulates the full grant-and-retry lifecycle for the permission-required state machine.
+private final class SimulatedHomeGrantHandler: StoragePermissionHandling, @unchecked Sendable {
+    var statuses: [StoragePermissionStatus]
+    var granted = false
+
+    init(statuses: [StoragePermissionStatus]) { self.statuses = statuses }
+
+    func currentStatuses() -> [StoragePermissionStatus] { statuses }
+
+    func requestHomeFolderAccess() -> Bool { granted }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        guard granted else { return nil }
+        return SecurityScopedResourceAccess(url: URL(fileURLWithPath: "/tmp/stub"), didStartAccessing: false)
+    }
 }

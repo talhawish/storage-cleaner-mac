@@ -27,13 +27,45 @@ struct FileSystemPermissionService: StoragePermissionHandling {
     }
 
     func currentStatuses() -> [StoragePermissionStatus] {
-        [
+        let homeAccessible = resolveBookmarkedHome() != nil
+        var statuses: [StoragePermissionStatus] = [
             StoragePermissionStatus(
                 scope: .home,
                 url: homeDirectory,
-                state: resolveBookmarkedHome() == nil ? .denied : .accessible
+                state: homeAccessible ? .accessible : .denied
             )
         ]
+
+        let scopeByRelativePath: [StoragePermissionScope: String] = [
+            .desktop: "Desktop",
+            .downloads: "Downloads",
+            .movies: "Movies",
+            .pictures: "Pictures",
+            .library: "Library",
+            .trash: ".Trash"
+        ]
+
+        for (scope, relativePath) in scopeByRelativePath {
+            let childFolder = HomeChildFolder(relativePath: relativePath, directoryHint: .isDirectory)
+            let resolved = resolveChildBookmark(childFolder, homeDirectory: homeDirectory)
+            let state: StoragePermissionState
+            if resolved != nil {
+                state = .accessible
+            } else if bookmarkStore.data(forKey: childFolder.bookmarkKey) != nil {
+                state = .denied
+            } else {
+                state = .missing
+            }
+            statuses.append(
+                StoragePermissionStatus(
+                    scope: scope,
+                    url: homeDirectory.appending(path: relativePath, directoryHint: .isDirectory),
+                    state: state
+                )
+            )
+        }
+
+        return statuses
     }
 
     @MainActor
@@ -62,14 +94,12 @@ struct FileSystemPermissionService: StoragePermissionHandling {
         guard let home = resolveBookmarkedHome() else { return nil }
 
         var accesses: [SecurityScopedResourceAccess] = []
-        for url in [home] + resolveChildBookmarks(homeDirectory: home) {
-            let didStart = url.startAccessingSecurityScopedResource()
-            guard didStart else {
-                guard url == home else { continue }
-                SecurityScopedResourceAccess(accesses: accesses).stop()
-                return nil
-            }
-            accesses.append(SecurityScopedResourceAccess(url: url, didStartAccessing: didStart))
+        // Scope is already started by resolveBookmarkedHome's .withSecurityScope.
+        accesses.append(SecurityScopedResourceAccess(url: home, didStartAccessing: true))
+
+        for url in resolveChildBookmarks(homeDirectory: home) {
+            // Scope already started by resolveChildBookmark's .withSecurityScope.
+            accesses.append(SecurityScopedResourceAccess(url: url, didStartAccessing: true))
         }
 
         return SecurityScopedResourceAccess(accesses: accesses)
