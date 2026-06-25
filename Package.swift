@@ -17,7 +17,11 @@ let package = Package(
         .executableTarget(
             name: "StorageCleaner",
             path: "StorageCleaner",
-            exclude: ["Assets.xcassets", "StorageCleaner.entitlements"]
+            exclude: [
+                "Assets.xcassets",
+                "StorageCleaner.entitlements",
+                "Resources/StorageCleanerPro.storekit"
+            ]
         ),
         .testTarget(
             name: "StorageCleanerTests",

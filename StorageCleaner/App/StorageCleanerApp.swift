@@ -5,6 +5,7 @@ import SwiftUI
 @main
 struct StorageCleanerApp: App {
     @State private var viewModel: DashboardViewModel
+    @State private var subscriptionController: SubscriptionController
     @StateObject private var systemAppearance = SystemAppearanceObserver()
     @AppStorage("appearanceMode")
     private var appearanceMode: AppearanceMode = .system
@@ -21,22 +22,28 @@ struct StorageCleanerApp: App {
             ? PersistenceController.makeInMemory()
             : PersistenceController.shared
         let historyStore = SwiftDataScanHistoryStore(context: modelContainer.mainContext)
+        let controller = SubscriptionController(service: container.subscriptionService)
 
         self.modelContainer = modelContainer
+        _subscriptionController = State(initialValue: controller)
         _viewModel = State(
             initialValue: DashboardViewModel(
                 scanner: container.storageScanner,
                 permissionHandler: container.permissionHandler,
                 cleanupService: container.cleanupService,
                 diskSpaceReader: container.diskSpaceReader,
-                historyStore: historyStore
+                historyStore: historyStore,
+                subscriptionController: controller
             )
         )
     }
 
     var body: some Scene {
         WindowGroup {
-            AppShellView(viewModel: viewModel)
+            AppShellView(
+                viewModel: viewModel,
+                subscriptionController: subscriptionController
+            )
                 .frame(minWidth: 920, minHeight: 640)
                 .preferredColorScheme(appearanceMode.colorScheme ?? systemAppearance.colorScheme)
                 .onAppear {

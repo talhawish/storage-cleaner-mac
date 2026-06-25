@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AppShellView: View {
     @Bindable var viewModel: DashboardViewModel
+    @Bindable var subscriptionController: SubscriptionController
     @State var selection: SidebarItem? = .section(.overview)
     @State var detailPath = NavigationPath()
     @State private var pendingSwitch: PendingSidebarSwitch?
@@ -48,6 +49,12 @@ struct AppShellView: View {
                     pendingSwitch = nil
                 },
                 onCancel: { pendingSwitch = nil }
+            )
+        }
+        .sheet(item: paywallBinding) { trigger in
+            PaywallSheet(
+                controller: subscriptionController,
+                trigger: trigger
             )
         }
     }
@@ -121,7 +128,7 @@ private extension AppShellView {
                         case .section(.cleanupHistory):
                             CleanupHistoryView()
                         case .section(.settings):
-                            InAppSettingsView()
+                            InAppSettingsView(subscriptionController: subscriptionController)
                         }
                     }
                     .navigationDestination(for: StorageFinding.self) { finding in
@@ -201,5 +208,54 @@ private extension ScanPhase {
         case .permissionRequired: "permissionRequired"
         case .failed: "failed"
         }
+    }
+}
+
+// MARK: - Paywall sheet
+
+private extension AppShellView {
+    /// Bridges the controller's `paywallRequest` (an optional
+    /// `PaywallTrigger`) into the `Binding<PaywallTrigger?>`
+    /// SwiftUI's `.sheet(item:)` needs. Setting it to `nil` from
+    /// inside the sheet dismisses the sheet; the controller's
+    /// `presentPaywall(_:)` writes a value to show it.
+    var paywallBinding: Binding<PaywallTrigger?> {
+        Binding(
+            get: { subscriptionController.paywallRequest },
+            set: { newValue in
+                if newValue == nil {
+                    subscriptionController.dismissPaywall()
+                }
+            }
+        )
+    }
+}
+
+/// The actual sheet. Creates a fresh `PaywallViewModel` per
+/// presentation so the banner / spinner state never leaks between
+/// sessions. The model's `onDismiss` calls back into the controller
+/// so dismissing via "X" or a successful purchase is the same code
+/// path.
+private struct PaywallSheet: View {
+    let controller: SubscriptionController
+    let trigger: PaywallTrigger
+
+    @Environment(\.openURL)
+    private var openURL
+
+    var body: some View {
+        PaywallView(
+            viewModel: PaywallViewModel(
+                service: controller.service,
+                onEntitlementUpgraded: { [weak controller] in
+                    controller?.dismissPaywall()
+                },
+                onDismiss: { [weak controller] in
+                    controller?.dismissPaywall()
+                }
+            ),
+            onTermsTapped: { openURL(AppLinks.terms) },
+            onPrivacyTapped: { openURL(AppLinks.privacy) }
+        )
     }
 }

@@ -5,6 +5,7 @@ struct AppContainer: Sendable {
     let permissionHandler: any StoragePermissionHandling
     let cleanupService: CleanupService
     let diskSpaceReader: any DiskSpaceReading
+    let subscriptionService: any SubscriptionService
 
     static var live: AppContainer {
         let permissionHandler = FileSystemPermissionService()
@@ -15,7 +16,8 @@ struct AppContainer: Sendable {
             ),
             permissionHandler: permissionHandler,
             cleanupService: FileManagerCleanupService(),
-            diskSpaceReader: LiveDiskSpaceService.shared
+            diskSpaceReader: LiveDiskSpaceService.shared,
+            subscriptionService: StoreKitSubscriptionService()
         )
     }
 
@@ -27,7 +29,8 @@ struct AppContainer: Sendable {
                 ),
                 permissionHandler: DemoPermissionHandler(),
                 cleanupService: DemoCleanupService(),
-                diskSpaceReader: DemoDiskSpaceService()
+                diskSpaceReader: DemoDiskSpaceService(),
+                subscriptionService: StoreKitSubscriptionService()
             )
         }
 
@@ -193,6 +196,10 @@ private struct DemoPermissionHandler: StoragePermissionHandling {
                 state: .accessible
             )
         }
+    }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        SecurityScopedResourceAccess(url: URL(filePath: "/tmp/demo-stub"), didStartAccessing: false)
     }
 }
 

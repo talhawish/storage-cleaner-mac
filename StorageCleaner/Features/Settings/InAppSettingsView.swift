@@ -11,6 +11,7 @@ struct InAppSettingsView: View {
     private var appearanceMode: AppearanceMode = .system
     @AppStorage("inactivityThreshold")
     private var inactivityThreshold: InactivityThreshold = .oneMonth
+    @Bindable var subscriptionController: SubscriptionController
 
     private let columns = [
         GridItem(.adaptive(minimum: 340, maximum: 520), spacing: AppTheme.Spacing.large, alignment: .top)
@@ -26,6 +27,7 @@ struct InAppSettingsView: View {
                 )
 
                 LazyVGrid(columns: columns, alignment: .leading, spacing: AppTheme.Spacing.large) {
+                    subscriptionSection
                     appearanceSection
                     quickCleanSection
                     projectActivitySection
@@ -40,6 +42,10 @@ struct InAppSettingsView: View {
         .background(AppTheme.appBackground)
         .navigationTitle("Settings")
         .accessibilityIdentifier("settings-root")
+    }
+
+    private var subscriptionSection: some View {
+        SubscriptionSettingsSection(controller: subscriptionController)
     }
 
     private var appearanceSection: some View {

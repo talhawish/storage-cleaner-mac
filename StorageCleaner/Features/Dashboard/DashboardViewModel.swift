@@ -14,6 +14,13 @@ final class DashboardViewModel {
     private let cleanupService: CleanupService
     private let cliRemovalService: CLIRemovalService
     private let historyStore: (any ScanHistoryStore)?
+    /// Owns the app's current Pro/Free entitlement. Optional so existing
+    /// unit tests that don't care about subscriptions can still construct
+    /// the VM. When `nil`, the cleanup gate is open (legacy behavior)
+    /// — production wiring in `StorageCleanerApp` always passes one in.
+    /// `internal` (not `private`) so the `+Subscription` extension file
+    /// can read it; the reference is read-only by convention.
+    let subscriptionController: SubscriptionController?
     private var scanTask: Task<Void, Never>?
     private var scanStartTime: Date?
     private var pendingScanKinds: Set<StorageFindingKind>?
@@ -38,7 +45,11 @@ final class DashboardViewModel {
     private(set) var freeBytesAtScanStart: Int64?
     /// Domains whose newest sampled files are older than the stale threshold. Populated off the main
     /// thread after a scan completes; empty until (and unless) sampling finds something.
-    private(set) var staleHints: [StaleHint] = []
+    /// Setter is `internal` (the default — explicit modifier would
+    /// be redundant) so the overview extension in
+    /// `DashboardViewModel+Overview.swift` can populate it from a
+    /// detached task. Reads are still module-internal.
+    var staleHints: [StaleHint] = []
     /// What the most recent scan covered. `never` means no scan has
     /// completed in this session (so every section is in its pre-scan
     /// "ready to discover" state). `full` means a full scan ran and covered
@@ -58,7 +69,8 @@ final class DashboardViewModel {
         cleanupService: CleanupService = FileManagerCleanupService(),
         cliRemovalService: CLIRemovalService = .live,
         diskSpaceReader: any DiskSpaceReading = LiveDiskSpaceService.shared,
-        historyStore: (any ScanHistoryStore)? = nil
+        historyStore: (any ScanHistoryStore)? = nil,
+        subscriptionController: SubscriptionController? = nil
     ) {
         self.scanner = scanner
         self.permissionHandler = permissionHandler
@@ -66,6 +78,7 @@ final class DashboardViewModel {
         self.cliRemovalService = cliRemovalService
         self.diskSpaceReader = diskSpaceReader
         self.historyStore = historyStore
+        self.subscriptionController = subscriptionController
         permissionStatuses = permissionHandler.currentStatuses()
         refreshVolumeSnapshot()
     }
@@ -91,6 +104,14 @@ final class DashboardViewModel {
     }
 
     func deleteFiles(_ urls: [URL]) async -> CleanupResult {
+        guard gateCleanup() else {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [],
+                totalBytesReclaimed: 0
+            )
+        }
         let result = await cleanupService.delete(urls: urls)
         lastCleanupResult = result
 
@@ -128,6 +149,14 @@ final class DashboardViewModel {
     /// trashing) so nothing is left abandoned, then reconciles the `cliApps` finding
     /// and records history. Returns the result so the caller can refresh its view.
     func removeCLIPrograms(_ urls: [URL]) async -> CleanupResult {
+        guard gateCleanup() else {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [],
+                totalBytesReclaimed: 0
+            )
+        }
         let result = await cliRemovalService.remove(urls)
         lastCleanupResult = result
 
@@ -172,6 +201,14 @@ final class DashboardViewModel {
     /// audit entry so Cleanup History reflects what was reclaimed. Returns the result
     /// so the caller can refresh its view.
     func removeRuntimeVersions(_ urls: [URL]) async -> CleanupResult {
+        guard gateCleanup() else {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [],
+                totalBytesReclaimed: 0
+            )
+        }
         let result = await cliRemovalService.remove(urls)
         lastCleanupResult = result
 
@@ -489,98 +526,4 @@ extension DashboardViewModel {
         guard let url = SystemSettingsPane.fullDiskAccess.url else { return }
         NSWorkspace.shared.open(url)
     }
-}
-
-extension DashboardViewModel {
-    /// Top domains for the Overview breakdown grid, with the long tail folded into "Other".
-    var domainTiles: [StorageOverview.DomainUsage] {
-        StorageOverview.tiles(in: snapshot?.findings ?? [], maxTiles: 6)
-    }
-
-    /// Every present domain rolled up, backing the grouped detection rows.
-    var domainGroups: [StorageOverview.DomainUsage] {
-        StorageOverview.domainUsages(in: snapshot?.findings ?? [])
-    }
-
-    var safeReclaimableBytes: Int64 {
-        StorageOverview.safeBytes(in: snapshot?.findings ?? [])
-    }
-
-    var reviewReclaimableBytes: Int64 {
-        StorageOverview.reviewBytes(in: snapshot?.findings ?? [])
-    }
-
-    var overviewTips: [OverviewTip] {
-        guard let snapshot else { return [] }
-        return OverviewTipBuilder.tips(for: snapshot, stale: staleHints)
-    }
-
-    /// The current finding for a kind, used to navigate from a tip or breakdown tile.
-    func finding(for kind: StorageFindingKind) -> StorageFinding? {
-        snapshot?.findings.first { $0.kind == kind }
-    }
-
-    func refreshStaleHints() {
-        staleTask?.cancel()
-        let samples = (snapshot?.findings ?? [])
-            .filter { DeveloperDomains.kinds.contains($0.kind) && $0.bytes > 0 && !$0.filePaths.isEmpty }
-            .map {
-                StaleSample(
-                    kind: $0.kind,
-                    domain: $0.domain,
-                    bytes: $0.bytes,
-                    paths: Array($0.filePaths.prefix(3))
-                )
-            }
-
-        guard !samples.isEmpty else {
-            staleHints = []
-            return
-        }
-
-        staleTask = Task { [weak self] in
-            let hints = await Self.computeStaleHints(from: samples)
-            guard !Task.isCancelled else { return }
-            self?.staleHints = hints
-        }
-    }
-
-    private struct StaleSample: Sendable {
-        let kind: StorageFindingKind
-        let domain: StorageDomain
-        let bytes: Int64
-        let paths: [URL]
-    }
-
-    private static func computeStaleHints(from samples: [StaleSample]) async -> [StaleHint] {
-        await Task.detached(priority: .utility) {
-            let now = Date()
-            return samples.compactMap { sample -> StaleHint? in
-                let newest = sample.paths
-                    .map { StorageFormatting.modificationDate(at: $0) }
-                    .max() ?? .distantPast
-                let days = Calendar.current.dateComponents([.day], from: newest, to: now).day ?? 0
-                guard days >= OverviewTipBuilder.staleThresholdDays else { return nil }
-                return StaleHint(
-                    kind: sample.kind,
-                    domain: sample.domain,
-                    bytes: sample.bytes,
-                    daysSinceModified: days
-                )
-            }
-        }.value
-    }
-}
-
-/// The footprint of the most recent scan, used to tell per-section views
-/// whether they should show their pre-scan "ready to discover" hero or
-/// their post-scan "all clean" empty state.
-enum LastScan: Equatable {
-    /// No scan has completed in this session.
-    case never
-    /// A full scan ran; every kind was covered.
-    case full
-    /// A targeted scan covered only the listed kinds; other kinds are
-    /// still in their pre-scan state.
-    case targeted(Set<StorageFindingKind>)
 }
