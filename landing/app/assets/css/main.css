@@ -197,16 +197,21 @@
    Component primitives — kept as plain CSS for predictable cascade.
    ============================================================ */
 @layer components {
-  .btn {
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-direction: row;
     gap: 0.5rem;
     border-radius: 9999px;
     padding: 0.625rem 1.25rem;
     font-size: 0.875rem;
     font-weight: 500;
     line-height: 1;
+    text-align: center;
     white-space: nowrap;
     transition:
       transform 150ms ease,
@@ -216,7 +221,10 @@
       border-color 150ms ease;
     will-change: transform;
   }
-  .btn:active { transform: translateY(1px); }
+  .btn:active,
+  .btn-primary:active,
+  .btn-secondary:active,
+  .btn-ghost:active { transform: translateY(1px); }
 
   .btn-primary {
     background: var(--color-ink-900);
