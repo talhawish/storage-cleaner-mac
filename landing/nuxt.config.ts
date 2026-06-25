@@ -7,6 +7,7 @@ export default defineNuxtConfig({
   ssr: true,
 
   modules: [
+    '@nuxt/fonts',
     '@nuxtjs/sitemap',
     '@nuxt/image',
     'nuxt-og-image',
@@ -45,8 +46,13 @@ export default defineNuxtConfig({
 
   ogImage: {
     enabled: true,
-    fonts: ['Inter:400', 'Inter:600', 'Inter:700'],
     colorScheme: 'light'
+  },
+
+  fonts: {
+    families: [
+      { name: 'Inter', provider: 'google', weights: [400, 600, 700] }
+    ]
   },
 
   sitemap: {
