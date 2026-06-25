@@ -2,6 +2,10 @@
  * Static OG image generator. Produces a 1200x630 PNG for the home page
  * and a per-page variant for legal/marketing pages. Run as part of the
  * build pipeline.
+ *
+ * The site's deploy URL is read from `nuxt.config.ts → site.url` so
+ * there's only one place to change it. The display label on each card
+ * is the host portion of that URL (e.g. `storagecleaner.horizm.com`).
  */
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -12,6 +16,21 @@ import { Resvg } from '@resvg/resvg-js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
 const publicDir = join(root, 'public')
+
+const nuxtConfig = await import('../nuxt.config.ts')
+  .then((m) => m.default?.())
+  .catch(async () => {
+    // tsx/esm can't import .ts directly; fall back to a regex scrape
+    // of the source. The script is invoked from npm, so node --import
+    // tsx is wired in by the package's devDependency graph.
+    const source = await fs.readFile(join(root, 'nuxt.config.ts'), 'utf8')
+    const match = source.match(/url:\s*['"`]([^'"`]+)['"`]/)
+    if (!match) throw new Error('Could not read site.url from nuxt.config.ts')
+    return { url: match[1] }
+  })
+
+const SITE_URL = nuxtConfig.site?.url ?? nuxtConfig.url
+const SITE_HOST = new URL(SITE_URL).host
 
 const interRegular = await fs.readFile(
   join(root, 'node_modules/@fontsource/inter/files/inter-latin-400-normal.woff')
@@ -235,7 +254,7 @@ const HomeOg = () =>
             justifyContent: 'space-between',
             position: 'relative'
           },
-          children: [Wordmark({ inverse: true }), { type: 'div', props: { children: 'storagecleaner.horizm.com' } }]
+          children: [Wordmark({ inverse: true }), { type: 'div', props: { children: SITE_HOST } }]
         }
       }
     ]
@@ -309,7 +328,7 @@ const PageOg = (props) => {
             alignItems: 'center',
             justifyContent: 'space-between'
           },
-          children: [Wordmark(), { type: 'div', props: { children: 'storagecleaner.horizm.com' } }]
+          children: [Wordmark(), { type: 'div', props: { children: SITE_HOST } }]
         }
       }
     ]

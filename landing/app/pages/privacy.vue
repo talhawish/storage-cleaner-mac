@@ -7,6 +7,7 @@ usePageSeo({
   path: '/privacy'
 })
 
+const contactEmail = useSiteConfig().email
 const updated = '2026-01-15'
 
 const sections = [
@@ -50,7 +51,7 @@ const sections = [
   {
     title: '5. Crash reports',
     body: [
-      'The App does not include an automatic crash reporter. If you experience a crash, please send the crash log to support@storagecleaner.app — including the report helps us fix the issue faster and is the only way we will ever see diagnostic information.'
+      `The App does not include an automatic crash reporter. If you experience a crash, please send the crash log to ${contactEmail} — including the report helps us fix the issue faster and is the only way we will ever see diagnostic information.`
     ]
   },
   {
@@ -69,7 +70,7 @@ const sections = [
     title: '8. Your rights',
     body: [
       'You have the right to access, correct, or delete any personal data you have shared with us. In practice, the only personal data we ever hold is whatever is in the email thread you initiated.',
-      'To exercise these rights, contact support@storagecleaner.app.'
+      `To exercise these rights, contact ${contactEmail}.`
     ]
   },
   {
@@ -81,7 +82,7 @@ const sections = [
   {
     title: '10. Contact',
     body: [
-      'Questions about this policy can be sent to support@storagecleaner.app or via the contact form.'
+      `Questions about this policy can be sent to ${contactEmail} or via the contact form.`
     ]
   }
 ] as const

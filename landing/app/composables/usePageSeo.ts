@@ -1,6 +1,16 @@
 /**
  * Single source of truth for the site's SEO.
  * Update values here — every page picks them up via the `usePageSeo` helper.
+ *
+ * The site's `url` is defined in nuxt.config.ts → `site.url` and pulled
+ * at runtime via `useSiteConfig()`. This composable is the only place
+ * that re-exports the derived helpers (full URL, absolute OG image, etc.)
+ * so call sites never duplicate the deploy target.
+ */
+/**
+ * Copy-only constants. Anything that varies per-deploy (the URL and the
+ * contact email) lives in `nuxt.config.ts → site` and is read at runtime
+ * via `useSiteConfig()`.
  */
 export const site = {
   name: 'Storage Cleaner for Developers',
@@ -8,14 +18,11 @@ export const site = {
   tagline: 'Reclaim the space your Mac actually forgot about.',
   description:
     'A native macOS app that helps developers understand and safely reclaim storage used by build artifacts, package caches, simulators, Docker, runtime versions, and other development tools.',
-  url: 'https://storagecleaner.horizm.com',
   ogImage: '/og-image.png',
   locale: 'en_US',
   twitter: '@storagecleaner',
   twitterId: 'storagecleaner',
   author: 'Storage Cleaner',
-  authorUrl: 'https://storagecleaner.horizm.com',
-  email: 'support@storagecleaner.app',
   keywords: [
     'mac storage cleaner',
     'developer tools',
@@ -51,16 +58,18 @@ const truncate = (value: string, max = 160) =>
 
 export const usePageSeo = (options: SeoOptions = {}) => {
   const route = useRoute()
+  const config = useSiteConfig()
 
   const path = options.path ?? route.path
   const isHome = path === '/'
   const baseTitle = options.title ?? site.tagline
   const fullTitle = isHome ? site.name : `${baseTitle} — ${site.name}`
   const description = truncate(options.description ?? site.description, 160)
-  const url = new URL(path, site.url).toString()
+  const url = new URL(path, config.url).toString()
   const image = options.image
-    ? new URL(options.image, site.url).toString()
-    : new URL(site.ogImage, site.url).toString()
+    ? new URL(options.image, config.url).toString()
+    : new URL(site.ogImage, config.url).toString()
+  const authorUrl = new URL('/', config.url).toString().replace(/\/$/, '')
   const type = options.type ?? 'website'
   const keywords = (options.keywords ?? site.keywords).join(', ')
 
@@ -112,7 +121,7 @@ export const usePageSeo = (options: SeoOptions = {}) => {
           '@type': 'SoftwareApplication',
           name: site.name,
           description: site.description,
-          url: site.url,
+          url: config.url,
           applicationCategory: 'DeveloperApplication',
           operatingSystem: 'macOS 14 Sonoma or later',
           offers: {
@@ -121,7 +130,7 @@ export const usePageSeo = (options: SeoOptions = {}) => {
             priceCurrency: 'USD',
             category: 'Free with in-app purchases'
           },
-          author: { '@type': 'Organization', name: site.author, url: site.authorUrl }
+          author: { '@type': 'Organization', name: site.author, url: authorUrl }
         })
       }
     ]

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const year = new Date().getFullYear()
+const contactEmail = useSiteConfig().email
 </script>
 
 <template>
@@ -46,8 +47,8 @@ const year = new Date().getFullYear()
           <ul class="mt-4 space-y-2.5 text-sm">
             <li><NuxtLink to="/contact" class="text-ink-700 hover:text-ink-900">Contact us</NuxtLink></li>
             <li>
-              <a href="mailto:support@storagecleaner.app" class="text-ink-700 hover:text-ink-900">
-                support@storagecleaner.app
+              <a :href="`mailto:${contactEmail}`" class="text-ink-700 hover:text-ink-900">
+                {{ contactEmail }}
               </a>
             </li>
             <li><NuxtLink to="/terms" class="text-ink-700 hover:text-ink-900">Terms &amp; Conditions</NuxtLink></li>

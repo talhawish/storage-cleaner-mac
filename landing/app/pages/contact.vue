@@ -7,6 +7,10 @@ usePageSeo({
   path: '/contact'
 })
 
+const siteConfig = useSiteConfig()
+const contactEmail = siteConfig.email
+const siteOrigin = computed(() => new URL(siteConfig.url).origin)
+
 const form = reactive({
   name: '',
   email: '',
@@ -26,9 +30,9 @@ const submit = async () => {
   // Open a pre-filled mail client as the contact transport.
   const subject = encodeURIComponent(`[${form.topic}] Storage Cleaner — ${form.name || 'New message'}`)
   const body = encodeURIComponent(
-    `From: ${form.name} <${form.email}>\nTopic: ${form.topic}\n\n${form.message}\n\n— Sent from storagecleaner.horizm.com/contact`
+    `From: ${form.name} <${form.email}>\nTopic: ${form.topic}\n\n${form.message}\n\n— Sent from ${siteOrigin.value}/contact`
   )
-  const href = `mailto:support@storagecleaner.app?subject=${subject}&body=${body}`
+  const href = `mailto:${contactEmail}?subject=${subject}&body=${body}`
   if (typeof window !== 'undefined') window.location.href = href
   status.value = 'sent'
 }
@@ -36,19 +40,19 @@ const submit = async () => {
 const channels = [
   {
     label: 'Support',
-    email: 'support@storagecleaner.app',
+    email: contactEmail,
     body: 'Bugs, scans gone wrong, questions about a cleanup operation.',
     cta: 'Email support'
   },
   {
     label: 'Feature requests',
-    email: 'feedback@storagecleaner.app',
+    email: contactEmail,
     body: 'A storage domain we should cover, a UI tweak, a missing command.',
     cta: 'Send a request'
   },
   {
     label: 'Press & partnerships',
-    email: 'press@storagecleaner.app',
+    email: contactEmail,
     body: 'Reviews, interviews, conference talks, Mac App Store features.',
     cta: 'Get in touch'
   }
@@ -104,8 +108,8 @@ const channels = [
           <p class="mt-1.5">
             We typically reply within 1 business day. For time-sensitive Mac
             App Store issues (e.g. a failed purchase), write
-            <a href="mailto:support@storagecleaner.app" class="text-ink-900 underline decoration-ink-300 underline-offset-4 hover:decoration-ink-700">
-              support@storagecleaner.app
+            <a :href="`mailto:${contactEmail}`" class="text-ink-900 underline decoration-ink-300 underline-offset-4 hover:decoration-ink-700">
+              {{ contactEmail }}
             </a>
             and include the App Store receipt ID.
           </p>
@@ -179,7 +183,7 @@ const channels = [
               class="mt-0.5 size-4 rounded border-ink-300 text-ink-900 focus:ring-ink-900/20"
             />
             <span>
-              I understand my message will be sent to support@storagecleaner.app
+              I understand my message will be sent to {{ contactEmail }}
               via my mail client, and that the content I type is handled under
               the
               <NuxtLink to="/privacy" class="text-ink-900 underline decoration-ink-300 underline-offset-4 hover:decoration-ink-700">

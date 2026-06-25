@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const contactEmail = useSiteConfig().email
+
 const faqs = [
   {
     q: 'Will Storage Cleaner delete my source code or active projects?',
@@ -41,8 +43,8 @@ const toggle = (i: number) => (open.value = open.value === i ? null : i)
           </h2>
           <p class="lede mt-4 text-pretty">
             Still curious? Email us at
-            <a href="mailto:support@storagecleaner.app" class="text-ink-900 underline decoration-ink-300 underline-offset-4 hover:decoration-ink-700">
-              support@storagecleaner.app
+            <a :href="`mailto:${contactEmail}`" class="text-ink-900 underline decoration-ink-300 underline-offset-4 hover:decoration-ink-700">
+              {{ contactEmail }}
             </a>
             — there's a real person on the other end.
           </p>

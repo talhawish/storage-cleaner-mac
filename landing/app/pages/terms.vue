@@ -7,6 +7,7 @@ usePageSeo({
   path: '/terms'
 })
 
+const contactEmail = useSiteConfig().email
 const updated = '2026-01-15'
 
 const sections = [
@@ -83,7 +84,7 @@ const sections = [
   {
     title: '11. Contact',
     body: [
-      'Questions about these Terms can be sent to support@storagecleaner.app or via the contact form.'
+      `Questions about these Terms can be sent to ${contactEmail} or via the contact form.`
     ]
   }
 ] as const
