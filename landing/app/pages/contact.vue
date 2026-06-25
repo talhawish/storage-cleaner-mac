@@ -26,7 +26,7 @@ const submit = async () => {
   // Open a pre-filled mail client as the contact transport.
   const subject = encodeURIComponent(`[${form.topic}] Storage Cleaner — ${form.name || 'New message'}`)
   const body = encodeURIComponent(
-    `From: ${form.name} <${form.email}>\nTopic: ${form.topic}\n\n${form.message}\n\n— Sent from storagecleaner.app/contact`
+    `From: ${form.name} <${form.email}>\nTopic: ${form.topic}\n\n${form.message}\n\n— Sent from storagecleaner.horizm.com/contact`
   )
   const href = `mailto:support@storagecleaner.app?subject=${subject}&body=${body}`
   if (typeof window !== 'undefined') window.location.href = href

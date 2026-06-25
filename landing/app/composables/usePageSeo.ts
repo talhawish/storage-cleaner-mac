@@ -8,13 +8,13 @@ export const site = {
   tagline: 'Reclaim the space your Mac actually forgot about.',
   description:
     'A native macOS app that helps developers understand and safely reclaim storage used by build artifacts, package caches, simulators, Docker, runtime versions, and other development tools.',
-  url: 'https://storagecleaner.app',
+  url: 'https://storagecleaner.horizm.com',
   ogImage: '/og-image.png',
   locale: 'en_US',
   twitter: '@storagecleaner',
   twitterId: 'storagecleaner',
   author: 'Storage Cleaner',
-  authorUrl: 'https://storagecleaner.app',
+  authorUrl: 'https://storagecleaner.horizm.com',
   email: 'support@storagecleaner.app',
   keywords: [
     'mac storage cleaner',

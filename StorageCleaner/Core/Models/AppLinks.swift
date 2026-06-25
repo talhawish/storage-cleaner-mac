@@ -10,9 +10,9 @@ import Foundation
 enum AppLinks {
     /// End User License Agreement. Required by App Review guideline
     /// 3.1.2 for any auto-renewable subscription.
-    static let terms = URL(string: "https://storagecleaner.app/terms")!
+    static let terms = URL(string: "https://storagecleaner.horizm.com/terms")!
     /// Privacy Policy. Required by App Review for any app that
     /// collects data — and shown in the paywall so subscribers know
     /// what they're agreeing to.
-    static let privacy = URL(string: "https://storagecleaner.app/privacy")!
+    static let privacy = URL(string: "https://storagecleaner.horizm.com/privacy")!
 }

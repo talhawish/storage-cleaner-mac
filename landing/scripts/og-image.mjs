@@ -235,7 +235,7 @@ const HomeOg = () =>
             justifyContent: 'space-between',
             position: 'relative'
           },
-          children: [Wordmark({ inverse: true }), { type: 'div', props: { children: 'storagecleaner.app' } }]
+          children: [Wordmark({ inverse: true }), { type: 'div', props: { children: 'storagecleaner.horizm.com' } }]
         }
       }
     ]
@@ -309,7 +309,7 @@ const PageOg = (props) => {
             alignItems: 'center',
             justifyContent: 'space-between'
           },
-          children: [Wordmark(), { type: 'div', props: { children: 'storagecleaner.app' } }]
+          children: [Wordmark(), { type: 'div', props: { children: 'storagecleaner.horizm.com' } }]
         }
       }
     ]

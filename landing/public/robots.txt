@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://storagecleaner.app/sitemap.xml
+Sitemap: https://storagecleaner.horizm.com/sitemap.xml
