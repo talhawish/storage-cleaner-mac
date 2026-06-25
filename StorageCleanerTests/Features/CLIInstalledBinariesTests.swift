@@ -59,6 +59,36 @@ final class CLIInstalledBinariesTests: XCTestCase {
         XCTAssertTrue(InstalledBinaryCatalog.installedPrograms(in: [binDir]).isEmpty)
     }
 
+    func testAutodiscoverReturnsKnownToolBinsWhenHomeEnumerationFails() {
+        // Simulate a sandboxed build where the home directory cannot be
+        // enumerated. autodiscoveredToolBins should fall back to probing
+        // known tool-specific bin directories instead of returning empty.
+        let inaccessibleHome = URL(fileURLWithPath: "/tmp/does-not-exist-\(UUID().uuidString)", isDirectory: true)
+        let result = InstalledBinaryCatalog.autodiscoveredToolBins(
+            home: inaccessibleHome,
+            fileManager: FileManager.default
+        )
+        // Should be empty (the dummy home has no bins) but must not crash.
+        XCTAssertTrue(result.isEmpty, "Fallback should handle missing home dir without crashing")
+    }
+
+    func testBinDirectoriesIncludesKnownToolBins() throws {
+        // Set up a ~/.opencode/bin directory and verify it appears in the
+        // autodiscovery result when the home directory is enumerable.
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let opencodeBin = home.appendingPathComponent(".opencode/bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: opencodeBin, withIntermediateDirectories: true)
+
+        let result = InstalledBinaryCatalog.autodiscoveredToolBins(
+            home: home,
+            fileManager: FileManager.default
+        )
+        XCTAssertTrue(result.contains(opencodeBin), ".opencode/bin should be in autodiscovered bins")
+    }
+
     func testDeduplicatesSameResolvedTargetAcrossDirectories() throws {
         let other = root.appendingPathComponent("bin2", isDirectory: true)
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)

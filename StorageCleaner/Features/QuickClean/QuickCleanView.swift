@@ -4,13 +4,7 @@ import SwiftUI
 /// expansion state; everything else lives in the subcomponents under
 /// `Components/` so this file stays under the type-body-length limit.
 struct QuickCleanView: View {
-    let onClean: @MainActor ([URL]) async -> CleanupResult
     var onOpenSettings: (() -> Void)?
-    /// Closure the modal calls whenever it needs the latest free-bytes
-    /// snapshot for the volume. Defaults to a no-op so callers that don't
-    /// care about disk-space telemetry (UI tests, previews) keep working
-    /// unchanged.
-    var freeBytesProvider: (@MainActor () async -> Int64?)?
 
     @Environment(\.dismiss)
     private var dismiss
@@ -18,14 +12,26 @@ struct QuickCleanView: View {
     @State private var expandedCategoryIDs: Set<String> = []
     @State private var showCleanConfirmation = false
 
+    /// Pre-built view model. The dashboard uses this entry point so the
+    /// scanner can be wired with a `StoragePermissionHandling` and acquire
+    /// security-scoped access to the home folder before measuring sizes.
+    init(
+        viewModel: QuickCleanViewModel,
+        onOpenSettings: (() -> Void)? = nil
+    ) {
+        self.onOpenSettings = onOpenSettings
+        _viewModel = State(initialValue: viewModel)
+    }
+
+    /// Convenience initializer for callers (UI tests, previews) that don't
+    /// need disk-space telemetry or security-scoped access. Builds a
+    /// default `QuickCleanViewModel` internally.
     init(
         onClean: @escaping @MainActor ([URL]) async -> CleanupResult,
         onOpenSettings: (() -> Void)? = nil,
         freeBytesProvider: (@MainActor () async -> Int64?)? = nil
     ) {
-        self.onClean = onClean
         self.onOpenSettings = onOpenSettings
-        self.freeBytesProvider = freeBytesProvider
         _viewModel = State(
             initialValue: QuickCleanViewModel(
                 onClean: onClean,
@@ -60,6 +66,8 @@ struct QuickCleanView: View {
             cleaningView
         case .success:
             successView
+        case .needsAccess:
+            needsAccessView
         }
     }
 
@@ -92,6 +100,8 @@ struct QuickCleanView: View {
                 return "No items were found to clean"
             }
             return "Cleanup finished"
+        case .needsAccess:
+            return "Home Folder access is required"
         }
     }
 
@@ -134,7 +144,7 @@ struct QuickCleanView: View {
                         isExpanded: expandedCategoryIDs.contains(category.id) || expandedCategoryIDs.isEmpty,
                         isFullySelected: viewModel.isCategoryFullySelected(category),
                         isPartiallySelected: viewModel.isCategoryPartiallySelected(category),
-                        tint: QuickCleanPalette.color(for: category),
+                        tint: category.tint,
                         onToggleCategory: { viewModel.toggleCategory(category) },
                         onToggleExpansion: { toggleExpansion(for: category.id) },
                         onToggleItem: { viewModel.toggle($0.url) },
@@ -173,6 +183,10 @@ struct QuickCleanView: View {
         QuickCleanCleaningView(itemCount: viewModel.totalSelectedItems)
     }
 
+    private var needsAccessView: some View {
+        QuickCleanNeedsAccessView(onClose: { dismiss() })
+    }
+
     private var successView: some View {
         QuickCleanSuccessView(
             result: viewModel.lastResult,
@@ -184,12 +198,9 @@ struct QuickCleanView: View {
         )
     }
 
-    private func cleanedCategories() -> [QuickCleanCategory] {
+    private func cleanedCategories() -> [QuickCleanCleanedCategory] {
         guard let result = viewModel.lastResult else { return [] }
-        let deletedURLs = Set(result.deletedItems.map(\.originalURL))
-        return viewModel.scan.populatedCategories.filter { category in
-            category.items.contains { deletedURLs.contains($0.url) }
-        }
+        return viewModel.scan.cleanedCategories(in: result)
     }
 
     // MARK: - Confirmation
@@ -197,21 +208,7 @@ struct QuickCleanView: View {
     @ViewBuilder private var confirmationSheet: some View {
         let urls = viewModel.selection
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-        let selectedSafety = viewModel.populatedCategories
-            .filter { $0.items.contains { viewModel.isSelected($0.url) } }
-            .map(\.safety)
-            .contains(.review) ? CleanupSafety.review : CleanupSafety.safe
-        let finding = StorageFinding(
-            kind: .junkFiles,
-            domain: .otherCaches,
-            bytes: viewModel.totalSelectedBytes,
-            itemCount: urls.count,
-            safety: selectedSafety,
-            examples: viewModel.populatedCategories.prefix(3).map(\.name),
-            filePaths: urls
-        )
         DeleteConfirmationSheet(
-            finding: finding,
             selectedURLs: urls,
             totalBytes: viewModel.totalSelectedBytes,
             onDelete: {

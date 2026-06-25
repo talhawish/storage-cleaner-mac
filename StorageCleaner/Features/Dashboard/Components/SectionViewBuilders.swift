@@ -76,7 +76,8 @@ extension AppShellView {
             onOpenFinding: openFinding,
             onRemoveRuntimeVersions: { urls in
                 _ = await viewModel.removeRuntimeVersions(urls)
-            }
+            },
+            permissionHandler: viewModel.permissionHandler
         )
     }
 
@@ -378,7 +379,8 @@ extension AppShellView {
                 findings: sectionFindings,
                 emptyStateMessage: emptyStateMessage,
                 onScan: scanAction,
-                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
+                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) },
+                permissionHandler: viewModel.permissionHandler
             )
         }
     }
@@ -400,16 +402,11 @@ extension AppShellView {
                 viewModel.startScan(for: [.dockerArtifacts])
             })
         } else if finding.kind == .cliApps {
-            CLIProgramsView(
-                findings: [finding],
-                emptyStateMessage: "Homebrew, version managers, global npm packages, "
-                    + "and standalone CLI tools you've installed.",
-                onScan: { viewModel.startScan(for: [.cliApps]) },
-                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) }
-            )
+            cliProgramsDestination(for: finding)
         } else if finding.kind == .runtimeVersions {
             RuntimeVersionsView(
-                onRemove: { urls in _ = await viewModel.removeRuntimeVersions(urls) }
+                onRemove: { urls in _ = await viewModel.removeRuntimeVersions(urls) },
+                permissionHandler: viewModel.permissionHandler
             )
         } else if AppSection.leftovers.filterKinds.contains(finding.kind) {
             LeftoversView(
@@ -435,6 +432,18 @@ extension AppShellView {
                 }
             )
         }
+    }
+
+    @ViewBuilder
+    private func cliProgramsDestination(for finding: StorageFinding) -> some View {
+        CLIProgramsView(
+            findings: [finding],
+            emptyStateMessage: "Homebrew, version managers, global npm packages, "
+                + "and standalone CLI tools you've installed.",
+            onScan: { viewModel.startScan(for: [.cliApps]) },
+            onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) },
+            permissionHandler: viewModel.permissionHandler
+        )
     }
 
     func filteredFindings(for kinds: [StorageFindingKind]) -> [StorageFinding] {

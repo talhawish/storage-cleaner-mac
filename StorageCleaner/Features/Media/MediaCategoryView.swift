@@ -147,15 +147,6 @@ struct MediaCategoryView: View {
         }
             .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
-                finding: StorageFinding(
-                    kind: findings.first?.kind ?? .screenshots,
-                    domain: findings.first?.domain ?? .screenshots,
-                    bytes: selectedTotalSize,
-                    itemCount: selectedURLs.count,
-                    safety: .review,
-                    examples: [],
-                    filePaths: Array(selectedURLs)
-                ),
                 selectedURLs: Array(selectedURLs),
                 totalBytes: selectedTotalSize,
                 onDelete: {

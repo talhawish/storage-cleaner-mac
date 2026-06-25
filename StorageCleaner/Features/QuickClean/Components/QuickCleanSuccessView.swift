@@ -6,7 +6,7 @@ import SwiftUI
 /// when the caller captured disk-space snapshots.
 struct QuickCleanSuccessView: View {
     let result: CleanupResult?
-    let cleanedCategories: [QuickCleanCategory]
+    let cleanedCategories: [QuickCleanCleanedCategory]
     let freeBytesBefore: Int64?
     let freeBytesAfter: Int64?
     let onScanAgain: () -> Void
@@ -14,7 +14,7 @@ struct QuickCleanSuccessView: View {
 
     init(
         result: CleanupResult?,
-        cleanedCategories: [QuickCleanCategory],
+        cleanedCategories: [QuickCleanCleanedCategory],
         freeBytesBefore: Int64? = nil,
         freeBytesAfter: Int64? = nil,
         onScanAgain: @escaping () -> Void,
@@ -114,7 +114,7 @@ struct QuickCleanSuccessView: View {
         return "Clean Complete!"
     }
 
-    private func cleanupBreakdown(categories: [QuickCleanCategory]) -> some View {
+    private func cleanupBreakdown(categories: [QuickCleanCleanedCategory]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Categories cleaned")
                 .font(.caption.weight(.semibold))
@@ -123,12 +123,12 @@ struct QuickCleanSuccessView: View {
                 ForEach(categories) { category in
                     HStack(spacing: 8) {
                         Image(systemName: category.icon)
-                            .foregroundStyle(QuickCleanPalette.color(for: category))
+                            .foregroundStyle(category.tint)
                             .accessibilityHidden(true)
                         Text(category.name)
                             .font(.subheadline)
                         Spacer()
-                        Text(StorageFormatting.bytes(category.bytes))
+                        Text(StorageFormatting.bytes(category.reclaimedBytes))
                             .font(.subheadline.weight(.semibold).monospacedDigit())
                             .foregroundStyle(.secondary)
                     }

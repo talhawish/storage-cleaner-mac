@@ -8,6 +8,7 @@ import SwiftUI
 /// immediately, then on-disk sizes fill in — mirroring `CLIProgramsView`.
 struct RuntimeVersionsView: View {
     let onRemove: ([URL]) async -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
 
     @State private var groups: [RuntimeVersionGroup] = []
     @State private var selectedURLs: Set<URL> = []
@@ -47,7 +48,6 @@ struct RuntimeVersionsView: View {
         .onDisappear { cancelLoading() }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
-                finding: deletionFinding,
                 selectedURLs: Array(selectedURLs),
                 totalBytes: selectedBytes,
                 onDelete: {
@@ -223,18 +223,6 @@ struct RuntimeVersionsView: View {
 // MARK: - Behaviour
 
 private extension RuntimeVersionsView {
-    var deletionFinding: StorageFinding {
-        StorageFinding(
-            kind: .runtimeVersions,
-            domain: .cliTooling,
-            bytes: selectedBytes,
-            itemCount: selectedURLs.count,
-            safety: .review,
-            examples: [],
-            filePaths: Array(selectedURLs)
-        )
-    }
-
     func toggle(_ url: URL) {
         if selectedURLs.contains(url) {
             selectedURLs.remove(url)
@@ -257,6 +245,9 @@ private extension RuntimeVersionsView {
     /// Older, removable versions are pre-selected as the suggested cleanup.
     func load() async {
         isLoading = true
+        let access = permissionHandler?.beginHomeFolderAccess()
+        defer { access?.stop() }
+
         let discovered = await Task.detached(priority: .userInitiated) {
             RuntimeVersionCatalog.discoverGroups()
         }.value

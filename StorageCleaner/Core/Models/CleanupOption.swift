@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 struct CleanupOption: Identifiable, Hashable, Sendable {
     let id: String
@@ -11,6 +11,11 @@ struct CleanupOption: Identifiable, Hashable, Sendable {
     let paths: [String]
     let isSafeByDefault: Bool
     let category: Category
+    /// The canonical `StorageFindingKind` this option's cleanup belongs to. Drives the audit
+    /// trail's `kind` for cleanups that happen without a matching dashboard finding (e.g. Quick
+    /// Clean run before any scan, or a manual URL delete). `.junkFiles` is the catch-all for
+    /// options that don't have a dedicated finding kind.
+    let storageKind: StorageFindingKind
 
     enum Category: String, CaseIterable, Sendable {
         case developerTools = "Developer Tools"
@@ -21,6 +26,7 @@ struct CleanupOption: Identifiable, Hashable, Sendable {
     }
 }
 
+// swiftlint:disable:next type_body_length
 enum CleanupOptionsRegistry {
     static let allOptions: [CleanupOption] = [
         // Developer Tools
@@ -34,7 +40,8 @@ enum CleanupOptionsRegistry {
             safety: .safe,
             paths: ["~/Library/Developer/Xcode/DerivedData"],
             isSafeByDefault: true,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .xcodeArtifacts
         ),
         CleanupOption(
             id: "xcode-archives",
@@ -46,7 +53,8 @@ enum CleanupOptionsRegistry {
             safety: .safe,
             paths: ["~/Library/Developer/Xcode/Archives"],
             isSafeByDefault: true,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .xcodeArtifacts
         ),
         CleanupOption(
             id: "swiftpm-checkouts",
@@ -58,7 +66,8 @@ enum CleanupOptionsRegistry {
             safety: .safe,
             paths: ["~/Library/Caches/org.swift.swiftpm"],
             isSafeByDefault: true,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .xcodeArtifacts
         ),
         CleanupOption(
             id: "node-modules",
@@ -75,7 +84,8 @@ enum CleanupOptionsRegistry {
                 "~/.bun/install/global"
             ],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .nodeDependencies
         ),
         CleanupOption(
             id: "gradle-cache",
@@ -87,7 +97,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/.gradle/caches", "~/.m2/repository"],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .gradleDependencies
         ),
         CleanupOption(
             id: "flutter-cache",
@@ -99,7 +110,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/.pub-cache", "~/Library/Caches/flutter"],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .flutterArtifacts
         ),
         CleanupOption(
             id: "docker-cache",
@@ -115,7 +127,8 @@ enum CleanupOptionsRegistry {
                 "~/Library/Application Support/OrbStack"
             ],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .dockerArtifacts
         ),
         CleanupOption(
             id: "cargo-cache",
@@ -127,7 +140,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/.cargo/registry", "~/.cargo/git/db"],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .rustDependencies
         ),
         CleanupOption(
             id: "pip-cache",
@@ -145,7 +159,8 @@ enum CleanupOptionsRegistry {
                 "~/.cache/uv"
             ],
             isSafeByDefault: true,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .pythonDependencies
         ),
         CleanupOption(
             id: "composer-cache",
@@ -160,7 +175,8 @@ enum CleanupOptionsRegistry {
                 "~/.composer/cache"
             ],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .phpDependencies
         ),
         CleanupOption(
             id: "ruby-cache",
@@ -175,7 +191,8 @@ enum CleanupOptionsRegistry {
                 "~/.gem/cache"
             ],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .rubyDependencies
         ),
         CleanupOption(
             id: "nuget-cache",
@@ -191,7 +208,8 @@ enum CleanupOptionsRegistry {
                 "~/Library/Caches/NuGet"
             ],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .dotnetDependencies
         ),
         CleanupOption(
             id: "go-cache",
@@ -203,7 +221,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/go/pkg/mod"],
             isSafeByDefault: false,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .goDependencies
         ),
         CleanupOption(
             id: "homebrew-cache",
@@ -215,7 +234,8 @@ enum CleanupOptionsRegistry {
             safety: .safe,
             paths: ["~/Library/Caches/Homebrew"],
             isSafeByDefault: true,
-            category: .developerTools
+            category: .developerTools,
+            storageKind: .junkFiles
         ),
 
         // Caches
@@ -227,17 +247,10 @@ enum CleanupOptionsRegistry {
             iconColor: "teal",
             domain: .browserData,
             safety: .safe,
-            paths: [
-                "~/Library/Caches/com.apple.Safari",
-                "~/Library/Caches/Google/Chrome",
-                "~/Library/Caches/Microsoft Edge",
-                "~/Library/Caches/Firefox",
-                "~/Library/Caches/company.thebrowser.Browser",
-                "~/Library/Caches/BraveSoftware",
-                "~/Library/Caches/Chromium"
-            ],
+            paths: DependencyPaths.Browser.cacheDirStrings,
             isSafeByDefault: true,
-            category: .caches
+            category: .caches,
+            storageKind: .browserCaches
         ),
         CleanupOption(
             id: "system-logs",
@@ -249,7 +262,8 @@ enum CleanupOptionsRegistry {
             safety: .safe,
             paths: ["~/Library/Logs"],
             isSafeByDefault: true,
-            category: .caches
+            category: .caches,
+            storageKind: .junkFiles
         ),
         CleanupOption(
             id: "ai-model-cache",
@@ -265,7 +279,8 @@ enum CleanupOptionsRegistry {
                 "~/Library/Application Support/LM Studio"
             ],
             isSafeByDefault: false,
-            category: .caches
+            category: .caches,
+            storageKind: .aiModelCaches
         ),
 
         // System
@@ -279,7 +294,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/.Trash"],
             isSafeByDefault: false,
-            category: .system
+            category: .system,
+            storageKind: .trash
         ),
         CleanupOption(
             id: "tmp-files",
@@ -291,7 +307,8 @@ enum CleanupOptionsRegistry {
             safety: .safe,
             paths: ["/tmp", "~/Library/Caches/com.apple-crashreporter"],
             isSafeByDefault: true,
-            category: .system
+            category: .system,
+            storageKind: .junkFiles
         ),
 
         // Emulators
@@ -305,7 +322,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/.android/avd", "~/Library/Android/sdk/system-images"],
             isSafeByDefault: false,
-            category: .emulators
+            category: .emulators,
+            storageKind: .junkFiles
         ),
         CleanupOption(
             id: "ios-simulators",
@@ -317,7 +335,26 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/Library/Developer/CoreSimulator"],
             isSafeByDefault: false,
-            category: .emulators
+            category: .emulators,
+            storageKind: .junkFiles
+        ),
+        CleanupOption(
+            id: "ios-device-support",
+            name: "iOS Device Support",
+            description: "Debug-symbol packs for symbolication when attaching a real iOS device",
+            icon: "ladybug.fill",
+            iconColor: "violet",
+            domain: .appleDevelopment,
+            safety: .review,
+            paths: [
+                "~/Library/Developer/Xcode/iOS DeviceSupport",
+                "~/Library/Developer/Xcode/tvOS DeviceSupport",
+                "~/Library/Developer/Xcode/watchOS DeviceSupport",
+                "~/Library/Developer/Xcode/visionOS DeviceSupport"
+            ],
+            isSafeByDefault: false,
+            category: .emulators,
+            storageKind: .iosDeviceSupport
         ),
 
         // Media
@@ -331,7 +368,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/Movies", "~/Downloads", "~/Desktop"],
             isSafeByDefault: false,
-            category: .media
+            category: .media,
+            storageKind: .largeVideos
         ),
         CleanupOption(
             id: "screenshots",
@@ -343,7 +381,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/Desktop", "~/Pictures", "~/Downloads"],
             isSafeByDefault: false,
-            category: .media
+            category: .media,
+            storageKind: .screenshots
         ),
         CleanupOption(
             id: "screen-recordings",
@@ -355,7 +394,8 @@ enum CleanupOptionsRegistry {
             safety: .review,
             paths: ["~/Movies", "~/Desktop", "~/Downloads"],
             isSafeByDefault: false,
-            category: .media
+            category: .media,
+            storageKind: .screenRecordings
         )
     ]
 
@@ -374,4 +414,40 @@ enum CleanupOptionsRegistry {
     static var categories: [CleanupOption.Category] {
         CleanupOption.Category.allCases
     }
+
+    /// Resolves the canonical `StorageFindingKind` for `url` by finding the
+    /// first registered `CleanupOption` whose `paths` entry is a parent of
+    /// (or equal to) the URL. Used to attribute Quick Clean cleanups — and
+    /// any URL-based delete that runs without a matching dashboard finding
+    /// — to the correct audit kind. Returns `nil` when no option claims the
+    /// path; callers decide whether to fall back to `.junkFiles` or skip.
+    static func storageKind(forURL url: URL) -> StorageFindingKind? {
+        let standardized = url.standardizedFileURL.path
+        for option in allOptions {
+            for path in option.paths {
+                let expanded = UserHomeDirectory.expandingTilde(in: path)
+                guard !expanded.isEmpty else { continue }
+                if standardized == expanded || standardized.hasPrefix(expanded + "/") {
+                    return option.storageKind
+                }
+            }
+        }
+        return nil
+    }
+}
+
+extension CleanupOption {
+    var resolvedTint: Color {
+        let domainColor = AppTheme.color(for: domain)
+        guard domainColor == .secondary else { return domainColor }
+        return Self.tintPalette[iconColor, default: .secondary]
+    }
+
+    private static let tintPalette: [String: Color] = [
+        "blue": AppTheme.accent, "cyan": AppTheme.cyan, "mint": AppTheme.mint,
+        "orange": AppTheme.orange, "pink": AppTheme.pink, "rose": AppTheme.rose,
+        "indigo": AppTheme.indigo, "teal": AppTheme.teal, "violet": AppTheme.violet,
+        "yellow": .yellow, "red": .red, "green": .green, "purple": AppTheme.violet,
+        "gray": .gray
+    ]
 }

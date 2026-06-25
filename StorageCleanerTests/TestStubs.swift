@@ -1,8 +1,19 @@
 import XCTest
 @testable import StorageCleaner
 
+private enum StubAccessMode: Sendable {
+    case consistentWithStatus
+    case alwaysGrant
+    case alwaysDeny
+}
+
 final class StubPermissionHandler: @unchecked Sendable, StoragePermissionHandling {
     var statuses: [StoragePermissionStatus]
+    /// How `beginHomeFolderAccess()` should resolve. Defaults to
+    /// `.consistentWithStatus` — i.e. access is granted iff every
+    /// reported status is `.accessible`. Tests that need a stale
+    /// bookmark or an unconditional grant opt in explicitly.
+    private var accessMode: StubAccessMode = .consistentWithStatus
 
     init(statuses: [StoragePermissionStatus]) {
         self.statuses = statuses
@@ -10,6 +21,30 @@ final class StubPermissionHandler: @unchecked Sendable, StoragePermissionHandlin
 
     func currentStatuses() -> [StoragePermissionStatus] {
         statuses
+    }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        let grantsAccess: Bool
+        switch accessMode {
+        case .alwaysGrant:
+            grantsAccess = true
+        case .alwaysDeny:
+            grantsAccess = false
+        case .consistentWithStatus:
+            grantsAccess = statuses.allSatisfy { $0.state == .accessible }
+        }
+        guard grantsAccess else { return nil }
+        // No real URL is started — the stub token is enough to satisfy
+        // the dashboard's `ensureAccessAvailable()` probe; the test's
+        // scanner stub doesn't actually touch the filesystem.
+        return SecurityScopedResourceAccess(url: URL(filePath: "/tmp/stub"), didStartAccessing: false)
+    }
+
+    /// Test seam: opt into a stale-bookmark scenario where
+    /// `currentStatuses()` reports `.accessible` but the access probe
+    /// denies access. Used by the new dashboard regression test.
+    func simulateStaleBookmark() {
+        accessMode = .alwaysDeny
     }
 }
 

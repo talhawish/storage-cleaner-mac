@@ -5,8 +5,6 @@ import SwiftUI
 struct QuickCleanFileRow: View {
     let item: QuickCleanItem
     let isSelected: Bool
-    let isDisabled: Bool
-    let accentTint: Color
     let onToggle: () -> Void
 
     var body: some View {
@@ -18,20 +16,22 @@ struct QuickCleanFileRow: View {
                 EmptyView()
             }
             .toggleStyle(.checkbox)
-            .disabled(isDisabled)
 
-            Image(systemName: item.isDirectory ? "folder.fill" : "doc.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(accentTint.opacity(isDisabled ? 0.4 : 1))
-                .frame(width: 16)
-                .accessibilityHidden(true)
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(FileRowIconStyle.background(for: item.url))
+                    .frame(width: 24, height: 24)
+                Image(systemName: FileRowIconStyle.symbol(for: item.url))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(FileRowIconStyle.foreground(for: item.url))
+            }
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.displayName)
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(isDisabled ? .secondary : .primary)
                     .lineLimit(1)
-                Text(item.parentPath)
+                Text(item.url.standardizedFileURL.path)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
@@ -48,11 +48,9 @@ struct QuickCleanFileRow: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 5)
         .contentShape(Rectangle())
-        .opacity(isDisabled ? 0.5 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(item.displayName), \(StorageFormatting.bytes(item.bytes))"
-                + (isDisabled ? ", disabled" : "")
         )
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }

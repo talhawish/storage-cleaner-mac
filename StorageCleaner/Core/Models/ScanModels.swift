@@ -57,6 +57,7 @@ enum ScannerProgressState: Equatable, Sendable {
 
 enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case xcodeArtifacts
+    case iosDeviceSupport
     case nodeDependencies
     case dockerArtifacts
     case flutterArtifacts
@@ -94,6 +95,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     var title: String {
         switch self {
         case .xcodeArtifacts: "Xcode artifacts"
+        case .iosDeviceSupport: "iOS Device Support"
         case .nodeDependencies: "Node.js dependencies"
         case .dockerArtifacts: "Docker artifacts"
         case .flutterArtifacts: "Flutter artifacts"
@@ -133,6 +135,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     var summary: String {
         switch self {
         case .xcodeArtifacts: "DerivedData, archives, simulators, and SwiftPM checkouts"
+        case .iosDeviceSupport: "Debug-symbol packs for symbolicating crash logs from real iOS devices"
         case .nodeDependencies: "npm, pnpm, yarn, and Bun caches and installed packages"
         case .dockerArtifacts: "Images, volumes, builder layers, and local container runtimes"
         case .flutterArtifacts: "Flutter build folders, pub cache files, and generated app bundles"

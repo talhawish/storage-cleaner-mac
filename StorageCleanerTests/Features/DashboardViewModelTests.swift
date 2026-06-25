@@ -78,6 +78,45 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.hasPermissionIssues)
     }
 
+    /// `currentStatuses()` reports `.accessible` whenever a bookmark is on
+    /// disk, but the bookmark can outlive the user's grant (System Settings
+    /// → Privacy → revoke). `beginHomeFolderAccess()` is the only call
+    /// that actually starts the security scope, so the dashboard must
+    /// probe it before falling through to "start the scan" — otherwise the
+    /// downstream scanner yields `.failed` and the user sees a generic
+    /// `ErrorStateView` instead of `PermissionRequiredView`.
+    func testStartScanWithStaleBookmarkShowsPermissionRequired() async {
+        let handler = StubPermissionHandler(statuses: allAccessibleStatuses)
+        handler.simulateStaleBookmark()
+        let viewModel = DashboardViewModel(
+            scanner: ImmediateScanner(),
+            permissionHandler: handler
+        )
+
+        viewModel.startScan()
+        for _ in 0..<20 where viewModel.phase == .idle {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.phase, .permissionRequired)
+    }
+
+    func testRetryAfterPermissionWithStaleBookmarkShowsPermissionRequired() async {
+        let handler = StubPermissionHandler(statuses: allAccessibleStatuses)
+        handler.simulateStaleBookmark()
+        let viewModel = DashboardViewModel(
+            scanner: ImmediateScanner(),
+            permissionHandler: handler
+        )
+
+        viewModel.retryAfterPermission()
+        for _ in 0..<20 where viewModel.phase == .idle {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.phase, .permissionRequired)
+    }
+
     func testRetryAfterPermissionResolvesAndStartsScanning() async {
         let handler = StubPermissionHandler(
             statuses: [

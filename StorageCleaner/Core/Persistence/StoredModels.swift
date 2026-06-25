@@ -131,7 +131,9 @@ final class StoredCleanupAction {
     var itemCount: Int
     /// A handful of representative original paths that were moved to Trash. Persisted as URLs so
     /// the Cleanup History detail sheet can offer "Show in Finder" without re-scanning disk.
-    var samplePaths: [URL]
+    /// Optional so stores written before this column existed can migrate without validation
+    /// errors — older rows surface as `nil` in the UI and render as "No paths recorded".
+    var samplePaths: [URL]?
 
     var scan: StoredScan?
 
@@ -140,7 +142,7 @@ final class StoredCleanupAction {
         kindRaw: String = "",
         bytesReclaimed: Int64 = 0,
         itemCount: Int = 0,
-        samplePaths: [URL] = []
+        samplePaths: [URL]? = nil
     ) {
         self.date = date
         self.kindRaw = kindRaw

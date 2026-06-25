@@ -42,6 +42,7 @@ enum AppUninstallError: LocalizedError, Sendable {
 actor AppInventoryService {
     private let uninstallAppBundle: @Sendable (URL) async throws -> Void
     private let fileExists: @Sendable (String) -> Bool
+    private let directorySizer: @Sendable (URL) async -> Int64
     private let verificationAttempts: Int
     private let verificationDelay: Duration
 
@@ -50,16 +51,18 @@ actor AppInventoryService {
         fileExists: @escaping @Sendable (String) -> Bool = { path in
             FileManager.default.fileExists(atPath: path)
         },
+        directorySizer: @escaping @Sendable (URL) async -> Int64 = AppInventoryService.liveSize,
         verificationAttempts: Int = 8,
         verificationDelay: Duration = .milliseconds(150)
     ) {
         self.uninstallAppBundle = uninstallAppBundle
         self.fileExists = fileExists
+        self.directorySizer = directorySizer
         self.verificationAttempts = verificationAttempts
         self.verificationDelay = verificationDelay
     }
 
-    func scanInstalledApps() -> [AppItem] {
+    func scanInstalledApps() async -> [AppItem] {
         let fileManager = FileManager.default
         var items: [AppItem] = []
 
@@ -89,7 +92,7 @@ actor AppInventoryService {
                     bundleID = bid
                 }
 
-                let size = directorySize(at: URL(fileURLWithPath: appPath), fileManager: fileManager)
+                let size = await directorySizer(URL(fileURLWithPath: appPath))
                 let isSystem = appPath.hasPrefix("/System")
 
                 items.append(AppItem(
@@ -125,12 +128,59 @@ actor AppInventoryService {
         NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
 
-    private func directorySize(at url: URL, fileManager: FileManager) -> Int64 {
+    /// Production sizer wired in by default. Tries `du -sk` first (which matches what
+    /// Finder, System Settings → Storage → Applications, and `du` itself report) and
+    /// falls back to the FileManager walker when `du` is unavailable or fails.
+    static let liveSize: @Sendable (URL) async -> Int64 = { url in
+        if let duBytes = await duBasedSize(at: url) {
+            return duBytes
+        }
+        return directorySize(at: url, fileManager: .default)
+    }
+
+    /// Returns the on-disk size of `url` in bytes using `/usr/bin/du -sk`, which
+    /// reports the same number Finder, System Settings, and `du` show. Unlike
+    /// `directorySize(at:fileManager:)`, this includes AppleDouble `._*` sidecars
+    /// and extended-attribute overflow blocks — both of which APFS hides from
+    /// `FileManager.enumerator`. Returns `nil` if `du` cannot be launched or its
+    /// output cannot be parsed, so the caller can fall back to the walker.
+    static func duBasedSize(
+        at url: URL,
+        executor: any ProcessExecuting = SystemProcessExecutor()
+    ) async -> Int64? {
+        let duURL = URL(fileURLWithPath: "/usr/bin/du")
+        let result: ProcessRunResult
+        do {
+            result = try await executor.run(executable: duURL, arguments: ["-sk", url.path])
+        } catch {
+            return nil
+        }
+        guard result.exitCode == 0,
+              let output = String(data: result.standardOutput, encoding: .utf8) else {
+            return nil
+        }
+        let token = output.split(whereSeparator: { $0 == "\t" || $0 == " " || $0 == "\n" }).first
+        guard let token, let kilobytes = Int64(token) else { return nil }
+        return kilobytes * 1024
+    }
+
+    /// Walks an `.app` bundle with `FileManager.enumerator` and sums the
+    /// `fileAllocatedSize` of every regular file inside it.
+    ///
+    /// Hidden files are walked (the enumerator runs with no options), so
+    /// `Contents/.DS_Store`, `.localized` markers, and similar `.`-prefixed
+    /// files contribute to the total — they consume real blocks on disk and
+    /// are reclaimed when the user uninstalls the app. This walker does NOT
+    /// see AppleDouble `._*` files (APFS hides them from `FileManager`),
+    /// nor xattr overflow blocks; for that coverage use `duBasedSize(at:)`.
+    /// Used as a fallback when `du` is unavailable and as the deterministic
+    /// testable backend for unit tests.
+    static func directorySize(at url: URL, fileManager: FileManager) -> Int64 {
         let resourceKeys: [URLResourceKey] = [.fileAllocatedSizeKey, .fileSizeKey, .isRegularFileKey]
         guard let enumerator = fileManager.enumerator(
             at: url,
             includingPropertiesForKeys: resourceKeys,
-            options: [.skipsHiddenFiles]
+            options: []
         ) else {
             return 0
         }

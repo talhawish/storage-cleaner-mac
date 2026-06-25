@@ -17,6 +17,11 @@ final class QuickCleanViewModel {
         case review
         case cleaning
         case success
+        /// Sandbox-only: the user hasn't granted home folder access, so the
+        /// scanner can't measure sizes. The view shows a permission prompt
+        /// with a "Grant access" action that dismisses the modal so the
+        /// user can use the dashboard's existing permission flow.
+        case needsAccess
     }
 
     /// Live progress reported by the scanner. The view uses this to render a
@@ -46,16 +51,43 @@ final class QuickCleanViewModel {
     /// when other apps are still writing.
     private(set) var freeBytesAtEnd: Int64?
 
+    private let scanner: QuickCleanScanner
     private let onClean: @MainActor ([URL]) async -> CleanupResult
     private let volumeProvider: @MainActor () async -> Int64?
     private var scanTask: Task<Void, Never>?
 
     init(
+        scanner: QuickCleanScanner = QuickCleanScanner(),
         onClean: @escaping @MainActor ([URL]) async -> CleanupResult,
         volumeProvider: @escaping @MainActor () async -> Int64? = { nil }
     ) {
+        self.scanner = scanner
         self.onClean = onClean
         self.volumeProvider = volumeProvider
+    }
+
+    /// Convenience initializer that builds a `QuickCleanScanner` pre-wired
+    /// with the supplied `StoragePermissionHandling` so sandboxed builds can
+    /// acquire security-scoped access to the home folder before walking
+    /// option paths. Without this, `FileManager.enumerator` returns nothing
+    /// for protected paths and every item surfaces as `0 KB`.
+    static func make(
+        options: [CleanupOption] = CleanupOptionsRegistry.allOptions,
+        enabledIDs: Set<String>? = nil,
+        permissionHandler: (any StoragePermissionHandling)? = nil,
+        onClean: @escaping @MainActor ([URL]) async -> CleanupResult,
+        volumeProvider: @escaping @MainActor () async -> Int64? = { nil }
+    ) -> QuickCleanViewModel {
+        let scanner = QuickCleanScanner(
+            options: options,
+            enabledIDs: enabledIDs,
+            permissionHandler: permissionHandler
+        )
+        return QuickCleanViewModel(
+            scanner: scanner,
+            onClean: onClean,
+            volumeProvider: volumeProvider
+        )
     }
 
     // MARK: - Derived state
@@ -94,8 +126,8 @@ final class QuickCleanViewModel {
             self?.freeBytesAtStart = await self?.volumeProvider()
         }
 
-        let scanner = QuickCleanScanner()
         scanTask = Task { [weak self] in
+            guard let scanner = self?.scanner else { return }
             let result = await scanner.scan { completed, total in
                 await MainActor.run {
                     self?.progress = Progress(
@@ -176,6 +208,14 @@ final class QuickCleanViewModel {
             completedCategories: result.categories.count,
             totalCategories: result.categories.count
         )
+        if result.accessDenied {
+            // Sandbox-only: the scanner couldn't measure anything because
+            // home folder access is missing. Show a permission prompt
+            // instead of an empty (and misleadingly clean) review list.
+            selection = []
+            phase = .needsAccess
+            return
+        }
         if result.populatedCategories.isEmpty {
             phase = .success
             lastResult = CleanupResult(
@@ -185,7 +225,12 @@ final class QuickCleanViewModel {
                 totalBytesReclaimed: 0
             )
         } else {
-            selection = Set(result.allItems.map(\.url))
+            selection = Set(
+                result.populatedCategories
+                    .filter { $0.safety == .safe }
+                    .flatMap(\.items)
+                    .map(\.url)
+            )
             phase = .review
         }
     }

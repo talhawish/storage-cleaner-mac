@@ -26,15 +26,18 @@ struct QuickCleanPreferences: Sendable {
 struct QuickCleanScanner: Sendable {
     private let options: [CleanupOption]
     private let collector: FileSystemCollector
+    private let permissionHandler: (any StoragePermissionHandling)?
 
     init(
         options: [CleanupOption] = CleanupOptionsRegistry.allOptions,
         enabledIDs: Set<String>? = nil,
-        collector: FileSystemCollector = FileSystemCollector()
+        collector: FileSystemCollector = FileSystemCollector(),
+        permissionHandler: (any StoragePermissionHandling)? = nil
     ) {
         let enabled = enabledIDs ?? QuickCleanPreferences().enabledOptionIDs
         self.options = options.filter { enabled.contains($0.id) }
         self.collector = collector
+        self.permissionHandler = permissionHandler
     }
 
     /// Walks every enabled option. The `progress` callback fires after each
@@ -43,8 +46,40 @@ struct QuickCleanScanner: Sendable {
     ///
     /// The walk is `Task.isCancelled`-aware; cancellation returns whatever
     /// categories have been collected so far.
+    ///
+    /// On a sandboxed build the scanner acquires security-scoped access to
+    /// the home folder before measuring sizes — `FileManager`'s directory
+    /// enumerator returns nothing for protected paths (e.g.
+    /// `~/Library/Developer/Xcode/DerivedData`) without it, which would
+    /// surface as `0 KB` for every item. If the user hasn't granted access
+    /// the scan returns an empty `QuickCleanScan` with `accessDenied = true`
+    /// so the view can prompt for permission instead of misleadingly showing
+    /// "Nothing to clean".
+    ///
+    /// The `permissionHandler` is optional so tests can drive the scanner
+    /// against synthetic paths without a permission layer; in that case the
+    /// scanner walks paths directly with no security scope. The acquire/
+    /// release lifecycle is delegated to `withHomeFolderAccess` so the
+    /// helper is the single source of truth for sandbox-aware scanning.
     func scan(
         progress: (@Sendable (Int, Int) async -> Void)? = nil
+    ) async -> QuickCleanScan {
+        guard let permissionHandler else {
+            return await runScan(progress: progress)
+        }
+        return await permissionHandler.withHomeFolderAccess { access in
+            guard access != nil else {
+                return QuickCleanScan(categories: [], accessDenied: true)
+            }
+            return await runScan(progress: progress)
+        }
+    }
+
+    /// Walks every enabled option under whatever security scope the caller
+    /// has already arranged. The `progress` callback fires after each option
+    /// completes so the UI can render a live status.
+    private func runScan(
+        progress: (@Sendable (Int, Int) async -> Void)?
     ) async -> QuickCleanScan {
         var categories: [QuickCleanCategory] = []
         let total = options.count
@@ -71,7 +106,7 @@ struct QuickCleanScanner: Sendable {
                 name: option.name,
                 summary: option.description,
                 icon: option.icon,
-                iconColor: option.iconColor,
+                tint: option.resolvedTint,
                 domain: option.domain,
                 safety: option.safety,
                 items: sorted

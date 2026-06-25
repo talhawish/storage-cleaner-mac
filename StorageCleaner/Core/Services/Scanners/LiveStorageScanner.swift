@@ -180,6 +180,7 @@ extension LiveStorageScanner {
         let appCatalog = InstalledAppCatalog()
         let scanners: [any StorageCategoryScanning] = [
             XcodeStorageScanner(collector: collector),
+            IosDeviceSupportScanner(),
             DockerStorageScanner(collector: collector),
             FlutterStorageScanner(collector: collector),
             ReactNativeStorageScanner(collector: collector),

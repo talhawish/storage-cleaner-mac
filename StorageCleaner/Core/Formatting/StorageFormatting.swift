@@ -37,6 +37,9 @@ enum StorageFormatting {
     /// `fileSize(at:)` only reports the size of the inode itself, so it is wrong
     /// for directories (e.g. CLI toolchain roots). Use this when the URL may be a
     /// folder. Run off the main thread — it can enumerate large trees.
+    ///
+    /// Hidden files and directories (dotfiles) are included so CLI toolchains
+    /// like `~/.rustup`, `~/.cargo`, `~/.npm` and their caches are fully counted.
     static func itemSize(at url: URL) -> Int64 {
         let sizeKeys: Set<URLResourceKey> = [.isRegularFileKey, .fileAllocatedSizeKey, .fileSizeKey]
         let values = try? url.resourceValues(forKeys: sizeKeys)
@@ -48,7 +51,7 @@ enum StorageFormatting {
         guard let enumerator = fileManager.enumerator(
             at: url,
             includingPropertiesForKeys: Array(sizeKeys),
-            options: [.skipsHiddenFiles]
+            options: []
         ) else {
             return 0
         }

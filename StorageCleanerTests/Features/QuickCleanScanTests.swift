@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 import XCTest
 @testable import StorageCleaner
 
@@ -23,7 +23,7 @@ final class QuickCleanScanTests: XCTestCase {
             name: name,
             summary: "",
             icon: "doc.fill",
-            iconColor: "blue",
+            tint: .accentColor,
             domain: domain,
             safety: safety,
             items: items
@@ -98,7 +98,7 @@ final class QuickCleanScanTests: XCTestCase {
             name: "Option A",
             summary: "",
             icon: "doc.fill",
-            iconColor: "blue",
+            tint: .accentColor,
             domain: .otherCaches,
             safety: .safe,
             items: [makeItem(name: "a", bytes: 1)]
@@ -108,7 +108,7 @@ final class QuickCleanScanTests: XCTestCase {
             name: "Option B",
             summary: "",
             icon: "doc.fill",
-            iconColor: "blue",
+            tint: .accentColor,
             domain: .otherCaches,
             safety: .safe,
             items: [makeItem(name: "b", bytes: 1)]
@@ -116,5 +116,67 @@ final class QuickCleanScanTests: XCTestCase {
         let scan = QuickCleanScan(categories: [firstCategory, secondCategory])
         XCTAssertEqual(scan.populatedCategories.count, 2)
         XCTAssertEqual(scan.populatedCategories.map(\.id), ["option-a", "option-b"])
+    }
+
+    // MARK: - QuickCleanCleanedCategory
+
+    /// `cleanedCategories(in:)` must report the *reclaimed* bytes — not the
+    /// scanned bytes — so a partially-failed cleanup (e.g. one of three
+    /// browser cache roots throws on trash) shows the real outcome.
+    func testCleanedCategoriesReportsReclaimedBytesNotScannedBytes() {
+        let category = makeCategory(id: "browser-cache", bytes: [100, 200, 300])
+        let scan = QuickCleanScan(categories: [category])
+        let deletedURL = category.items[1].url
+        let result = CleanupResult(
+            deletedURLs: [deletedURL],
+            deletedItems: [DeletedItem(originalURL: deletedURL, bytesReclaimed: 250)],
+            failedURLs: [],
+            totalBytesReclaimed: 250
+        )
+
+        let cleaned = scan.cleanedCategories(in: result)
+
+        XCTAssertEqual(cleaned.count, 1)
+        XCTAssertEqual(cleaned.first?.reclaimedBytes, 250, "must reflect actual reclaimed bytes, not scanned (500)")
+        XCTAssertEqual(cleaned.first?.reclaimedItems.count, 1)
+        XCTAssertEqual(cleaned.first?.reclaimedItems.first?.url, deletedURL)
+    }
+
+    /// Categories with zero successful deletes must drop out of the breakdown.
+    /// The original implementation kept the category and reported scanned
+    /// bytes even when the Trash move failed for every item in it.
+    func testCleanedCategoriesDropsCategoriesWithOnlyFailures() {
+        let category = makeCategory(id: "browser-cache", bytes: [100])
+        let scan = QuickCleanScan(categories: [category])
+        let failedURL = category.items[0].url
+        let result = CleanupResult(
+            deletedURLs: [],
+            deletedItems: [],
+            failedURLs: [(failedURL, NSError(domain: "test", code: 1))],
+            totalBytesReclaimed: 0
+        )
+
+        XCTAssertTrue(scan.cleanedCategories(in: result).isEmpty)
+    }
+
+    /// A category is included only if at least one of its items was
+    /// successfully cleaned; failed items inside an otherwise-successful
+    /// category are filtered out so the breakdown matches the real outcome.
+    func testCleanedCategoriesExcludesFailedItemsButKeepsSuccessfulOnes() {
+        let category = makeCategory(id: "browser-cache", bytes: [100, 200, 300])
+        let scan = QuickCleanScan(categories: [category])
+        let succeededURL = category.items[0].url
+        let failedURL = category.items[2].url
+        let result = CleanupResult(
+            deletedURLs: [succeededURL],
+            deletedItems: [DeletedItem(originalURL: succeededURL, bytesReclaimed: 100)],
+            failedURLs: [(failedURL, NSError(domain: "test", code: 1))],
+            totalBytesReclaimed: 100
+        )
+
+        let cleaned = scan.cleanedCategories(in: result)
+        XCTAssertEqual(cleaned.count, 1)
+        XCTAssertEqual(cleaned.first?.reclaimedBytes, 100)
+        XCTAssertEqual(cleaned.first?.reclaimedItems.map(\.url), [succeededURL])
     }
 }

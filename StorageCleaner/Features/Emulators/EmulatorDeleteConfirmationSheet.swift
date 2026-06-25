@@ -12,15 +12,18 @@ struct EmulatorDeleteConfirmationSheet: View {
     @State private var confirmed = false
 
     private var totalBytes: Int64 { images.reduce(0) { $0 + $1.bytes } }
-    private var hasUninstall: Bool {
+    private var hasSimctlRuntime: Bool {
         images.contains { if case .simctlRuntime = $0.removal { true } else { false } }
+    }
+    private var hasSimctlDevice: Bool {
+        images.contains { if case .simctlDevice = $0.removal { true } else { false } }
     }
     private var hasTrash: Bool { images.contains { $0.removal.isReversible } }
 
     var body: some View {
         ConfirmationModal(
             variant: .destructive,
-            title: "Remove \(images.count) OS image\(images.count == 1 ? "" : "s")",
+            title: "Remove \(images.count) item\(images.count == 1 ? "" : "s")",
             subtitle: "Reclaims \(StorageFormatting.bytes(totalBytes))",
             iconSystemName: "externaldrive.badge.minus",
             trailing: .sizeBadge(value: StorageFormatting.bytes(totalBytes), tint: AppTheme.orange),
@@ -40,14 +43,14 @@ struct EmulatorDeleteConfirmationSheet: View {
             cancel: AppModalActionBar.CancelAction(title: "Cancel", action: onCancel),
             isProcessing: confirmed
         ) {
-            if hasUninstall || hasTrash {
+            if hasSimctlRuntime || hasSimctlDevice || hasTrash {
                 AppModalSection(
                     title: "What will happen",
                     systemImage: "info.circle.fill",
                     tint: AppTheme.cyan
                 ) {
                     VStack(spacing: AppTheme.Spacing.small) {
-                        if hasUninstall {
+                        if hasSimctlRuntime {
                             AppModalBanner(
                                 systemImage: "arrow.down.circle",
                                 tint: AppTheme.accent,
@@ -56,12 +59,26 @@ struct EmulatorDeleteConfirmationSheet: View {
                                     + "anytime from Xcode."
                             )
                         }
+                        if hasSimctlDevice {
+                            AppModalBanner(
+                                systemImage: "iphone.slash",
+                                tint: AppTheme.indigo,
+                                text: "Simulator device instances are deleted from CoreSimulator. "
+                                    + "You can re-create them from Xcode any time."
+                            )
+                        }
                         if hasTrash {
+                            let hasDeviceSupport = images.contains { $0.platform == .iosDeviceSupport }
+                            let trashMessage = hasDeviceSupport
+                                ? "iOS Device Support debug symbols, Android system images, and any "
+                                    + "other user-owned folders are moved to the Trash, so you can "
+                                    + "restore them until you empty it."
+                                : "Android system images and any other user-owned folders are moved "
+                                    + "to the Trash, so you can restore them until you empty it."
                             AppModalBanner(
                                 systemImage: "trash",
                                 tint: AppTheme.mint,
-                                text: "Android system images are moved to the Trash, so you can "
-                                    + "restore them until you empty it."
+                                text: trashMessage
                             )
                         }
                     }
@@ -69,7 +86,7 @@ struct EmulatorDeleteConfirmationSheet: View {
             }
 
             AppModalSection(
-                title: "Selected images",
+                title: "Selected items",
                 systemImage: "list.bullet",
                 tint: AppTheme.orange
             ) {

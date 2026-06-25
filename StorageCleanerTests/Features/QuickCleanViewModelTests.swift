@@ -29,7 +29,8 @@ final class QuickCleanViewModelTests: XCTestCase {
             safety: .safe,
             paths: [path],
             isSafeByDefault: true,
-            category: .system
+            category: .system,
+            storageKind: .junkFiles
         )
     }
 
@@ -116,5 +117,21 @@ final class QuickCleanViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.totalSelectedItems, 0)
         viewModel.toggleCategory(category)
         XCTAssertTrue(viewModel.isCategoryFullySelected(category))
+    }
+
+    /// When the scanner reports an access-denied result (sandboxed build,
+    /// no home folder grant), the view model must transition to a
+    /// dedicated `.needsAccess` phase so the view can prompt for
+    /// permission instead of misleadingly showing an empty review list.
+    @MainActor
+    func testAccessDeniedScanTransitionsToNeedsAccessPhase() {
+        let viewModel = QuickCleanViewModel(onClean: { _ in
+            CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+        })
+        viewModel.setScanResultForTesting(
+            QuickCleanScan(categories: [], accessDenied: true)
+        )
+        XCTAssertEqual(viewModel.phase, .needsAccess)
+        XCTAssertFalse(viewModel.hasSelection)
     }
 }

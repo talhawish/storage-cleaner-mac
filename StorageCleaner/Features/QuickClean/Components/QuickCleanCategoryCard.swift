@@ -20,13 +20,11 @@ struct QuickCleanCategoryCard: View {
             header
             if isExpanded {
                 Divider().padding(.leading, 56)
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(Array(category.items.enumerated()), id: \.element.id) { index, item in
                         QuickCleanFileRow(
                             item: item,
                             isSelected: isItemSelected(item),
-                            isDisabled: false,
-                            accentTint: tint,
                             onToggle: { onToggleItem(item) }
                         )
                         if index < category.items.count - 1 {

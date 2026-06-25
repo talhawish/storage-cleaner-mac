@@ -102,7 +102,7 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
                 kindRaw: entry.kind.rawValue,
                 bytesReclaimed: entry.bytesReclaimed,
                 itemCount: entry.itemCount,
-                samplePaths: entry.samplePaths
+                samplePaths: entry.samplePaths.isEmpty ? nil : entry.samplePaths
             )
             action.scan = scan
             context.insert(action)

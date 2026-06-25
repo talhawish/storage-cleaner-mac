@@ -1,90 +1,74 @@
 import SwiftUI
 
-/// Lists installed simulator/emulator OS images (Apple runtimes + Android system images) with their
-/// sizes and lets the user reclaim space by removing the ones they don't need. Self-contained and
-/// driven by live discovery, like `AppsView` — no scan required.
+/// Lists installed simulator/emulator OS images (Apple runtimes + Apple Device Support debug
+/// symbols + CoreSimulator device instances + Android system images) with their sizes and lets
+/// the user reclaim space by removing the ones they don't need. Self-contained and driven by
+/// live discovery, like `AppsView` — no scan required.
 ///
-/// Nothing is pre-selected: removing an OS image is consequential, so every selection is explicit.
+/// All state lives in ``EmulatorsViewModel`` so the loading / empty / content state machine,
+/// the Rescan button, and the live-factory wiring can be unit-tested without a SwiftUI host.
 struct EmulatorsView: View {
-    private let service: EmulatorManagementService
-
-    @State private var images: [EmulatorImage] = []
-    @State private var selectedIDs: Set<String> = []
-    @State private var isLoading = true
-    @State private var showConfirmation = false
-    @State private var loadTask: Task<Void, Never>?
+    @State private var viewModel: EmulatorsViewModel
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
-    init(service: EmulatorManagementService = .live) {
-        self.service = service
+    init(viewModel: EmulatorsViewModel = EmulatorsViewModel()) {
+        _viewModel = State(initialValue: viewModel)
     }
-
-    private var sections: [(platform: EmulatorPlatform, images: [EmulatorImage])] {
-        EmulatorPlatform.allCases
-            .sorted { $0.sortIndex < $1.sortIndex }
-            .compactMap { platform in
-                let matching = images.filter { $0.platform == platform }
-                return matching.isEmpty ? nil : (platform, matching)
-            }
-    }
-
-    private var selectedImages: [EmulatorImage] {
-        images.filter { selectedIDs.contains($0.id) }
-    }
-
-    private var totalBytes: Int64 { images.reduce(0) { $0 + $1.bytes } }
-    private var selectedBytes: Int64 { selectedImages.reduce(0) { $0 + $1.bytes } }
 
     var body: some View {
         Group {
-            if isLoading && images.isEmpty {
+            switch viewModel.state {
+            case .loading:
                 loadingState
-            } else if images.isEmpty {
+            case .empty:
                 emptyState
-            } else {
+            case .loaded:
                 content
             }
         }
         .navigationTitle("Simulators & Emulators")
-        .navigationSubtitle("\(images.count) OS images · \(StorageFormatting.bytes(totalBytes))")
+        .navigationSubtitle("\(viewModel.images.count) items · \(StorageFormatting.bytes(viewModel.totalBytes))")
         .accessibilityIdentifier("simulators-emulators-root")
         .toolbar { toolbarContent }
-        .onAppear { startLoading() }
-        .onDisappear { cancelLoading() }
-        .sheet(isPresented: $showConfirmation) {
+        .onAppear { viewModel.start() }
+        .onDisappear { viewModel.cancel() }
+        .sheet(isPresented: Binding(
+            get: { viewModel.showConfirmation },
+            set: { viewModel.showConfirmation = $0 }
+        )) {
             EmulatorDeleteConfirmationSheet(
-                images: selectedImages,
+                images: viewModel.selectedImages,
                 onConfirm: {
-                    let toRemove = selectedImages
-                    selectedIDs.removeAll()
-                    showConfirmation = false
+                    let toRemove = viewModel.selectedImages
+                    viewModel.selectedIDs.removeAll()
+                    viewModel.showConfirmation = false
                     Task {
-                        _ = await service.remove(toRemove)
-                        startLoading()
+                        _ = await viewModel.delete(toRemove)
+                        viewModel.start()
                     }
                 },
-                onCancel: { showConfirmation = false }
+                onCancel: { viewModel.showConfirmation = false }
             )
         }
     }
 
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            if !selectedIDs.isEmpty {
+            if !viewModel.selectedIDs.isEmpty {
                 Button {
-                    showConfirmation = true
+                    viewModel.showConfirmation = true
                 } label: {
-                    Label("Remove \(selectedIDs.count)", systemImage: "externaldrive.badge.minus")
+                    Label("Remove \(viewModel.selectedIDs.count)", systemImage: "externaldrive.badge.minus")
                 }
                 .foregroundStyle(.red)
-                .help("Remove \(selectedIDs.count) selected OS images")
+                .help("Remove \(viewModel.selectedIDs.count) selected OS images")
             }
         }
 
         ToolbarItem {
             Button {
-                startLoading()
+                viewModel.start()
             } label: {
                 Label("Rescan", systemImage: "arrow.clockwise")
             }
@@ -100,13 +84,13 @@ struct EmulatorsView: View {
             selectionBar
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    ForEach(sections, id: \.platform) { section in
+                    ForEach(viewModel.sections, id: \.platform) { section in
                         EmulatorSectionCard(
                             platform: section.platform,
                             images: section.images,
-                            selectedIDs: selectedIDs,
-                            onToggle: toggle,
-                            onToggleAll: { toggleAll(in: section.images) }
+                            selectedIDs: viewModel.selectedIDs,
+                            onToggle: viewModel.toggle,
+                            onToggleAll: { viewModel.toggleAll(in: section.images) }
                         )
                     }
                 }
@@ -130,7 +114,8 @@ struct EmulatorsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Simulators & Emulators")
                     .font(.title2.weight(.semibold))
-                Text("Installed iOS simulator runtimes and Android system images — often several GB each")
+                Text("Apple simulator runtimes, device debug symbols, simulator device instances, "
+                    + "and Android system images — often several GB each")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -139,7 +124,7 @@ struct EmulatorsView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 6) {
-                Text(StorageFormatting.bytes(totalBytes))
+                Text(StorageFormatting.bytes(viewModel.totalBytes))
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .contentTransition(.numericText())
                 Text("installed")
@@ -159,12 +144,12 @@ struct EmulatorsView: View {
 
             Spacer()
 
-            if !selectedIDs.isEmpty {
-                Text("\(selectedIDs.count) selected")
+            if !viewModel.selectedIDs.isEmpty {
+                Text("\(viewModel.selectedIDs.count) selected")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppTheme.accent)
                     .contentTransition(.numericText())
-                Text(StorageFormatting.bytes(selectedBytes))
+                Text(StorageFormatting.bytes(viewModel.selectedBytes))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
@@ -173,18 +158,19 @@ struct EmulatorsView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
         .background(.regularMaterial)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: selectedIDs.count)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: viewModel.selectedIDs.count)
     }
 
     private var emptyState: some View {
         EmptyStateView(
             title: "No Simulator or Emulator Images",
-            message: "Installed iOS simulator runtimes and Android system images appear here so you can "
-                + "reclaim the space they use. None were found on this Mac.",
+            message: "Installed iOS / tvOS / watchOS / visionOS simulator runtimes, device debug "
+                + "symbols, simulator device instances, and Android system images appear here so "
+                + "you can reclaim the space they use. None were found on this Mac.",
             systemImage: "iphone.gen3",
             tint: AppTheme.accent,
             actionTitle: "Rescan",
-            action: startLoading
+            action: { viewModel.start() }
         )
         .frame(minHeight: 430)
     }
@@ -192,7 +178,8 @@ struct EmulatorsView: View {
     private var loadingState: some View {
         ScanningLoaderView(
             title: "Looking for OS images",
-            subtitle: "Discovering installed iOS simulator runtimes and Android system images.",
+            subtitle: "Discovering installed iOS / tvOS / watchOS / visionOS simulator runtimes, "
+                + "device debug symbols, simulator device instances, and Android system images.",
             progress: nil,
             scanners: [
                 ScannerLoaderItem(
@@ -205,68 +192,34 @@ struct EmulatorsView: View {
                     tint: AppTheme.accent
                 ),
                 ScannerLoaderItem(
+                    id: "ios-device-support",
+                    title: "iOS Device Support",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "Reading ~/Library/Developer/Xcode",
+                    systemImage: "ladybug.fill",
+                    tint: AppTheme.violet
+                ),
+                ScannerLoaderItem(
+                    id: "simulator-devices",
+                    title: "Simulator device instances",
+                    state: .scanning,
+                    itemsScanned: 0,
+                    message: "Walking CoreSimulator/Devices",
+                    systemImage: "ipad.gen2",
+                    tint: AppTheme.indigo
+                ),
+                ScannerLoaderItem(
                     id: "android-images",
                     title: "Android system images",
                     state: .scanning,
                     itemsScanned: 0,
-                    message: "Scanning ~/.android/avd",
-                    systemImage: "ipad.gen2",
-                    tint: AppTheme.violet
+                    message: "Scanning ~/Library/Android/sdk/system-images",
+                    systemImage: "smartphone",
+                    tint: AppTheme.mint
                 )
             ],
-            cancelAction: cancelLoading
+            cancelAction: { viewModel.cancel() }
         )
-    }
-}
-
-// MARK: - Behaviour
-
-private extension EmulatorsView {
-    func toggle(_ image: EmulatorImage) {
-        guard image.isRemovable else { return }
-        if selectedIDs.contains(image.id) {
-            selectedIDs.remove(image.id)
-        } else {
-            selectedIDs.insert(image.id)
-        }
-    }
-
-    func toggleAll(in images: [EmulatorImage]) {
-        let removable = images.filter(\.isRemovable).map(\.id)
-        if removable.allSatisfy(selectedIDs.contains) {
-            removable.forEach { selectedIDs.remove($0) }
-        } else {
-            removable.forEach { selectedIDs.insert($0) }
-        }
-    }
-
-    /// Two-phase load: discover the images (Apple sizes are instant) so the list appears immediately,
-    /// then measure Android image sizes in the background.
-    func load() async {
-        isLoading = true
-        let discovered = await service.discover()
-        guard !Task.isCancelled else { return }
-        images = discovered
-        isLoading = false
-        // Drop selections that no longer exist (e.g. after a removal + reload).
-        selectedIDs = selectedIDs.intersection(Set(discovered.map(\.id)))
-
-        let sized = await Task.detached(priority: .utility) { [service] in
-            service.measuringAndroidSizes(in: discovered)
-        }.value
-        guard !Task.isCancelled else { return }
-        images = sized
-        loadTask = nil
-    }
-
-    func startLoading() {
-        loadTask?.cancel()
-        loadTask = Task { await load() }
-    }
-
-    func cancelLoading() {
-        loadTask?.cancel()
-        loadTask = nil
-        isLoading = false
     }
 }

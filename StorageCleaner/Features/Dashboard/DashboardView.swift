@@ -70,20 +70,23 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showQuickClean) {
             QuickCleanView(
-                onClean: { urls in
-                    await viewModel.deleteFiles(urls)
-                },
+                viewModel: QuickCleanViewModel.make(
+                    permissionHandler: viewModel.permissionHandler,
+                    onClean: { urls in
+                        await viewModel.deleteFiles(urls)
+                    },
+                    volumeProvider: {
+                        viewModel.refreshVolumeSnapshot()
+                        return viewModel.volumeSnapshot.isAvailable
+                            ? viewModel.volumeSnapshot.freeBytes
+                            : nil
+                    }
+                ),
                 onOpenSettings: {
                     showQuickClean = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                         onOpenSettings?()
                     }
-                },
-                freeBytesProvider: {
-                    viewModel.refreshVolumeSnapshot()
-                    return viewModel.volumeSnapshot.isAvailable
-                        ? viewModel.volumeSnapshot.freeBytes
-                        : nil
                 }
             )
         }

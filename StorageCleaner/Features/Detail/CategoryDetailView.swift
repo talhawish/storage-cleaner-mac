@@ -83,7 +83,6 @@ struct CategoryDetailView: View {
         }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
-                finding: finding,
                 selectedURLs: Array(selectedURLs),
                 totalBytes: totalSelectedBytes,
                 onDelete: {

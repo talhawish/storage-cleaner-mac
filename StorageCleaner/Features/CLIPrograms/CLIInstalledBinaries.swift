@@ -102,18 +102,43 @@ enum InstalledBinaryCatalog {
         }
     }
 
-    private static func autodiscoveredToolBins(home: URL, fileManager: FileManager) -> [URL] {
+    /// Internal for testing — do not call directly from outside this file.
+    static func autodiscoveredToolBins(home: URL, fileManager: FileManager) -> [URL] {
+        // Keep known tool bin directories as a fallback when the home
+        // directory cannot be enumerated (sandboxed build without active
+        // security-scoped access). These are merged with autodiscovered
+        // entries so they are still found regardless of scope state.
+        let known = knownToolBins(home: home, fileManager: fileManager)
+
         guard let entries = try? fileManager.contentsOfDirectory(
             at: home,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: []
         ) else {
-            return []
+            return known
         }
 
-        return entries
+        let autodiscovered = entries
             .filter { $0.lastPathComponent.hasPrefix(".") && isDirectory($0, fileManager: fileManager) }
             .map { $0.appendingPathComponent("bin") }
+            .filter { isDirectory($0, fileManager: fileManager) }
+
+        return autodiscovered + known
+    }
+
+    /// Well-known tool-specific bin directories that autodiscovery would
+    /// normally find by enumerating home, listed explicitly so they are
+    /// still probed when security-scoped access has not been granted.
+    /// When home enumeration succeeds these are still included (and
+    /// deduplicated by the caller) as a safety net.
+    private static func knownToolBins(home: URL, fileManager: FileManager) -> [URL] {
+        let candidates = [
+            ".opencode/bin",
+            ".foundry/bin",
+            ".rye/shims"
+        ]
+        return candidates
+            .map { home.appendingPathComponent($0) }
             .filter { isDirectory($0, fileManager: fileManager) }
     }
 

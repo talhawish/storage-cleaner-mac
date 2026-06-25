@@ -116,7 +116,7 @@ enum CLIProgramCatalog {
             // Version managers.
             at(".nvm"), at(".volta"), at(".fnm"), at(".pyenv"), at(".rbenv"), at(".rvm"),
             // Toolchains & caches.
-            at(".rustup"), at("Library/Caches/Homebrew")
+            at(".rustup"), at(".cargo/bin"), at(".bun/bin"), at("Library/Caches/Homebrew")
         ]
     }()
 
@@ -240,56 +240,10 @@ extension CLIProgramCatalog {
             category: .homebrew,
             safety: .review
         ),
-        Container(
-            suffix: "/.nvm",
-            childSubpath: "versions/node",
-            childrenAreDirectories: true,
-            childSubtitle: "Node.js version (nvm)",
-            symbolName: "arrow.triangle.branch",
-            accent: AppTheme.mint,
-            category: .versionManager,
-            safety: .review
-        ),
-        Container(
-            suffix: "/.volta",
-            childSubpath: "tools/image/node",
-            childrenAreDirectories: true,
-            childSubtitle: "Node.js version (Volta)",
-            symbolName: "bolt.fill",
-            accent: AppTheme.mint,
-            category: .versionManager,
-            safety: .review
-        ),
-        Container(
-            suffix: "/.pyenv",
-            childSubpath: "versions",
-            childrenAreDirectories: true,
-            childSubtitle: "Python version (pyenv)",
-            symbolName: "chevron.left.forwardslash.chevron.right",
-            accent: AppTheme.cyan,
-            category: .versionManager,
-            safety: .review
-        ),
-        Container(
-            suffix: "/.rbenv",
-            childSubpath: "versions",
-            childrenAreDirectories: true,
-            childSubtitle: "Ruby version (rbenv)",
-            symbolName: "diamond.fill",
-            accent: AppTheme.rose,
-            category: .versionManager,
-            safety: .review
-        ),
-        Container(
-            suffix: "/.rvm",
-            childSubpath: "rubies",
-            childrenAreDirectories: true,
-            childSubtitle: "Ruby version (RVM)",
-            symbolName: "diamond.fill",
-            accent: AppTheme.rose,
-            category: .versionManager,
-            safety: .review
-        ),
+        // Version-manager roots (nvm, volta, pyenv, rbenv, rvm, fnm) are intentionally
+        // NOT listed as containers. Each appears as a single entry via its template
+        // rule, avoiding the clutter of every installed version. The Runtime Versions
+        // section provides the per-version granularity.
         Container(
             suffix: "/.cargo/bin",
             childSubpath: "",

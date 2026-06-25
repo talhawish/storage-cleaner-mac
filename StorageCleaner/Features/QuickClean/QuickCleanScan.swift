@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// One file or directory that Quick Clean discovered. The `id` is the canonical
 /// file URL so the same path can never appear twice in a single scan result,
@@ -11,7 +11,6 @@ struct QuickCleanItem: Identifiable, Hashable, Sendable {
 
     var isDirectory: Bool { url.hasDirectoryPath }
     var displayName: String { url.lastPathComponent }
-    var parentPath: String { url.deletingLastPathComponent().path }
 }
 
 /// One enabled `CleanupOption` and everything Quick Clean found under its
@@ -28,7 +27,7 @@ struct QuickCleanCategory: Identifiable, Hashable, Sendable {
     let name: String
     let summary: String
     let icon: String
-    let iconColor: String
+    let tint: Color
     let domain: StorageDomain
     let safety: CleanupSafety
     let items: [QuickCleanItem]
@@ -46,6 +45,17 @@ struct QuickCleanCategory: Identifiable, Hashable, Sendable {
 /// computed totals that the header and review footer render.
 struct QuickCleanScan: Hashable, Sendable {
     let categories: [QuickCleanCategory]
+    /// `true` when the scan ran on a sandboxed build but the user hadn't
+    /// granted home folder access. The view surfaces this as an "Access
+    /// required" state instead of an empty (and misleadingly clean) review
+    /// list, because the underlying measurement would have returned `0 KB`
+    /// for every path.
+    let accessDenied: Bool
+
+    init(categories: [QuickCleanCategory], accessDenied: Bool = false) {
+        self.categories = categories
+        self.accessDenied = accessDenied
+    }
 
     var allItems: [QuickCleanItem] {
         categories.flatMap(\.items)
@@ -88,5 +98,63 @@ extension QuickCleanCategory {
     /// what is about to be removed.
     func selectedItems(in selection: Set<URL>) -> [QuickCleanItem] {
         items.filter { selection.contains($0.url) }
+    }
+}
+
+/// One category from a completed Quick Clean run, carrying the bytes and
+/// items that were *actually* moved to Trash. Distinct from `QuickCleanCategory`
+/// (which holds the *scanned* state) so the success view can show the real
+/// reclaimed total even when a sub-path failed to delete or the on-disk size
+/// drifted between scan and cleanup.
+struct QuickCleanCleanedCategory: Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let icon: String
+    let tint: Color
+    let domain: StorageDomain
+    let safety: CleanupSafety
+    /// Bytes actually reclaimed for items in this category. May be less than
+    /// the scanned size when a deletion failed or when on-disk size changed
+    /// between scan and cleanup.
+    let reclaimedBytes: Int64
+    /// Items that were successfully moved to Trash (or permanently deleted
+    /// from inside it), in scan order. Excludes items that failed.
+    let reclaimedItems: [QuickCleanItem]
+
+    var itemCount: Int { reclaimedItems.count }
+    var isEmpty: Bool { reclaimedItems.isEmpty }
+}
+
+extension QuickCleanScan {
+    /// Builds the per-category success view model from a `CleanupResult`.
+    /// A category is included only if at least one of its items was
+    /// successfully cleaned. Failed items are filtered out so the success
+    /// breakdown reflects the real outcome, not the pre-scan estimate.
+    func cleanedCategories(in result: CleanupResult) -> [QuickCleanCleanedCategory] {
+        let deletedBytesByURL = Dictionary(
+            result.deletedItems.map { ($0.originalURL, $0.bytesReclaimed) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let failedURLs = Set(result.failedURLs.map(\.0))
+
+        return populatedCategories.compactMap { category in
+            let reclaimedItems = category.items.compactMap { item -> QuickCleanItem? in
+                guard let bytes = deletedBytesByURL[item.url], bytes > 0 else { return nil }
+                guard !failedURLs.contains(item.url) else { return nil }
+                return QuickCleanItem(url: item.url, bytes: bytes)
+            }
+            guard !reclaimedItems.isEmpty else { return nil }
+            let reclaimedBytes = reclaimedItems.reduce(Int64(0)) { $0 + $1.bytes }
+            return QuickCleanCleanedCategory(
+                id: category.id,
+                name: category.name,
+                icon: category.icon,
+                tint: category.tint,
+                domain: category.domain,
+                safety: category.safety,
+                reclaimedBytes: reclaimedBytes,
+                reclaimedItems: reclaimedItems
+            )
+        }
     }
 }

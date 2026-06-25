@@ -15,18 +15,21 @@ struct SecurityScopedCategoryScanner: StorageCategoryScanning {
     }
 
     func scan() async -> CategoryScanResult {
-        guard let access = permissionHandler.beginHomeFolderAccess() else {
-            return CategoryScanResult(
-                finding: nil,
-                inspectedItemCount: 0,
-                message: "Home Folder access is required"
-            )
+        // The shared helper calls `beginHomeFolderAccess()` exactly once and
+        // hands the access token to the body. The dashboard's permission UX
+        // (a specific "Home Folder access is required" finding) is preserved
+        // by branching on the token before running the inner scanner —
+        // otherwise the scan would silently return an empty finding on a
+        // sandboxed build without a grant.
+        await permissionHandler.withHomeFolderAccess { access in
+            guard access != nil else {
+                return CategoryScanResult(
+                    finding: nil,
+                    inspectedItemCount: 0,
+                    message: "Home Folder access is required"
+                )
+            }
+            return await scanner.scan()
         }
-
-        defer {
-            access.stop()
-        }
-
-        return await scanner.scan()
     }
 }

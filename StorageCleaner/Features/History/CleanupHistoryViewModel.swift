@@ -180,7 +180,7 @@ final class CleanupHistoryViewModel {
                     kind: kind,
                     bytesReclaimed: action.bytesReclaimed,
                     itemCount: action.itemCount,
-                    samplePaths: action.samplePaths
+                    samplePaths: action.samplePaths ?? []
                 )
             }
             .sorted { $0.bytesReclaimed > $1.bytesReclaimed }
@@ -210,7 +210,7 @@ private extension StorageFindingKind {
     /// scan pipeline's mapping; if a kind has no canonical domain, fall back to `.otherCaches`.
     var defaultDomain: StorageDomain {
         switch self {
-        case .xcodeArtifacts: .appleDevelopment
+        case .xcodeArtifacts, .iosDeviceSupport: .appleDevelopment
         case .nodeDependencies: .webDevelopment
         case .browserCaches: .browserData
         case .dockerArtifacts: .containers

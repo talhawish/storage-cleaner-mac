@@ -42,6 +42,7 @@ private struct DemoStorageScanner: StorageScanning {
     /// shows a populated breakdown grid, grouped detection rows, and tips.
     static let allFindings: [StorageFinding] = [
         demo(.xcodeArtifacts, .appleDevelopment, bytes: 18_535_280_640, items: 412, safety: .safe),
+        demo(.iosDeviceSupport, .appleDevelopment, bytes: 20_521_336_832, items: 4, safety: .review),
         demo(.nodeDependencies, .webDevelopment, bytes: 9_126_805_504, items: 286, safety: .safe),
         demo(.dockerArtifacts, .containers, bytes: 6_442_450_944, items: 37, safety: .safe),
         demo(.aiModelCaches, .artificialIntelligence, bytes: 4_294_967_296, items: 12, safety: .safe),

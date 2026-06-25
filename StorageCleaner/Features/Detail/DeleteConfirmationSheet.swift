@@ -3,7 +3,6 @@ import SwiftUI
 struct DeleteConfirmationSheet: View {
     private static var trashPrefix: String { UserHomeDirectory.path + "/.Trash/" }
 
-    let finding: StorageFinding
     let selectedURLs: [URL]
     let totalBytes: Int64
     let onDelete: () -> Void

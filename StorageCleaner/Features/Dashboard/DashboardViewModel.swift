@@ -6,7 +6,11 @@ import Observation
 @Observable
 final class DashboardViewModel {
     private let scanner: any StorageScanning
-    private let permissionHandler: any StoragePermissionHandling
+    /// Exposed so dependent features (Quick Clean) can reuse the same
+    /// security-scoped access grant instead of requesting their own. Kept
+    /// `internal` (not `private`) for that one call site; treat as
+    /// read-only.
+    let permissionHandler: any StoragePermissionHandling
     private let cleanupService: CleanupService
     private let cliRemovalService: CLIRemovalService
     private let historyStore: (any ScanHistoryStore)?
@@ -136,7 +140,7 @@ final class DashboardViewModel {
                 kind: .cliApps,
                 bytesReclaimed: result.totalBytesReclaimed,
                 itemCount: result.deletedCount,
-                samplePaths: Self.samplePaths(
+                samplePaths: CleanupAuditRecorder.samplePaths(
                     from: result.deletedItems.map(\.originalURL)
                 )
             )
@@ -180,7 +184,7 @@ final class DashboardViewModel {
                 kind: .runtimeVersions,
                 bytesReclaimed: result.totalBytesReclaimed,
                 itemCount: result.deletedCount,
-                samplePaths: Self.samplePaths(
+                samplePaths: CleanupAuditRecorder.samplePaths(
                     from: result.deletedItems.map(\.originalURL)
                 )
             )
@@ -249,28 +253,16 @@ final class DashboardViewModel {
         )
     }
 
-    /// Records one audit entry per affected category so cleanup history reflects what was removed.
+    /// Records one audit entry per affected category so cleanup history reflects what was
+    /// removed. See `DashboardViewModel+CleanupAudit.swift` for the attribution rules
+    /// (snapshot-first, `CleanupOption` fallback, `.junkFiles` last resort).
     private func recordCleanupAudit(reclaimedBytesByURL: [URL: Int64]) {
-        guard let historyStore, !reclaimedBytesByURL.isEmpty, let snapshot else { return }
-
-        let entries = snapshot.findings.compactMap { finding -> CleanupAuditEntry? in
-            let deletedPaths = reclaimedBytesByURL.keys.filter { finding.contains($0) }
-            guard !deletedPaths.isEmpty else { return nil }
-            let bytes = deletedPaths.reduce(Int64(0)) { $0 + (reclaimedBytesByURL[$1] ?? 0) }
-            return CleanupAuditEntry(
-                kind: finding.kind,
-                bytesReclaimed: bytes,
-                itemCount: deletedPaths.count,
-                samplePaths: Self.samplePaths(from: deletedPaths)
-            )
-        }
-        historyStore.recordCleanupActions(entries, disk: currentScanDiskSnapshot())
-    }
-
-    private static let samplePathLimit = 5
-
-    private static func samplePaths<S: Sequence>(from paths: S) -> [URL] where S.Element == URL {
-        Array(paths.prefix(samplePathLimit))
+        CleanupAuditRecorder.record(
+            reclaimedBytesByURL: reclaimedBytesByURL,
+            snapshot: snapshot,
+            historyStore: historyStore,
+            disk: currentScanDiskSnapshot()
+        )
     }
 
     private func beginScanning(for kinds: Set<StorageFindingKind>?) {
@@ -437,7 +429,12 @@ extension DashboardViewModel {
 
         permissionStatuses = permissionHandler.currentStatuses()
 
-        guard !hasPermissionIssues else {
+        guard ensureAccessAvailable() else {
+            // Either `currentStatuses()` reported a missing/denied scope
+            // (caught by `hasPermissionIssues`) or the saved bookmark
+            // couldn't be resolved into a live access token (stale
+            // bookmark, revoked permission). Either way the user needs
+            // to re-grant Home Folder access before the scan can run.
             phase = .permissionRequired
             return
         }
@@ -453,11 +450,35 @@ extension DashboardViewModel {
             permissionStatuses = permissionHandler.currentStatuses()
         }
 
-        guard !hasPermissionIssues else {
+        guard ensureAccessAvailable() else {
+            // Still no usable access even after prompting — the saved
+            // bookmark may be stale. Surface the guide so the user can
+            // re-grant instead of seeing a generic "retry" failure.
+            phase = .permissionRequired
             return
         }
 
         beginScanning(for: pendingScanKinds)
+    }
+
+    /// Probes the permission handler's access token instead of trusting
+    /// the cached `permissionStatuses` alone. `currentStatuses()` reports
+    /// `.accessible` whenever a bookmark is on disk, but a bookmark can
+    /// outlive the user's grant (e.g. the user revoked Home Folder
+    /// access in System Settings without re-prompting). `beginHomeFolderAccess()`
+    /// is the only call that actually starts the security scope and is
+    /// therefore the single source of truth for "can the next scan run?".
+    ///
+    /// Returns `false` when the access probe fails; callers transition
+    /// to `.permissionRequired` so the user sees the permission guide
+    /// (`PermissionRequiredView`) instead of a generic `ErrorStateView`
+    /// from a downstream `.failed` scan event.
+    private func ensureAccessAvailable() -> Bool {
+        guard let access = permissionHandler.beginHomeFolderAccess() else {
+            return false
+        }
+        access.stop()
+        return true
     }
 
     func grantHomeFolderAccess() {
@@ -548,24 +569,6 @@ extension DashboardViewModel {
                 )
             }
         }.value
-    }
-}
-
-private extension StorageFinding {
-    func contains(_ url: URL) -> Bool {
-        trackedURLs.contains { scannedURL in
-            scannedURL == url || scannedURL.isAncestor(of: url)
-        }
-    }
-}
-
-private extension URL {
-    func isAncestor(of descendant: URL) -> Bool {
-        let ancestorPath = standardizedFileURL.path
-        let descendantPath = descendant.standardizedFileURL.path
-        guard descendantPath.hasPrefix(ancestorPath) else { return false }
-        let remainder = descendantPath.dropFirst(ancestorPath.count)
-        return remainder.first == "/"
     }
 }
 

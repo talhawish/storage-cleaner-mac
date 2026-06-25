@@ -126,6 +126,21 @@ enum DependencyPaths {
         static let archives = home("Library/Developer/Xcode/Archives")
         static let coreSimulator = home("Library/Developer/CoreSimulator")
         static let swiftPM = home("Library/Caches/org.swift.swiftpm")
+        /// Debug-symbol packs used to symbolicate stack traces when attaching a real device. These
+        /// are re-downloaded automatically by Xcode on demand, so the per-version folders are safe
+        /// to remove when you no longer need to symbolicate against them.
+        static let iosDeviceSupport = home("Library/Developer/Xcode/iOS DeviceSupport")
+        static let tvosDeviceSupport = home("Library/Developer/Xcode/tvOS DeviceSupport")
+        static let watchOSDeviceSupport = home("Library/Developer/Xcode/watchOS DeviceSupport")
+        static let visionOSDeviceSupport = home("Library/Developer/Xcode/visionOS DeviceSupport")
+        /// All Device Support roots. The `Simulator` and runtime paths live in `coreSimulator` and
+        /// are surfaced through `EmulatorManagementService`, not here.
+        static let deviceSupportRoots: [URL] = [
+            iosDeviceSupport,
+            tvosDeviceSupport,
+            watchOSDeviceSupport,
+            visionOSDeviceSupport
+        ]
     }
 
     // MARK: - Docker / Containers
@@ -205,6 +220,21 @@ enum DependencyPaths {
             home("Library/Caches/BraveSoftware"),
             home("Library/Caches/Chromium")
         ]
+
+        /// `cacheDirs` re-expressed as `~`-prefixed strings, suitable for
+        /// `CleanupOption.paths` (which `QuickCleanScanner` tilde-expands at
+        /// scan time). This is the single source of truth for browser cache
+        /// locations: the dashboard scanner consumes `cacheDirs`, the Quick
+        /// Clean registry consumes `cacheDirStrings`, and both stay in lockstep
+        /// by construction.
+        static let cacheDirStrings: [String] = cacheDirs.map { url in
+            let homePath = UserHomeDirectory.path
+            let path = url.standardizedFileURL.path
+            if path.hasPrefix(homePath + "/") {
+                return "~/" + String(path.dropFirst(homePath.count + 1))
+            }
+            return path
+        }
     }
 
     // MARK: - Media Roots
@@ -322,40 +352,5 @@ enum DependencyPaths {
         static let savedApplicationState = SystemJunkPaths.savedApplicationState
         static let diagnosticReports = SystemJunkPaths.diagnosticReports
         static let crashReporter = SystemJunkPaths.crashReporter
-    }
-
-    // MARK: - Cleanup Quick Clean Paths
-
-    enum QuickClean {
-        static let allPaths: [String] = [
-            "~/Library/Developer/Xcode/DerivedData",
-            "~/Library/Developer/Xcode/Archives",
-            "~/Library/Caches/org.swift.swiftpm",
-            "~/.npm",
-            "~/.cache/yarn",
-            "~/.bun/install/cache",
-            "~/.docker",
-            "~/Library/Containers/com.docker.docker",
-            "~/.pub-cache",
-            "~/Library/Caches/flutter",
-            "~/.gradle/caches",
-            "~/.m2/repository",
-            "~/.cargo/registry",
-            "~/go/pkg/mod",
-            "~/.nuget/packages",
-            "~/Library/Caches/pip",
-            "~/Library/Caches/composer",
-            "~/.ollama/models",
-            "~/.cache/huggingface",
-            "~/Library/Application Support/LM Studio",
-            "~/Library/Caches/com.apple.Safari",
-            "~/Library/Caches/Google/Chrome",
-            "~/Library/Caches/Microsoft Edge",
-            "~/Library/Caches/Firefox",
-            "~/Library/Caches/company.thebrowser.Browser",
-            "~/Library/Caches/BraveSoftware",
-            "~/Library/Caches/Chromium",
-            "~/.Trash"
-        ]
     }
 }

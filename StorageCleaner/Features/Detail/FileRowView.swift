@@ -291,7 +291,7 @@ private struct FileRowPreviewControl: View {
     }
 }
 
-private enum FileRowIconStyle {
+enum FileRowIconStyle {
     private static let symbolsByExtension: [String: String] = [
         "mov": "film.fill", "mp4": "film.fill", "m4v": "film.fill", "avi": "film.fill",
         "mkv": "film.fill", "webm": "film.fill",

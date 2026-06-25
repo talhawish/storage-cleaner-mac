@@ -7,6 +7,7 @@ enum DeveloperDomains {
     /// to derive which domains are present after a scan.
     static let kinds: [StorageFindingKind] = [
         .xcodeArtifacts,
+        .iosDeviceSupport,
         .dockerArtifacts,
         .flutterArtifacts,
         .androidStudioArtifacts,

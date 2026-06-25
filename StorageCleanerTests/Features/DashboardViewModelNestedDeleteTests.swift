@@ -67,6 +67,16 @@ private struct NestedDeletePermissionHandler: StoragePermissionHandling {
             )
         }
     }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        // Stub token — the test scanner doesn't touch the filesystem,
+        // and the dashboard's `ensureAccessAvailable()` only needs a
+        // non-nil access probe to know it can proceed.
+        SecurityScopedResourceAccess(
+            url: URL(filePath: "/tmp/stub"),
+            didStartAccessing: false
+        )
+    }
 }
 
 private struct NestedDeleteCleanupService: CleanupService {

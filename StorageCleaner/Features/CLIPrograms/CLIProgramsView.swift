@@ -5,6 +5,7 @@ struct CLIProgramsView: View {
     let emptyStateMessage: String
     let onScan: () -> Void
     let onRemove: ([URL]) async -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
 
     @State private var selectedURLs: Set<URL> = []
     @State private var searchText = ""
@@ -90,7 +91,6 @@ struct CLIProgramsView: View {
         .onDisappear { cancelLoading() }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
-                finding: deletionFinding,
                 selectedURLs: Array(selectedURLs),
                 totalBytes: selectedBytes,
                 onDelete: {
@@ -321,18 +321,6 @@ private extension CLIProgramsView {
         findings.flatMap(\.filePaths).map(\.path).sorted().joined(separator: "|")
     }
 
-    var deletionFinding: StorageFinding {
-        StorageFinding(
-            kind: findings.first?.kind ?? .cliApps,
-            domain: findings.first?.domain ?? .cliTooling,
-            bytes: selectedBytes,
-            itemCount: selectedURLs.count,
-            safety: .review,
-            examples: [],
-            filePaths: Array(selectedURLs)
-        )
-    }
-
     func sectionBytes(_ programs: [CLIProgram]) -> Int64 {
         programs.reduce(Int64(0)) { $0 + (sizes[$1.url] ?? 0) }
     }
@@ -372,6 +360,11 @@ private extension CLIProgramsView {
         // Phase 1 — discover programs directly from disk (Homebrew, version
         // managers, global Node packages, and standalone installer binaries),
         // independent of whether a storage scan has run.
+        // Start security-scoped access so sandboxed builds can enumerate
+        // user home directories (~/.local/bin, ~/.opencode/bin, etc.).
+        let access = permissionHandler?.beginHomeFolderAccess()
+        defer { access?.stop() }
+
         let discovered = await Task.detached(priority: .userInitiated) {
             CLIProgramCatalog.discoverInstalled()
         }.value

@@ -68,6 +68,15 @@ final class CLIProgramCatalogTests: XCTestCase {
         XCTAssertEqual(programs.first?.displayName, "Homebrew formulae")
     }
 
+    func testCanonicalRootsIncludesCargoAndBunBins() {
+        // These paths are in DependencyPaths.CLI.homeDirs and must be
+        // reflected in canonicalRoots so the independent CLI Programs
+        // screen discovers Rust- and Bun-installed binaries.
+        let roots = CLIProgramCatalog.canonicalRoots
+        XCTAssertTrue(roots.contains { $0.path.hasSuffix(".cargo/bin") }, ".cargo/bin missing from canonicalRoots")
+        XCTAssertTrue(roots.contains { $0.path.hasSuffix(".bun/bin") }, ".bun/bin missing from canonicalRoots")
+    }
+
     func testNonContainerRootStaysASingleProgram() {
         let programs = CLIProgramCatalog.expand(root: DependencyPaths.home(".rustup"))
         XCTAssertEqual(programs.count, 1)
