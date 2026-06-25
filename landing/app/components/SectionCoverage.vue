@@ -98,25 +98,17 @@ const dotClass: Record<Tone, string> = {
 <template>
   <section class="bg-ink-50/40 py-24 sm:py-32">
     <div class="container-page">
-      <div class="flex flex-wrap items-end justify-between gap-6">
-        <div class="max-w-2xl">
-          <span class="eyebrow">Detection coverage</span>
-          <h2 class="heading-section mt-4 text-balance">
-            15+ storage domains,
-            <span class="text-ink-500">one inventory.</span>
-          </h2>
-          <p class="lede mt-4 text-pretty">
-            Every scanner is a thin, typed, protocol-driven component that
-            reuses a small set of high-performance engines. No black-box
-            heuristics, no surprise deletions.
-          </p>
-        </div>
-        <NuxtLink
-          to="https://github.com/talhawish/storage-cleaner-mac"
-          class="btn-secondary shrink-0 self-end"
-        >
-          View on GitHub
-        </NuxtLink>
+      <div class="max-w-2xl">
+        <span class="eyebrow">Detection coverage</span>
+        <h2 class="heading-section mt-4 text-balance">
+          15+ storage domains,
+          <span class="text-ink-500">one inventory.</span>
+        </h2>
+        <p class="lede mt-4 text-pretty">
+          Every scanner is a thin, typed, protocol-driven component that
+          reuses a small set of high-performance engines. No black-box
+          heuristics, no surprise deletions.
+        </p>
       </div>
 
       <div class="mt-14 grid gap-6 lg:grid-cols-2">

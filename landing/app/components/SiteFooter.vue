@@ -5,7 +5,7 @@ const year = new Date().getFullYear()
 <template>
   <footer class="border-t border-ink-200 bg-ink-50/60">
     <div class="container-page py-14">
-      <div class="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+      <div class="grid gap-10 lg:grid-cols-[1.6fr_1fr_1fr]">
         <div>
           <div class="flex items-center gap-2.5">
             <img
@@ -42,45 +42,23 @@ const year = new Date().getFullYear()
         </div>
 
         <div>
-          <h3 class="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Resources</h3>
+          <h3 class="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Company</h3>
           <ul class="mt-4 space-y-2.5 text-sm">
-            <li>
-              <a href="https://github.com/talhawish/storage-cleaner-mac" class="text-ink-700 hover:text-ink-900">
-                Source on GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://github.com/talhawish/storage-cleaner-mac/releases" class="text-ink-700 hover:text-ink-900">
-                Release notes
-              </a>
-            </li>
+            <li><NuxtLink to="/contact" class="text-ink-700 hover:text-ink-900">Contact us</NuxtLink></li>
             <li>
               <a href="mailto:support@storagecleaner.app" class="text-ink-700 hover:text-ink-900">
                 support@storagecleaner.app
               </a>
             </li>
-          </ul>
-        </div>
-
-        <div>
-          <h3 class="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Legal</h3>
-          <ul class="mt-4 space-y-2.5 text-sm">
-            <li><NuxtLink to="/terms" class="text-ink-700 hover:text-ink-900">Terms & Conditions</NuxtLink></li>
+            <li><NuxtLink to="/terms" class="text-ink-700 hover:text-ink-900">Terms &amp; Conditions</NuxtLink></li>
             <li><NuxtLink to="/privacy" class="text-ink-700 hover:text-ink-900">Privacy Policy</NuxtLink></li>
-            <li><NuxtLink to="/contact" class="text-ink-700 hover:text-ink-900">Contact us</NuxtLink></li>
           </ul>
         </div>
       </div>
 
       <div class="mt-12 flex flex-col items-start justify-between gap-4 border-t border-ink-200 pt-6 text-xs text-ink-500 sm:flex-row sm:items-center">
         <p>© {{ year }} Storage Cleaner for Developers. All rights reserved.</p>
-        <p class="flex items-center gap-2">
-          <span>Built with care on macOS.</span>
-          <span aria-hidden="true">·</span>
-          <a href="https://github.com/talhawish/storage-cleaner-mac" class="hover:text-ink-900">
-            v0.9.0
-          </a>
-        </p>
+        <p>Built with care on macOS.</p>
       </div>
     </div>
   </footer>

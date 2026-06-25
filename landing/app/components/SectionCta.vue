@@ -23,7 +23,7 @@
               Download the universal build for Apple silicon and Intel. Free
               forever, no account, no telemetry — the way Mac apps should be.
             </p>
-            <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div class="mt-8 flex justify-start">
               <a href="#" class="btn-primary shrink-0 px-6 py-3 text-[15px]">
                 <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" aria-hidden="true">
                   <path
@@ -32,12 +32,6 @@
                   />
                 </svg>
                 <span>Download for macOS</span>
-              </a>
-              <a
-                href="https://github.com/talhawish/storage-cleaner-mac"
-                class="btn-secondary shrink-0 px-6 py-3 text-[15px]"
-              >
-                Star on GitHub
               </a>
             </div>
             <p class="mt-5 text-xs text-ink-500">

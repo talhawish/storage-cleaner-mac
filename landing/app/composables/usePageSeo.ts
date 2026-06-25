@@ -102,8 +102,7 @@ export const usePageSeo = (options: SeoOptions = {}) => {
     htmlAttrs: { lang: 'en' },
     titleTemplate: (chunk?: string) => (chunk ? chunk : site.name),
     link: [
-      { rel: 'canonical', href: url },
-      { rel: 'alternate', type: 'application/rss+xml', title: site.name, href: `${site.url}/rss.xml` }
+      { rel: 'canonical', href: url }
     ],
     script: [
       {
