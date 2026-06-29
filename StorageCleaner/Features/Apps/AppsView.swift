@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct AppsView: View {
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
+
     @State private var apps: [AppItem] = []
     @State private var isLoading = true
     @State private var searchText = ""
@@ -146,7 +149,8 @@ struct AppsView: View {
                         AppRowView(
                             app: app,
                             onReveal: { Task { await inventoryService.revealInFinder(app) } },
-                            onUninstall: { appToDelete = app }
+                            onUninstall: { requestUninstall(app) },
+                            canUseProActions: canUseProActions
                         )
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
@@ -197,6 +201,14 @@ struct AppsView: View {
     private func uninstallApp(_ app: AppItem) async throws {
         try await inventoryService.uninstallApp(app)
         apps.removeAll { $0.id == app.id }
+    }
+
+    private func requestUninstall(_ app: AppItem) {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        appToDelete = app
     }
 
     private func sortedApps(from list: [AppItem]) -> [AppItem] {

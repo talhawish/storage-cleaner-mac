@@ -77,7 +77,9 @@ extension AppShellView {
             onRemoveRuntimeVersions: { urls in
                 _ = await viewModel.removeRuntimeVersions(urls)
             },
-            permissionHandler: viewModel.permissionHandler
+            permissionHandler: viewModel.permissionHandler,
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
         )
     }
 
@@ -126,7 +128,10 @@ extension AppShellView {
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
                     Task { await viewModel.deleteFiles(urls) }
-                }
+                },
+                permissionHandler: viewModel.permissionHandler,
+                canUseProActions: viewModel.canCleanup,
+                onRequirePro: { _ = viewModel.gateFileAction() }
             )
         }
     }
@@ -176,7 +181,9 @@ extension AppShellView {
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
                     Task { await viewModel.deleteFiles(urls) }
-                }
+                },
+                canUseProActions: viewModel.canCleanup,
+                onRequirePro: { _ = viewModel.gateFileAction() }
             )
         }
     }
@@ -226,7 +233,9 @@ extension AppShellView {
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
                     Task { await viewModel.deleteFiles(urls) }
-                }
+                },
+                canUseProActions: viewModel.canCleanup,
+                onRequirePro: { _ = viewModel.gateFileAction() }
             )
         }
     }
@@ -272,14 +281,11 @@ extension AppShellView {
             )
             .padding(28)
         case .results:
-            MediaCategoryView(
+            mediaCategoryResults(
                 title: title,
                 findings: sectionFindings,
                 emptyStateMessage: emptyStateMessage,
-                onScan: scanAction,
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
+                scanAction: scanAction
             )
         }
     }
@@ -329,7 +335,10 @@ extension AppShellView {
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
                     Task { await viewModel.deleteFiles(urls) }
-                }
+                },
+                permissionHandler: viewModel.permissionHandler,
+                canUseProActions: viewModel.canCleanup,
+                onRequirePro: { _ = viewModel.gateFileAction() }
             )
         }
     }
@@ -380,7 +389,9 @@ extension AppShellView {
                 emptyStateMessage: emptyStateMessage,
                 onScan: scanAction,
                 onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) },
-                permissionHandler: viewModel.permissionHandler
+                permissionHandler: viewModel.permissionHandler,
+                canUseProActions: viewModel.canCleanup,
+                onRequirePro: { _ = viewModel.gateFileAction() }
             )
         }
     }
@@ -390,48 +401,95 @@ extension AppShellView {
         if finding.kind == .duplicatePhotos
             || finding.kind == .duplicateVideos
             || finding.kind == .duplicateDocuments {
-            DuplicatesView(
-                findings: [finding],
-                onScan: { viewModel.startScan(for: DuplicateMediaFilter.all.kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
+            duplicateDestination(for: finding)
         } else if finding.kind == .dockerArtifacts {
-            DockerView(onDockerChanged: {
-                viewModel.startScan(for: [.dockerArtifacts])
-            })
+            dockerDestination()
         } else if finding.kind == .cliApps {
             cliProgramsDestination(for: finding)
         } else if finding.kind == .runtimeVersions {
-            RuntimeVersionsView(
-                onRemove: { urls in _ = await viewModel.removeRuntimeVersions(urls) },
-                permissionHandler: viewModel.permissionHandler
-            )
+            runtimeVersionsDestination()
         } else if AppSection.leftovers.filterKinds.contains(finding.kind) {
-            LeftoversView(
-                findings: filteredFindings(for: AppSection.leftovers.filterKinds),
-                onScan: { viewModel.startScan(for: AppSection.leftovers.filterKinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
+            leftoversDestination()
         } else if AppSection.systemJunk.filterKinds.contains(finding.kind) {
-            SystemJunkView(
-                findings: filteredFindings(for: AppSection.systemJunk.filterKinds),
-                onScan: { viewModel.startScan(for: AppSection.systemJunk.filterKinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
+            systemJunkDestination()
         } else {
-            CategoryDetailView(
-                finding: finding,
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                }
-            )
+            categoryDestination(for: finding)
         }
+    }
+
+    private func mediaCategoryResults(
+        title: String,
+        findings: [StorageFinding],
+        emptyStateMessage: String,
+        scanAction: @escaping () -> Void
+    ) -> some View {
+        MediaCategoryView(
+            title: title,
+            findings: findings,
+            emptyStateMessage: emptyStateMessage,
+            onScan: scanAction,
+            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            permissionHandler: viewModel.permissionHandler,
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
+        )
+    }
+
+    private func duplicateDestination(for finding: StorageFinding) -> some View {
+        DuplicatesView(
+            findings: [finding],
+            onScan: { viewModel.startScan(for: DuplicateMediaFilter.all.kinds) },
+            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            permissionHandler: viewModel.permissionHandler,
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
+        )
+    }
+
+    private func dockerDestination() -> some View {
+        DockerView(
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() },
+            onDockerChanged: { viewModel.startScan(for: [.dockerArtifacts]) }
+        )
+    }
+
+    private func runtimeVersionsDestination() -> some View {
+        RuntimeVersionsView(
+            onRemove: { urls in _ = await viewModel.removeRuntimeVersions(urls) },
+            permissionHandler: viewModel.permissionHandler,
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
+        )
+    }
+
+    private func leftoversDestination() -> some View {
+        LeftoversView(
+            findings: filteredFindings(for: AppSection.leftovers.filterKinds),
+            onScan: { viewModel.startScan(for: AppSection.leftovers.filterKinds) },
+            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
+        )
+    }
+
+    private func systemJunkDestination() -> some View {
+        SystemJunkView(
+            findings: filteredFindings(for: AppSection.systemJunk.filterKinds),
+            onScan: { viewModel.startScan(for: AppSection.systemJunk.filterKinds) },
+            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
+        )
+    }
+
+    private func categoryDestination(for finding: StorageFinding) -> some View {
+        CategoryDetailView(
+            finding: finding,
+            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
+        )
     }
 
     @ViewBuilder
@@ -442,7 +500,9 @@ extension AppShellView {
                 + "and standalone CLI tools you've installed.",
             onScan: { viewModel.startScan(for: [.cliApps]) },
             onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) },
-            permissionHandler: viewModel.permissionHandler
+            permissionHandler: viewModel.permissionHandler,
+            canUseProActions: viewModel.canCleanup,
+            onRequirePro: { _ = viewModel.gateFileAction() }
         )
     }
 

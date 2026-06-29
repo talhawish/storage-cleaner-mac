@@ -7,6 +7,9 @@ struct MediaCategoryView: View {
     let emptyStateMessage: String
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var selectedURLs: Set<URL> = []
     @State private var searchText = ""
@@ -104,7 +107,7 @@ struct MediaCategoryView: View {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {
                     Button {
-                        showDeleteConfirmation = true
+                        requestDeleteConfirmation()
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
@@ -163,7 +166,11 @@ struct MediaCategoryView: View {
             set: { if !$0 { previewURL = nil } }
         )) {
             if let url = previewURL {
-                MediaPreviewSheet(url: url)
+                MediaPreviewSheet(
+                    url: url,
+                    permissionHandler: permissionHandler,
+                    canRevealInFinder: canUseProActions
+                )
             }
         }
         .onChange(of: searchText) { _, _ in resetPagination() }
@@ -221,7 +228,9 @@ struct MediaCategoryView: View {
                         size: record.size,
                         isSelected: selectedURLs.contains(record.url),
                         onToggle: { toggle(record.url) },
-                        onPreview: { previewURL = record.url }
+                        onPreview: { previewURL = record.url },
+                        permissionHandler: permissionHandler,
+                        canRevealInFinder: canUseProActions
                     )
                 }
 
@@ -246,7 +255,9 @@ struct MediaCategoryView: View {
                     size: record.size,
                     isSelected: selectedURLs.contains(record.url),
                     onToggle: { toggle(record.url) },
-                    onPreview: { previewURL = record.url }
+                    onPreview: { previewURL = record.url },
+                    permissionHandler: permissionHandler,
+                    canRevealInFinder: canUseProActions
                 )
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 2, leading: 20, bottom: 2, trailing: 20))
@@ -282,6 +293,14 @@ private extension MediaCategoryView {
         } else {
             selectedURLs.insert(url)
         }
+    }
+
+    func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showDeleteConfirmation = true
     }
 
     func resetPagination() {

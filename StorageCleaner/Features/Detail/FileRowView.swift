@@ -12,6 +12,7 @@ struct FileRowView: View {
     let metadata: DetailFileMetadata?
     let precomputedBytes: Int64?
     let canOpen: Bool
+    let canRevealInFinder: Bool
     let onToggle: () -> Void
     let onPreview: (() -> Void)?
     let onOpen: (() -> Void)?
@@ -27,6 +28,7 @@ struct FileRowView: View {
         metadata: DetailFileMetadata? = nil,
         precomputedBytes: Int64? = nil,
         canOpen: Bool = false,
+        canRevealInFinder: Bool = true,
         onToggle: @escaping () -> Void,
         onPreview: (() -> Void)? = nil,
         onOpen: (() -> Void)? = nil
@@ -37,6 +39,7 @@ struct FileRowView: View {
         self.metadata = metadata
         self.precomputedBytes = precomputedBytes
         self.canOpen = canOpen
+        self.canRevealInFinder = canRevealInFinder
         self.onToggle = onToggle
         self.onPreview = onPreview
         self.onOpen = onOpen
@@ -120,6 +123,7 @@ struct FileRowView: View {
             Button("Show in Finder", systemImage: "folder") {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
+            .disabled(!canRevealInFinder)
         }
         .task(id: url) { await loadMetadataIfNeeded() }
         .accessibilityElement(children: .combine)

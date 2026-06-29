@@ -21,7 +21,11 @@ actor MediaThumbnailProvider {
 
     private let cache = NSCache<NSString, NSImage>()
 
-    func thumbnail(for url: URL, sideLength: CGFloat) async -> NSImage? {
+    func thumbnail(
+        for url: URL,
+        sideLength: CGFloat,
+        permissionHandler: (any StoragePermissionHandling)? = nil
+    ) async -> NSImage? {
         let scale = await screenScale()
         let pixelSize = Int((sideLength * scale).rounded())
         let key = "\(url.path)|\(pixelSize)" as NSString
@@ -30,7 +34,12 @@ actor MediaThumbnailProvider {
             return cachedImage
         }
 
-        guard let image = await generateThumbnail(for: url, sideLength: sideLength, scale: scale) else {
+        guard let image = await generateThumbnail(
+            for: url,
+            sideLength: sideLength,
+            scale: scale,
+            permissionHandler: permissionHandler
+        ) else {
             return nil
         }
 
@@ -39,7 +48,22 @@ actor MediaThumbnailProvider {
     }
 
     /// Public so tests can exercise the chain without going through the cache.
-    func generateThumbnail(for url: URL, sideLength: CGFloat, scale: CGFloat) async -> NSImage? {
+    func generateThumbnail(
+        for url: URL,
+        sideLength: CGFloat,
+        scale: CGFloat,
+        permissionHandler: (any StoragePermissionHandling)? = nil
+    ) async -> NSImage? {
+        await withPreviewAccess(permissionHandler) {
+            await generateThumbnailWithoutAccessManagement(for: url, sideLength: sideLength, scale: scale)
+        }
+    }
+
+    private func generateThumbnailWithoutAccessManagement(
+        for url: URL,
+        sideLength: CGFloat,
+        scale: CGFloat
+    ) async -> NSImage? {
         if let image = await quickLookThumbnail(for: url, sideLength: sideLength, scale: scale) {
             return image
         }
@@ -50,6 +74,18 @@ actor MediaThumbnailProvider {
             return await SVGImageRenderer.shared.rasterize(url: url, sideLength: sideLength, scale: scale)
         }
         return nil
+    }
+
+    private func withPreviewAccess<T>(
+        _ permissionHandler: (any StoragePermissionHandling)?,
+        _ body: () async -> T
+    ) async -> T {
+        guard let permissionHandler else {
+            return await body()
+        }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
+        return await body()
     }
 
     private func quickLookThumbnail(for url: URL, sideLength: CGFloat, scale: CGFloat) async -> NSImage? {

@@ -6,6 +6,7 @@ import AppKit
 struct CLIProgramDetailSheet: View {
     let program: CLIProgram
     let size: Int64?
+    var canRevealInFinder = true
 
     @Environment(\.dismiss)
     private var dismiss
@@ -85,7 +86,7 @@ struct CLIProgramDetailSheet: View {
                             title: "Reveal in Finder",
                             systemImage: "folder",
                             tint: AppTheme.accent,
-                            isDisabled: !exists,
+                            isDisabled: !exists || !canRevealInFinder,
                             action: {
                                 NSWorkspace.shared.activateFileViewerSelecting([program.url])
                             }

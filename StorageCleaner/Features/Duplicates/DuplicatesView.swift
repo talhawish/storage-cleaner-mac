@@ -7,6 +7,9 @@ struct DuplicatesView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var selection = DuplicateSelectionState()
     @State private var filter: DuplicateMediaFilter = .all
@@ -52,7 +55,11 @@ struct DuplicatesView: View {
         .accessibilityIdentifier("duplicates-root")
         .sheet(isPresented: previewPresented) {
             if let previewURL {
-                MediaPreviewSheet(url: previewURL)
+                MediaPreviewSheet(
+                    url: previewURL,
+                    permissionHandler: permissionHandler,
+                    canRevealInFinder: canUseProActions
+                )
             }
         }
         .sheet(isPresented: $showDeleteConfirmation) {
@@ -95,7 +102,7 @@ struct DuplicatesView: View {
                 onSelectAll: { for group in groups { selection.selectAllRemovable(in: group) } },
                 onDeselectAll: { for group in groups { selection.clearSelection(in: group) } },
                 onReset: { selection.reset() },
-                onRemoveSelected: { showDeleteConfirmation = true }
+                onRemoveSelected: requestDeleteConfirmation
             )
 
             ScrollView {
@@ -107,7 +114,9 @@ struct DuplicatesView: View {
                             onToggleRemoval: { selection.toggleRemoval($0, in: group) },
                             onSetKeep: { selection.setKeep($0, in: group) },
                             onKeepBestRemoveOthers: { keepBestRemoveOthers(in: group) },
-                            onPreview: { previewURL = $0 }
+                            onPreview: { previewURL = $0 },
+                            permissionHandler: permissionHandler,
+                            canRevealInFinder: canUseProActions
                         )
                     }
                 }
@@ -151,5 +160,13 @@ struct DuplicatesView: View {
         guard !urls.isEmpty else { return }
         selection.reset()
         onDelete(urls)
+    }
+
+    private func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showDeleteConfirmation = true
     }
 }

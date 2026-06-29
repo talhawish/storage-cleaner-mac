@@ -8,6 +8,8 @@ import SwiftUI
 /// containing folder, open with the system default app, and copy the path.
 struct MediaPreviewSheet: View {
     let url: URL
+    let permissionHandler: (any StoragePermissionHandling)?
+    let canRevealInFinder: Bool
 
     @Environment(\.dismiss)
     private var dismiss
@@ -19,8 +21,14 @@ struct MediaPreviewSheet: View {
     @State private var showCopiedFeedback = false
     @State private var copyFeedbackTask: Task<Void, Never>?
 
-    init(url: URL) {
+    init(
+        url: URL,
+        permissionHandler: (any StoragePermissionHandling)? = nil,
+        canRevealInFinder: Bool = true
+    ) {
         self.url = url
+        self.permissionHandler = permissionHandler
+        self.canRevealInFinder = canRevealInFinder
         _fileType = State(initialValue: MediaFileType.classify(url: url))
     }
 
@@ -53,7 +61,7 @@ struct MediaPreviewSheet: View {
 
                 Divider()
 
-                ImagePreviewView(url: url, fileType: fileType)
+                ImagePreviewView(url: url, fileType: fileType, permissionHandler: permissionHandler)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 Divider()
@@ -102,7 +110,7 @@ struct MediaPreviewSheet: View {
     }
 
     private var actions: [AppModalActionBar.Action] {
-        var result: [AppModalActionBar.Action] = [
+        [
             AppModalActionBar.Action(
                 title: showCopiedFeedback ? "Copied" : "Copy Path",
                 systemImage: showCopiedFeedback ? "checkmark.circle.fill" : "doc.on.doc",
@@ -116,33 +124,34 @@ struct MediaPreviewSheet: View {
                 systemImage: "folder",
                 tint: AppTheme.accent,
                 isProminent: false,
+                isDisabled: !canRevealInFinder,
                 isDefault: true,
                 action: showInFinder
             )
         ]
-        if NSWorkspace.shared.urlForApplication(toOpen: url) != nil {
-            result.append(
-                AppModalActionBar.Action(
-                    title: "Open",
-                    systemImage: "arrow.up.right.square",
-                    tint: AppTheme.accent,
-                    isProminent: true,
-                    isDefault: false,
-                    action: openWithDefaultApp
-                )
-            )
-        }
-        return result
     }
 
     private func loadMetadata() async {
-        async let metadata = ImageMetadataLoader.load(for: url)
-        let resolvedMetadata = await metadata
-        let size = StorageFormatting.fileSize(at: url)
-        let modification = StorageFormatting.modificationDate(at: url)
+        let loaded = await withPreviewAccess {
+            async let metadata = ImageMetadataLoader.load(for: url)
+            let resolvedMetadata = await metadata
+            let size = StorageFormatting.fileSize(at: url)
+            let modification = StorageFormatting.modificationDate(at: url)
+            return (resolvedMetadata, size, modification)
+        }
+        let (resolvedMetadata, size, modification) = loaded
         imageMetadata = resolvedMetadata
         bytes = size
         modifiedAt = modification
+    }
+
+    private func withPreviewAccess<T>(_ body: () async -> T) async -> T {
+        guard let permissionHandler else {
+            return await body()
+        }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
+        return await body()
     }
 
     private func copyPath() {
@@ -162,9 +171,6 @@ struct MediaPreviewSheet: View {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    private func openWithDefaultApp() {
-        NSWorkspace.shared.open(url)
-    }
 }
 
 // MARK: - Header badges

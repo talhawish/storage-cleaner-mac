@@ -9,6 +9,8 @@ struct DuplicateGroupCard: View {
     let onSetKeep: (URL) -> Void
     let onKeepBestRemoveOthers: () -> Void
     let onPreview: (URL) -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
+    var canRevealInFinder = true
 
     private var orderedFiles: [DuplicateFile] {
         let keepURL = selection.keepURL(for: group)
@@ -79,7 +81,9 @@ struct DuplicateGroupCard: View {
                         isMarkedForRemoval: selection.isMarkedForRemoval(file.url, in: group),
                         onToggleRemoval: { onToggleRemoval(file.url) },
                         onSetKeep: { onSetKeep(file.url) },
-                        onPreview: { onPreview(file.url) }
+                        onPreview: { onPreview(file.url) },
+                        permissionHandler: permissionHandler,
+                        canRevealInFinder: canRevealInFinder
                     )
                 }
             }

@@ -6,6 +6,8 @@ struct MediaGridItem: View {
     let isSelected: Bool
     let onToggle: () -> Void
     let onPreview: () -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
+    var canRevealInFinder = true
 
     @State private var isHovering = false
     @FocusState private var isFocused: Bool
@@ -33,6 +35,7 @@ struct MediaGridItem: View {
             Button("Show in Finder", systemImage: "folder") {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
+            .disabled(!canRevealInFinder)
         }
     }
 
@@ -46,7 +49,8 @@ struct MediaGridItem: View {
                     url: url,
                     sideLength: 150,
                     cornerRadius: 10,
-                    contentMode: .fill
+                    contentMode: .fill,
+                    permissionHandler: permissionHandler
                 )
             }
             .overlay {

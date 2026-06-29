@@ -76,6 +76,22 @@ final class MediaThumbnailProviderTests: XCTestCase {
         XCTAssertNil(image, "Unknown binary formats should not produce a thumbnail")
     }
 
+    func testThumbnailGenerationAcquiresAndReleasesPermissionScope() async throws {
+        let url = root.appendingPathComponent("scoped.dat")
+        try Data([0x00, 0x01, 0x02, 0x03]).write(to: url)
+        let handler = RecordingPermissionHandler()
+
+        _ = await MediaThumbnailProvider.shared.generateThumbnail(
+            for: url,
+            sideLength: 80,
+            scale: 2,
+            permissionHandler: handler
+        )
+
+        XCTAssertEqual(handler.beginCount, 1)
+        XCTAssertEqual(handler.stopCount, 1)
+    }
+
     private func makeTestPNG(width: Int, height: Int) -> Data {
         let size = NSSize(width: width, height: height)
         let image = NSImage(size: size)
@@ -106,5 +122,26 @@ final class MediaThumbnailProviderTests: XCTestCase {
             return Data()
         }
         return jpeg
+    }
+}
+
+private final class RecordingPermissionHandler: @unchecked Sendable, StoragePermissionHandling {
+    private let lock = NSLock()
+    private var beginAccessCount = 0
+    private var stopAccessCount = 0
+
+    var beginCount: Int { lock.withLock { beginAccessCount } }
+    var stopCount: Int { lock.withLock { stopAccessCount } }
+
+    func currentStatuses() -> [StoragePermissionStatus] { [] }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        lock.withLock { beginAccessCount += 1 }
+        return SecurityScopedResourceAccess(onStop: { [weak self] in
+            guard let self else { return }
+            self.lock.withLock {
+                self.stopAccessCount += 1
+            }
+        })
     }
 }

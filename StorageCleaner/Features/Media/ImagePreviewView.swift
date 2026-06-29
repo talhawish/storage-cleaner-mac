@@ -2,14 +2,12 @@ import AppKit
 import AVKit
 import Quartz
 import SwiftUI
-import WebKit
 
 /// A self-contained preview renderer for a media file. The view classifies the
 /// URL once and then dispatches to the right renderer:
 ///
 /// - Raster images render in `ZoomableImageView` with pinch-to-zoom and drag-to-pan.
-/// - SVGs render in a transparent-background `WKWebView` so the vector stays sharp
-///   at any scale.
+/// - SVGs rasterize through WebKit-backed `SVGImageRenderer`, matching thumbnails.
 /// - Videos render in `AVPlayerView` with the system transport controls.
 /// - Anything else falls through to `QLPreviewView` so Quick Look can use its
 ///   built-in viewers (PDFs, Office documents, archives, etc.).
@@ -21,6 +19,7 @@ import WebKit
 struct ImagePreviewView: View {
     let url: URL
     let fileType: MediaFileType
+    let permissionHandler: (any StoragePermissionHandling)?
 
     @State private var isLoading = true
 
@@ -43,13 +42,13 @@ struct ImagePreviewView: View {
     @ViewBuilder private var content: some View {
         switch fileType {
         case .rasterImage:
-            ZoomableImageView(url: url)
+            ZoomableImageView(url: url, permissionHandler: permissionHandler)
         case .svg:
-            SVGWebPreview(url: url)
+            SVGImagePreview(url: url, permissionHandler: permissionHandler)
         case .video:
-            VideoPreviewView(url: url)
+            VideoPreviewView(url: url, permissionHandler: permissionHandler)
         case .other:
-            QuickLookPreviewView(url: url)
+            QuickLookPreviewView(url: url, permissionHandler: permissionHandler)
         }
     }
 }
@@ -62,6 +61,7 @@ struct ImagePreviewView: View {
 /// the user pans it off-screen.
 struct ZoomableImageView: View {
     let url: URL
+    let permissionHandler: (any StoragePermissionHandling)?
 
     @State private var image: NSImage?
     @State private var loadError: Bool = false
@@ -142,9 +142,11 @@ struct ZoomableImageView: View {
     }
 
     private func load() async {
-        let loaded = await Task.detached(priority: .userInitiated) {
-            NSImage(contentsOf: url)
-        }.value
+        let loaded = await withPreviewAccess {
+            await Task.detached(priority: .userInitiated) {
+                NSImage(contentsOf: url)
+            }.value
+        }
         if let loaded {
             image = loaded
             loadError = false
@@ -152,53 +154,90 @@ struct ZoomableImageView: View {
             loadError = true
         }
     }
+
+    private func withPreviewAccess<T>(_ body: () async -> T) async -> T {
+        guard let permissionHandler else {
+            return await body()
+        }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
+        return await body()
+    }
 }
 
 // MARK: - SVG
 
-/// Renders an SVG in an off-screen `WKWebView` so the vector stays sharp at any
-/// zoom level. The web view's background is forced transparent so the preview
-/// blends with the modal's surface. The host page sets the SVG to fill the
-/// available size, so a tall portrait SVG doesn't end up with a letterboxed
-/// white square in the middle of the preview.
-struct SVGWebPreview: NSViewRepresentable {
+/// Renders an SVG through the same WebKit-backed rasterizer used by thumbnails.
+/// Embedding a live `WKWebView` in the detail modal can fail to paint in some
+/// SwiftUI sheet layouts; a rasterized `NSImage` is deterministic and still
+/// sharp at the modal's display size.
+struct SVGImagePreview: View {
     let url: URL
+    let permissionHandler: (any StoragePermissionHandling)?
 
-    func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.suppressesIncrementalRendering = false
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.setValue(false, forKey: "drawsBackground")
-        webView.allowsBackForwardNavigationGestures = false
-        webView.allowsLinkPreview = false
-        load(into: webView)
-        return webView
-    }
+    @State private var image: NSImage?
+    @State private var loadError = false
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
-        if webView.url == nil {
-            load(into: webView)
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .accessibilityLabel("Preview of \(url.lastPathComponent)")
+                } else if loadError {
+                    PreviewUnavailableView(
+                        url: url,
+                        title: "Couldn't load SVG",
+                        message: "The file may be corrupt or use an unsupported SVG feature."
+                    )
+                } else {
+                    ProgressView()
+                        .controlSize(.large)
+                        .accessibilityLabel("Loading SVG preview")
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .task(id: previewCacheKey(for: proxy.size)) {
+                await load(for: proxy.size)
+            }
         }
     }
 
-    private func load(into webView: WKWebView) {
-        guard let data = try? Data(contentsOf: url),
-              let markup = String(data: data, encoding: .utf8) else { return }
-        let host = """
-        <!doctype html>
-        <html>
-        <head>
-        <meta charset="utf-8" />
-        <style>
-        html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: transparent; }
-        body { display: flex; align-items: center; justify-content: center; }
-        svg { width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
-        </style>
-        </head>
-        <body>\(markup)</body>
-        </html>
-        """
-        webView.loadHTMLString(host, baseURL: url)
+    private func previewCacheKey(for size: CGSize) -> String {
+        "\(url.path)|\(Int(size.width.rounded()))x\(Int(size.height.rounded()))"
+    }
+
+    private func load(for size: CGSize) async {
+        let sideLength = max(1, max(size.width, size.height))
+        let scale = await MainActor.run { NSScreen.main?.backingScaleFactor ?? 2 }
+        let rendered = await withPreviewAccess {
+            await SVGImageRenderer.shared.rasterize(
+                url: url,
+                sideLength: sideLength,
+                scale: scale
+            )
+        }
+        guard !Task.isCancelled else { return }
+        if let rendered {
+            image = rendered
+            loadError = false
+        } else {
+            image = nil
+            loadError = true
+        }
+    }
+
+    private func withPreviewAccess<T>(_ body: () async -> T) async -> T {
+        guard let permissionHandler else {
+            return await body()
+        }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
+        return await body()
     }
 }
 
@@ -209,11 +248,17 @@ struct SVGWebPreview: NSViewRepresentable {
 /// bar gives the user a way to open the file in the default app or Finder.
 struct VideoPreviewView: NSViewRepresentable {
     let url: URL
+    let permissionHandler: (any StoragePermissionHandling)?
+
+    func makeCoordinator() -> SecurityScopedPreviewCoordinator {
+        SecurityScopedPreviewCoordinator(permissionHandler: permissionHandler)
+    }
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
         view.controlsStyle = .inline
         view.showsFullScreenToggleButton = true
+        context.coordinator.prepareAccess(for: url)
         view.player = AVPlayer(url: url)
         return view
     }
@@ -222,6 +267,7 @@ struct VideoPreviewView: NSViewRepresentable {
         if view.player?.currentItem == nil
             || view.player?.currentItem?.asset == nil
             || (view.player?.currentItem?.asset as? AVURLAsset)?.url != url {
+            context.coordinator.prepareAccess(for: url)
             view.player = AVPlayer(url: url)
         }
     }
@@ -231,16 +277,44 @@ struct VideoPreviewView: NSViewRepresentable {
 
 struct QuickLookPreviewView: NSViewRepresentable {
     let url: URL
+    let permissionHandler: (any StoragePermissionHandling)?
+
+    func makeCoordinator() -> SecurityScopedPreviewCoordinator {
+        SecurityScopedPreviewCoordinator(permissionHandler: permissionHandler)
+    }
 
     func makeNSView(context: Context) -> QLPreviewView {
         let previewView = QLPreviewView(frame: .zero, style: .normal)
         previewView?.autostarts = true
+        context.coordinator.prepareAccess(for: url)
         previewView?.previewItem = url as NSURL
         return previewView ?? QLPreviewView()
     }
 
     func updateNSView(_ previewView: QLPreviewView, context: Context) {
+        context.coordinator.prepareAccess(for: url)
         previewView.previewItem = url as NSURL
+    }
+}
+
+final class SecurityScopedPreviewCoordinator {
+    private let permissionHandler: (any StoragePermissionHandling)?
+    private var access: SecurityScopedResourceAccess?
+    private var accessedURL: URL?
+
+    init(permissionHandler: (any StoragePermissionHandling)?) {
+        self.permissionHandler = permissionHandler
+    }
+
+    deinit {
+        access?.stop()
+    }
+
+    func prepareAccess(for url: URL) {
+        guard accessedURL != url else { return }
+        access?.stop()
+        access = permissionHandler?.beginHomeFolderAccess()
+        accessedURL = url
     }
 }
 

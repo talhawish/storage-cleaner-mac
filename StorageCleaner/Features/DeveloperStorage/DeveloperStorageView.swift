@@ -7,6 +7,8 @@ struct DeveloperStorageView: View {
     let onOpenFinding: (StorageFinding) -> Void
     let onRemoveRuntimeVersions: ([URL]) async -> Void
     let permissionHandler: (any StoragePermissionHandling)?
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
     @State private var selectedDomain: StorageDomain?
 
     private var detectedDomains: [StorageDomain] {
@@ -126,7 +128,12 @@ struct DeveloperStorageView: View {
 
             if shouldShowRuntimeVersionsSection {
                 Section {
-                    RuntimeVersionsSection(onRemove: onRemoveRuntimeVersions, permissionHandler: permissionHandler)
+                    RuntimeVersionsSection(
+                        onRemove: onRemoveRuntimeVersions,
+                        permissionHandler: permissionHandler,
+                        canUseProActions: canUseProActions,
+                        onRequirePro: onRequirePro
+                    )
                         .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)

@@ -7,6 +7,8 @@ struct SystemJunkView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var typeFilter: SystemJunkTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
@@ -183,6 +185,10 @@ struct SystemJunkView: View {
     /// "Clean All" button so the most common bulk action is a single click. No-ops when the
     /// visible list is empty (nothing to select).
     private func requestCleanAll() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
         let visibleURLs = filteredRecords.map(\.url)
         guard !visibleURLs.isEmpty else { return }
         for url in visibleURLs {
@@ -272,6 +278,7 @@ struct SystemJunkView: View {
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
                     precomputedBytes: record.bytes,
+                    canRevealInFinder: canUseProActions,
                     onToggle: { toggle(record.url) }
                 )
             }
@@ -316,6 +323,10 @@ struct SystemJunkView: View {
             Spacer(minLength: 8)
 
             Button(role: .destructive) {
+                guard canUseProActions else {
+                    onRequirePro()
+                    return
+                }
                 if visibleSelectedCount > 0 {
                     showDeleteConfirmation = true
                 } else {

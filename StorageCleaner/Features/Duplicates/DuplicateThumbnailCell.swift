@@ -9,6 +9,8 @@ struct DuplicateThumbnailCell: View {
     let onToggleRemoval: () -> Void
     let onSetKeep: () -> Void
     let onPreview: () -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
+    var canRevealInFinder = true
 
     private static let side: CGFloat = 132
 
@@ -36,6 +38,7 @@ struct DuplicateThumbnailCell: View {
             Button("Show in Finder", systemImage: "folder") {
                 NSWorkspace.shared.activateFileViewerSelecting([file.url])
             }
+            .disabled(!canRevealInFinder)
         }
     }
 
@@ -45,7 +48,13 @@ struct DuplicateThumbnailCell: View {
         Color.clear
             .frame(width: Self.side, height: Self.side)
             .overlay {
-                MediaThumbnailView(url: file.url, sideLength: 150, cornerRadius: 12, contentMode: .fill)
+                MediaThumbnailView(
+                    url: file.url,
+                    sideLength: 150,
+                    cornerRadius: 12,
+                    contentMode: .fill,
+                    permissionHandler: permissionHandler
+                )
             }
             .overlay {
                 if isMarkedForRemoval {

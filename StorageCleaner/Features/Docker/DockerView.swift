@@ -3,6 +3,8 @@ import SwiftUI
 struct DockerView: View {
     private let service: DockerService
     private let onDockerChanged: () -> Void
+    private let canUseProActions: Bool
+    private let onRequirePro: () -> Void
 
     @State private var snapshot: DockerSnapshot?
     @State private var isLoading = true
@@ -13,9 +15,13 @@ struct DockerView: View {
 
     init(
         service: DockerService = .live,
+        canUseProActions: Bool = true,
+        onRequirePro: @escaping () -> Void = {},
         onDockerChanged: @escaping () -> Void = {}
     ) {
         self.service = service
+        self.canUseProActions = canUseProActions
+        self.onRequirePro = onRequirePro
         self.onDockerChanged = onDockerChanged
     }
 
@@ -205,8 +211,8 @@ struct DockerView: View {
                     DockerContainerRow(
                         container: container,
                         stats: statsByID[container.id] ?? statsByName[container.name],
-                        onStop: { pendingAction = .stopContainer(id: container.id, name: container.name) },
-                        onRemove: { pendingAction = .removeContainer(id: container.id, name: container.name) }
+                        onStop: { request(.stopContainer(id: container.id, name: container.name)) },
+                        onRemove: { request(.removeContainer(id: container.id, name: container.name)) }
                     )
                 }
             }
@@ -221,7 +227,7 @@ struct DockerView: View {
                 ForEach(snapshot.images) { image in
                     DockerImageRow(
                         image: image,
-                        onRemove: { pendingAction = .removeImage(id: image.id, name: image.displayName) }
+                        onRemove: { request(.removeImage(id: image.id, name: image.displayName)) }
                     )
                 }
             }
@@ -236,7 +242,7 @@ struct DockerView: View {
                 ForEach(snapshot.volumes) { volume in
                     DockerVolumeRow(
                         volume: volume,
-                        onRemove: { pendingAction = .removeVolume(name: volume.name) }
+                        onRemove: { request(.removeVolume(name: volume.name)) }
                     )
                 }
             }
@@ -263,7 +269,7 @@ struct DockerView: View {
                 Spacer()
 
                 Button(role: .destructive) {
-                    pendingAction = .pruneBuilderCache
+                    request(.pruneBuilderCache)
                 } label: {
                     Label("Prune", systemImage: "trash")
                 }
@@ -385,6 +391,14 @@ private extension DockerView {
         loadTask?.cancel()
         loadTask = nil
         isLoading = false
+    }
+
+    func request(_ action: PendingDockerAction) {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        pendingAction = action
     }
 
     func perform(_ action: PendingDockerAction) async {

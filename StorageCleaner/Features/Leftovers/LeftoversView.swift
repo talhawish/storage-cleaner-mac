@@ -7,6 +7,8 @@ struct LeftoversView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var typeFilter: LeftoverTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
@@ -61,7 +63,7 @@ struct LeftoversView: View {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {
                     Button {
-                        showDeleteConfirmation = true
+                        requestDeleteConfirmation()
                     } label: {
                         Label("Delete Selected", systemImage: "trash")
                     }
@@ -153,6 +155,7 @@ struct LeftoversView: View {
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
                     metadata: record.detailMetadata,
+                    canRevealInFinder: canUseProActions,
                     onToggle: { toggle(record.url) }
                 )
             }
@@ -192,6 +195,14 @@ struct LeftoversView: View {
         } else {
             selectedURLs.insert(url)
         }
+    }
+
+    private func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showDeleteConfirmation = true
     }
 
     private func loadRecords() async {

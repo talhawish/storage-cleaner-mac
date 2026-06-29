@@ -9,6 +9,8 @@ import SwiftUI
 struct RuntimeVersionsView: View {
     let onRemove: ([URL]) async -> Void
     let permissionHandler: (any StoragePermissionHandling)?
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var groups: [RuntimeVersionGroup] = []
     @State private var selectedURLs: Set<URL> = []
@@ -74,7 +76,7 @@ struct RuntimeVersionsView: View {
         ToolbarItem(placement: .primaryAction) {
             if !selectedURLs.isEmpty {
                 Button {
-                    showDeleteConfirmation = true
+                    requestDeleteConfirmation()
                 } label: {
                     Label("Remove \(selectedURLs.count)", systemImage: "trash")
                 }
@@ -239,6 +241,14 @@ private extension RuntimeVersionsView {
         } else {
             older.forEach { selectedURLs.insert($0) }
         }
+    }
+
+    func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showDeleteConfirmation = true
     }
 
     /// Two-phase load: discover groups (fast) then measure on-disk sizes in the background.

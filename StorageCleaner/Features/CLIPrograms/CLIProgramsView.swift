@@ -6,6 +6,8 @@ struct CLIProgramsView: View {
     let onScan: () -> Void
     let onRemove: ([URL]) async -> Void
     let permissionHandler: (any StoragePermissionHandling)?
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var selectedURLs: Set<URL> = []
     @State private var searchText = ""
@@ -105,7 +107,11 @@ struct CLIProgramsView: View {
             )
         }
         .sheet(item: $detailProgram) { program in
-            CLIProgramDetailSheet(program: program, size: sizes[program.url])
+            CLIProgramDetailSheet(
+                program: program,
+                size: sizes[program.url],
+                canRevealInFinder: canUseProActions
+            )
         }
     }
 
@@ -113,7 +119,7 @@ struct CLIProgramsView: View {
         ToolbarItem(placement: .primaryAction) {
             if !selectedURLs.isEmpty {
                 Button {
-                    showDeleteConfirmation = true
+                    requestDeleteConfirmation()
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -348,6 +354,14 @@ private extension CLIProgramsView {
         } else {
             for program in filteredPrograms { selectedURLs.insert(program.url) }
         }
+    }
+
+    func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showDeleteConfirmation = true
     }
 
     /// Two-phase load: first discover and publish the program list so it appears

@@ -6,6 +6,8 @@ import SwiftUI
 /// than a `List` so the hero and breakdown grid sit on the same vertical canvas and breathe
 /// against the page background.
 struct CleanupHistoryView: View {
+    var canRevealInFinder = true
+
     @Query(
         sort: \StoredScan.date,
         order: .reverse
@@ -43,7 +45,7 @@ struct CleanupHistoryView: View {
         .onAppear { viewModel.update(with: scans) }
         .onChange(of: scans.count) { _, _ in viewModel.update(with: scans) }
         .sheet(item: $selectedSummary) { summary in
-            CleanupDetailSheet(summary: summary)
+            CleanupDetailSheet(summary: summary, canRevealInFinder: canRevealInFinder)
         }
     }
 

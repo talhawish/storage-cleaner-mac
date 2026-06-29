@@ -4,6 +4,9 @@ struct LargeFilesView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @AppStorage(LargeFileThreshold.storageKey)
     private var largeFileThresholdMB = LargeFileThreshold.defaultMegabytes
@@ -67,7 +70,7 @@ struct LargeFilesView: View {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedURLs.isEmpty {
                     Button {
-                        showDeleteConfirmation = true
+                        requestDeleteConfirmation()
                     } label: {
                         Label("Delete Selected", systemImage: "trash")
                     }
@@ -113,7 +116,11 @@ struct LargeFilesView: View {
             set: { if !$0 { previewURL = nil } }
         )) {
             if let url = previewURL {
-                MediaPreviewSheet(url: url)
+                MediaPreviewSheet(
+                    url: url,
+                    permissionHandler: permissionHandler,
+                    canRevealInFinder: canUseProActions
+                )
             }
         }
     }
@@ -184,6 +191,7 @@ struct LargeFilesView: View {
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
                     metadata: record.detailMetadata,
+                    canRevealInFinder: canUseProActions,
                     onToggle: { toggle(record.url) },
                     onPreview: { previewURL = record.url }
                 )
@@ -232,6 +240,14 @@ struct LargeFilesView: View {
         } else {
             selectedURLs.insert(url)
         }
+    }
+
+    private func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showDeleteConfirmation = true
     }
 
     private func loadRecords() async {

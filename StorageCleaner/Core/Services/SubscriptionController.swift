@@ -57,6 +57,17 @@ final class SubscriptionController {
         paywallRequest = trigger
     }
 
+    /// Returns whether a Pro-only action can continue. Free users are
+    /// routed to the paywall and the caller must no-op the action.
+    @discardableResult
+    func requirePro(trigger: PaywallTrigger = .gatedAction) -> Bool {
+        guard currentEntitlement.isPro else {
+            presentPaywall(trigger: trigger)
+            return false
+        }
+        return true
+    }
+
     func dismissPaywall() {
         paywallRequest = nil
     }

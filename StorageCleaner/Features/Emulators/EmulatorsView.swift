@@ -8,11 +8,20 @@ import SwiftUI
 /// All state lives in ``EmulatorsViewModel`` so the loading / empty / content state machine,
 /// the Rescan button, and the live-factory wiring can be unit-tested without a SwiftUI host.
 struct EmulatorsView: View {
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
+
     @State private var viewModel: EmulatorsViewModel
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
-    init(viewModel: EmulatorsViewModel = EmulatorsViewModel()) {
+    init(
+        viewModel: EmulatorsViewModel = EmulatorsViewModel(),
+        canUseProActions: Bool = true,
+        onRequirePro: @escaping () -> Void = {}
+    ) {
+        self.canUseProActions = canUseProActions
+        self.onRequirePro = onRequirePro
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -63,7 +72,7 @@ struct EmulatorsView: View {
         ToolbarItem(placement: .primaryAction) {
             if !viewModel.selectedIDs.isEmpty {
                 Button {
-                    viewModel.showConfirmation = true
+                    requestDeleteConfirmation()
                 } label: {
                     Label("Remove \(viewModel.selectedIDs.count)", systemImage: "externaldrive.badge.minus")
                 }
@@ -227,5 +236,13 @@ struct EmulatorsView: View {
             ],
             cancelAction: { viewModel.cancel() }
         )
+    }
+
+    private func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        viewModel.showConfirmation = true
     }
 }

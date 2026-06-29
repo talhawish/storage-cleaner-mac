@@ -3,6 +3,8 @@ import SwiftUI
 struct CategoryDetailView: View {
     let finding: StorageFinding
     let onDelete: ([URL]) -> Void
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var selectedURLs: Set<URL> = []
     @State private var searchText = ""
@@ -107,7 +109,7 @@ struct CategoryDetailView: View {
         ToolbarItem(placement: .primaryAction) {
             if !selectedURLs.isEmpty {
                 Button {
-                    showDeleteConfirmation = true
+                    requestDeleteConfirmation()
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -290,6 +292,7 @@ struct CategoryDetailView: View {
                     pathDisplayMode: .fullPath,
                     metadata: fileMetadata[url],
                     canOpen: childLevels[url] != nil,
+                    canRevealInFinder: canUseProActions,
                     onToggle: { toggle(url) },
                     onOpen: { pushDirectoryLevel(from: url) }
                 )
@@ -317,6 +320,14 @@ struct CategoryDetailView: View {
         } else {
             selectedURLs.insert(url)
         }
+    }
+
+    private func requestDeleteConfirmation() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showDeleteConfirmation = true
     }
 
     private func pushDirectoryLevel(from url: URL) {

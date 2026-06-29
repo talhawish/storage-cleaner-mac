@@ -11,6 +11,7 @@ struct MediaThumbnailView: View {
     let displaySideLength: CGFloat?
     let cornerRadius: CGFloat
     let contentMode: ContentMode
+    let permissionHandler: (any StoragePermissionHandling)?
 
     @State private var state: ThumbnailState = .loading
     @State private var fileType: MediaFileType
@@ -20,13 +21,15 @@ struct MediaThumbnailView: View {
         sideLength: CGFloat,
         displaySideLength: CGFloat? = nil,
         cornerRadius: CGFloat,
-        contentMode: ContentMode
+        contentMode: ContentMode,
+        permissionHandler: (any StoragePermissionHandling)? = nil
     ) {
         self.url = url
         self.sideLength = sideLength
         self.displaySideLength = displaySideLength
         self.cornerRadius = cornerRadius
         self.contentMode = contentMode
+        self.permissionHandler = permissionHandler
         _fileType = State(initialValue: MediaFileType.classify(url: url))
     }
 
@@ -82,7 +85,11 @@ struct MediaThumbnailView: View {
 
     private func load() async {
         state = .loading
-        let image = await MediaThumbnailProvider.shared.thumbnail(for: url, sideLength: sideLength)
+        let image = await MediaThumbnailProvider.shared.thumbnail(
+            for: url,
+            sideLength: sideLength,
+            permissionHandler: permissionHandler
+        )
         if let image {
             state = .loaded(image)
         } else {

@@ -6,6 +6,8 @@ struct MediaListRow: View {
     let isSelected: Bool
     let onToggle: () -> Void
     let onPreview: () -> Void
+    let permissionHandler: (any StoragePermissionHandling)?
+    var canRevealInFinder = true
 
     var body: some View {
         Button(action: onToggle) {
@@ -15,7 +17,8 @@ struct MediaListRow: View {
                     sideLength: 64,
                     displaySideLength: 40,
                     cornerRadius: 6,
-                    contentMode: .fill
+                    contentMode: .fill,
+                    permissionHandler: permissionHandler
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -50,6 +53,7 @@ struct MediaListRow: View {
             Button("Show in Finder") {
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
             }
+            .disabled(!canRevealInFinder)
             Divider()
             Button("Select") { onToggle() }
         }

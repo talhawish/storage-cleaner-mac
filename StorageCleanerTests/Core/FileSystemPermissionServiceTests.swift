@@ -50,7 +50,9 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(service.currentStatuses().first?.state, .accessible)
-        XCTAssertNotNil(service.beginHomeFolderAccess())
+        let access = service.beginHomeFolderAccess()
+        XCTAssertNotNil(access)
+        access?.stop()
     }
 
     func testStaleBookmarkIsDetectedViaDirectoryProbe() throws {

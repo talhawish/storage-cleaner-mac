@@ -91,17 +91,30 @@ private extension AppShellView {
                                 onOpenSettings: { selection = .section(.settings) }
                             )
                         case .section(.apps):
-                            AppsView()
+                            AppsView(
+                                canUseProActions: viewModel.canCleanup,
+                                onRequirePro: { _ = viewModel.gateFileAction() }
+                            )
                         case .section(.projectActivity):
-                            ProjectActivityView()
+                            ProjectActivityView(
+                                canUseProActions: viewModel.canCleanup,
+                                onRequirePro: { _ = viewModel.gateFileAction() }
+                            )
                         case .section(.developerStorage):
                             developerStorageView()
                         case .section(.docker):
-                            DockerView(onDockerChanged: {
-                                viewModel.startScan(for: [.dockerArtifacts])
-                            })
+                            DockerView(
+                                canUseProActions: viewModel.canCleanup,
+                                onRequirePro: { _ = viewModel.gateFileAction() },
+                                onDockerChanged: {
+                                    viewModel.startScan(for: [.dockerArtifacts])
+                                }
+                            )
                         case .section(.simulatorsEmulators):
-                            EmulatorsView()
+                            EmulatorsView(
+                                canUseProActions: viewModel.canCleanup,
+                                onRequirePro: { _ = viewModel.gateFileAction() }
+                            )
                         case .section(.largeFiles):
                             largeFilesView(
                                 kinds: section?.filterKinds ?? []
@@ -126,7 +139,7 @@ private extension AppShellView {
                         case .section(.systemJunk):
                             systemJunkView(kinds: section?.filterKinds ?? [])
                         case .section(.cleanupHistory):
-                            CleanupHistoryView()
+                            CleanupHistoryView(canRevealInFinder: viewModel.canCleanup)
                         case .section(.settings):
                             InAppSettingsView(subscriptionController: subscriptionController)
                         }

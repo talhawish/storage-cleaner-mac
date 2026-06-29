@@ -52,7 +52,7 @@ extension ProjectActivityView {
             Spacer()
 
             Button("Review & Hibernate") {
-                showHibernateSheet = true
+                requestHibernateSheet()
             }
             .buttonStyle(.bordered)
             .tint(AppTheme.orange)

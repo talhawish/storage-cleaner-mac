@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct ProjectActivityView: View {
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
+
     @State var viewModel = ProjectActivityViewModel()
     @State private var selectedProject: ProjectInfo?
     @State var showHibernateSheet = false
@@ -39,7 +42,9 @@ struct ProjectActivityView: View {
                 },
                 onCompress: { project in
                     await viewModel.compress(project)
-                }
+                },
+                canUseProActions: canUseProActions,
+                onRequirePro: onRequirePro
             )
         }
         .sheet(isPresented: $showHibernateSheet) {
@@ -91,7 +96,7 @@ struct ProjectActivityView: View {
 
             if !viewModel.inactiveProjects.isEmpty {
                 Button {
-                    showHibernateSheet = true
+                    requestHibernateSheet()
                 } label: {
                     Label("Hibernate Inactive", systemImage: "archivebox.fill")
                         .font(.headline)
@@ -184,6 +189,14 @@ struct ProjectActivityView: View {
             actionTitle: "Scan Projects",
             action: viewModel.scan
         )
+    }
+
+    func requestHibernateSheet() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        showHibernateSheet = true
     }
 }
 

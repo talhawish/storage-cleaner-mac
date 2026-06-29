@@ -11,6 +11,8 @@ struct ProjectDetailView: View {
     let project: ProjectInfo
     let onHibernate: (ProjectInfo) async -> HibernationOutcome
     let onCompress: (ProjectInfo) async -> CompressionOutcome
+    var canUseProActions = true
+    var onRequirePro: () -> Void = {}
 
     @State private var pendingAction: Action?
     @State private var isHibernating = false
@@ -61,6 +63,7 @@ struct ProjectDetailView: View {
                             title: "Show in Finder",
                             systemImage: "folder",
                             tint: AppTheme.accent,
+                            isDisabled: !canUseProActions,
                             isIconOnly: true,
                             help: "Show the project in Finder",
                             action: { revealInFinder() }
@@ -73,7 +76,7 @@ struct ProjectDetailView: View {
                             help: project.dependencySize == 0
                                 ? "No regenerable dependencies to reclaim."
                                 : "Move regenerable dependencies to the Trash, keeping your source.",
-                            action: { pendingAction = .hibernate }
+                            action: { requestAction(.hibernate) }
                         ),
                         AppModalActionBar.Action(
                             title: "Hibernate & Compress",
@@ -85,7 +88,7 @@ struct ProjectDetailView: View {
                             help: project.dependencySize == 0
                                 ? "No regenerable dependencies to reclaim."
                                 : "Move dependencies to Trash, compress the project, then move the folder to Trash.",
-                            action: { pendingAction = .compress }
+                            action: { requestAction(.compress) }
                         )
                     ],
                     isProcessing: isHibernating || isCompressing,
@@ -248,7 +251,11 @@ struct ProjectDetailView: View {
     }
 
     private var locationInfo: some View {
-        ProjectLocationInfo(project: project, onReveal: revealInFinder)
+        ProjectLocationInfo(
+            project: project,
+            canRevealInFinder: canUseProActions,
+            onReveal: revealInFinder
+        )
     }
 
     private var compressingOverlay: some View {
@@ -268,7 +275,16 @@ struct ProjectDetailView: View {
     // MARK: - Actions
 
     private func revealInFinder() {
+        guard canUseProActions else { return }
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.path.path)
+    }
+
+    private func requestAction(_ action: Action) {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        pendingAction = action
     }
 
     private func hibernateProject() {
@@ -413,6 +429,7 @@ private struct ProjectTechnologyInfo: View {
 /// Location card — the project path with a Reveal-in-Finder button.
 private struct ProjectLocationInfo: View {
     let project: ProjectInfo
+    let canRevealInFinder: Bool
     let onReveal: () -> Void
 
     var body: some View {
@@ -447,6 +464,7 @@ private struct ProjectLocationInfo: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .disabled(!canRevealInFinder)
                     .accessibilityLabel("Reveal project in Finder")
                 }
             }

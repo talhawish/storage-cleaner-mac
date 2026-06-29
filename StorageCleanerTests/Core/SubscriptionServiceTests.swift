@@ -50,6 +50,19 @@ final class SubscriptionControllerTests: XCTestCase {
         XCTAssertEqual(controller.paywallRequest, .gatedAction)
     }
 
+    func testRequireProRequestsPaywallForFreeUser() {
+        XCTAssertFalse(controller.requirePro(trigger: .gatedAction))
+        XCTAssertEqual(controller.paywallRequest, .gatedAction)
+    }
+
+    func testRequireProAllowsActiveEntitlement() async {
+        service.setEntitlement(.yearly)
+        await waitForEntitlement(.yearly)
+
+        XCTAssertTrue(controller.requirePro(trigger: .gatedAction))
+        XCTAssertNil(controller.paywallRequest)
+    }
+
     // MARK: - Stream updates
 
     func testEntitlementStreamUpdatesController() async {

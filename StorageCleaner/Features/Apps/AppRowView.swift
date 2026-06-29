@@ -4,6 +4,7 @@ struct AppRowView: View {
     let app: AppItem
     let onReveal: () -> Void
     let onUninstall: () -> Void
+    var canUseProActions = true
 
     @State private var appIcon: NSImage?
     @State private var isHovering = false
@@ -84,6 +85,7 @@ struct AppRowView: View {
                     .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
+            .disabled(!canUseProActions)
             .help("Reveal in Finder")
             .accessibilityLabel("Reveal in Finder")
 
@@ -105,6 +107,7 @@ struct AppRowView: View {
 
     @ViewBuilder private var contextMenuContent: some View {
         Button("Reveal in Finder") { onReveal() }
+            .disabled(!canUseProActions)
         Button("Copy Name") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(app.displayName, forType: .string)

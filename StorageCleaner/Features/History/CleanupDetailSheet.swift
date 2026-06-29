@@ -5,6 +5,7 @@ import SwiftUI
 /// representative paths so the user can confirm exactly what was cleaned.
 struct CleanupDetailSheet: View {
     let summary: CleanupScanSummary
+    var canRevealInFinder = true
 
     @Environment(\.dismiss)
     private var dismiss
@@ -144,7 +145,11 @@ struct CleanupDetailSheet: View {
         ) {
             VStack(spacing: AppTheme.Spacing.small) {
                 ForEach(summary.categories) { category in
-                    CleanupCategoryRow(summary: category, totalBytes: summary.totalBytesCleaned)
+                    CleanupCategoryRow(
+                        summary: category,
+                        totalBytes: summary.totalBytesCleaned,
+                        canRevealInFinder: canRevealInFinder
+                    )
                 }
             }
         }
@@ -176,6 +181,7 @@ struct CleanupDetailSheet: View {
 private struct CleanupCategoryRow: View {
     let summary: CleanupCategorySummary
     let totalBytes: Int64
+    let canRevealInFinder: Bool
 
     private var tint: Color { AppTheme.color(for: summary.domain) }
     private var fraction: Double {
@@ -253,6 +259,7 @@ private struct CleanupCategoryRow: View {
                             .foregroundStyle(AppTheme.accent)
                     }
                     .buttonStyle(.plain)
+                    .disabled(!canRevealInFinder)
                     .help("Show \(url.lastPathComponent) in Finder")
                     .accessibilityLabel("Show \(url.lastPathComponent) in Finder")
                 }

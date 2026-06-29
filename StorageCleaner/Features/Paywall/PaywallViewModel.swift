@@ -75,13 +75,30 @@ final class PaywallViewModel {
     func loadProducts() async {
         isLoadingProducts = true
         defer { isLoadingProducts = false }
+
         do {
-            let loaded = try await service.loadProducts()
-            plans = loaded.isEmpty ? fallbackPlans() : loaded
+            let loadedPlans = try await service.loadProducts()
+            if loadedPlans.isEmpty {
+                plans = fallbackPlans()
+                banner = .info(
+                    message: "Plans are temporarily unavailable from the App Store. Showing fallback pricing."
+                )
+            } else {
+                plans = loadedPlans
+                if case .error = banner {
+                    banner = .none
+                }
+            }
         } catch {
             plans = fallbackPlans()
-            banner = .error(message: "Couldn't load plans. You can still try a purchase below.")
+            banner = .error(
+                message: "Couldn't load plans from the App Store. Showing fallback pricing."
+            )
         }
+
+        highlightedPlanID = plans.contains { $0.id == SubscriptionProductID.yearly }
+            ? SubscriptionProductID.yearly
+            : (plans.first?.id ?? SubscriptionProductID.yearly)
     }
 
     /// Initiates a purchase for the given product id. The card's

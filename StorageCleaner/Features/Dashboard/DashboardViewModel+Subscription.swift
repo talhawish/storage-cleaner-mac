@@ -33,10 +33,13 @@ extension DashboardViewModel {
     /// open so existing unit tests don't have to be updated.
     func gateCleanup() -> Bool {
         guard let controller = subscriptionController else { return true }
-        guard controller.currentEntitlement.isPro else {
-            controller.presentPaywall(trigger: .gatedAction)
-            return false
-        }
-        return true
+        return controller.requirePro(trigger: .gatedAction)
+    }
+
+    /// Gate for Pro file actions that are not cleanup, such as revealing
+    /// scanned files in Finder. Scanning and read-only preview remain free.
+    func gateFileAction() -> Bool {
+        guard let controller = subscriptionController else { return true }
+        return controller.requirePro(trigger: .gatedAction)
     }
 }
