@@ -90,4 +90,60 @@ final class CleanupAuditAttributionTests: XCTestCase {
         )
         XCTAssertFalse(registryPaths.isEmpty, "browser-cache option must list at least one path")
     }
+
+    // MARK: - Safety invariants
+
+    func testSafeByDefaultOptionsAreAllMarkedSafe() {
+        for id in CleanupOptionsRegistry.safeByDefaultIDs {
+            let option = CleanupOptionsRegistry.option(byID: id)
+            XCTAssertEqual(option?.safety, .safe, "\(id) is default-enabled but is not marked safe")
+        }
+    }
+
+    func testRegenerableCleanupOptionsAreSafeByDefault() {
+        let safeIDs: Set<String> = [
+            "browser-cache",
+            "cargo-cache",
+            "composer-cache",
+            "flutter-cache",
+            "go-cache",
+            "homebrew-cache",
+            "ios-device-support",
+            "pip-cache",
+            "ruby-cache",
+            "swiftpm-checkouts",
+            "system-logs",
+            "tmp-files",
+            "xcode-derived",
+            "xcode-archives"
+        ]
+
+        for id in safeIDs {
+            let option = CleanupOptionsRegistry.option(byID: id)
+            XCTAssertEqual(option?.safety, .safe, "\(id) should be marked safe")
+            XCTAssertEqual(option?.isSafeByDefault, true, "\(id) should be enabled by default")
+        }
+    }
+
+    func testRiskyCleanupOptionsRemainReviewOnly() {
+        let reviewIDs: Set<String> = [
+            "ai-model-cache",
+            "android-emulators",
+            "docker-cache",
+            "gradle-cache",
+            "ios-simulators",
+            "large-videos",
+            "node-modules",
+            "nuget-cache",
+            "screen-recordings",
+            "screenshots",
+            "trash"
+        ]
+
+        for id in reviewIDs {
+            let option = CleanupOptionsRegistry.option(byID: id)
+            XCTAssertEqual(option?.safety, .review, "\(id) should require review")
+            XCTAssertEqual(option?.isSafeByDefault, false, "\(id) should not be enabled by default")
+        }
+    }
 }

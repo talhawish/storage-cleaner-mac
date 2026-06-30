@@ -55,6 +55,54 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         access?.stop()
     }
 
+    func testHomeOnlyBookmarkBackfillsExistingChildBookmarks() throws {
+        let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
+        try createStandardHomeFolders(at: home)
+        let store = InMemoryBookmarkDataStore()
+        let homeBookmark = try home.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        store.set(homeBookmark, forKey: "HomeFolderSecurityScopedBookmark")
+        let service = FileSystemPermissionService(
+            bookmarkStore: store,
+            picker: FixedHomeFolderPicker(selectedURL: home),
+            homeDirectory: home
+        )
+
+        let access = service.beginHomeFolderAccess()
+        access?.stop()
+
+        XCTAssertNotNil(access)
+        XCTAssertNotNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Desktop"))
+        XCTAssertNotNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Downloads"))
+        XCTAssertNotNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Library"))
+    }
+
+    func testCurrentStatusesBackfillsAndReportsExistingChildrenAccessibleForHomeOnlyBookmark() throws {
+        let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
+        try createStandardHomeFolders(at: home)
+        let store = InMemoryBookmarkDataStore()
+        let homeBookmark = try home.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        store.set(homeBookmark, forKey: "HomeFolderSecurityScopedBookmark")
+        let service = FileSystemPermissionService(
+            bookmarkStore: store,
+            picker: FixedHomeFolderPicker(selectedURL: home),
+            homeDirectory: home
+        )
+
+        let statuses = service.currentStatuses()
+
+        XCTAssertEqual(statuses.first(where: { $0.scope == .home })?.state, .accessible)
+        XCTAssertEqual(statuses.first(where: { $0.scope == .desktop })?.state, .accessible)
+        XCTAssertEqual(statuses.first(where: { $0.scope == .downloads })?.state, .accessible)
+    }
+
     func testStaleBookmarkIsDetectedViaDirectoryProbe() throws {
         let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)

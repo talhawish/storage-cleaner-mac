@@ -137,7 +137,7 @@ private final class PoolEntry: NSObject, WKNavigationDelegate, @unchecked Sendab
             self?.fireTimeout()
         }
         pendingTimeout = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(800), execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5), execute: item)
     }
 
     private func fireTimeout() {

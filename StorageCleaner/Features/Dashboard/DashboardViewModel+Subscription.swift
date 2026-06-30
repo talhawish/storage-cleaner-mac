@@ -10,10 +10,12 @@ extension DashboardViewModel {
     /// Read-only view of the current Pro/Free state. Mirrors the
     /// controller so views that need to render Pro-only affordances
     /// (e.g. dim a "Clean" button) can read it off the same VM they
-    /// already observe. Returns `true` when no controller is wired,
-    /// matching `gateCleanup()`'s "legacy tests are always Pro" stance.
+    /// already observe. Defaults to `.free` when no controller is
+    /// wired — a missing controller is a wiring error, not a free
+    /// pass. Legacy tests that don't care about subscriptions should
+    /// inject a mock controller explicitly.
     var currentEntitlement: SubscriptionEntitlement {
-        subscriptionController?.currentEntitlement ?? .lifetime
+        subscriptionController?.currentEntitlement ?? .free
     }
 
     /// Whether the user is allowed to clean. Views bind against this

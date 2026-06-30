@@ -113,35 +113,7 @@ final class DashboardViewModel {
             )
         }
         let result = await cleanupService.delete(urls: urls)
-        lastCleanupResult = result
-
-        // Refresh the volume snapshot *before* recording the audit, so the
-        // "free bytes after" captured on `StoredScan` reflects the volume
-        // state once the trashed items are gone. The refresh dispatches a
-        // background task; awaiting it here keeps the audit recording in
-        // lockstep with the post-cleanup free-bytes value.
-        await refreshVolumeSnapshotAsync()
-
-        // `deletedItems` is keyed by the *original* path with the bytes captured at delete time;
-        // `result.deletedURLs` holds Trash locations and cannot be matched against findings.
-        let reclaimedBytesByURL = Dictionary(
-            result.deletedItems.map { ($0.originalURL, $0.bytesReclaimed) },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        recordCleanupAudit(reclaimedBytesByURL: reclaimedBytesByURL)
-
-        if let currentSnapshot = snapshot {
-            let updatedFindings = currentSnapshot.findings.compactMap { finding in
-                pruneDeletedPaths(from: finding, reclaimedBytesByURL: reclaimedBytesByURL)
-            }
-            snapshot = ScanSnapshot(
-                findings: updatedFindings,
-                scannedItemCount: currentSnapshot.scannedItemCount,
-                duration: currentSnapshot.duration
-            )
-        }
-
+        await reconcileCleanup(result)
         return result
     }
 
@@ -158,45 +130,10 @@ final class DashboardViewModel {
             )
         }
         let result = await cliRemovalService.remove(urls)
-        lastCleanupResult = result
-
-        guard result.totalBytesReclaimed > 0 else { return result }
-
-        await refreshVolumeSnapshotAsync()
-
-        historyStore?.recordCleanupActions([
-            CleanupAuditEntry(
-                kind: .cliApps,
-                bytesReclaimed: result.totalBytesReclaimed,
-                itemCount: result.deletedCount,
-                samplePaths: CleanupAuditRecorder.samplePaths(
-                    from: result.deletedItems.map(\.originalURL)
-                )
-            )
-        ], disk: currentScanDiskSnapshot())
-
-        if let currentSnapshot = snapshot {
-            let updatedFindings = currentSnapshot.findings.map { finding -> StorageFinding in
-                guard finding.kind == .cliApps else { return finding }
-                return StorageFinding(
-                    kind: finding.kind,
-                    domain: finding.domain,
-                    bytes: max(0, finding.bytes - result.totalBytesReclaimed),
-                    itemCount: finding.itemCount,
-                    safety: finding.safety,
-                    examples: finding.examples,
-                    filePaths: finding.filePaths
-                )
-            }
-            snapshot = ScanSnapshot(
-                findings: updatedFindings,
-                scannedItemCount: currentSnapshot.scannedItemCount,
-                duration: currentSnapshot.duration
-            )
-        }
-
+        await reconcileCleanup(result, auditKind: .cliApps)
         return result
     }
+
     /// and reconciles the `runtimeVersions` finding. Recorded as a `.runtimeVersions`
     /// audit entry so Cleanup History reflects what was reclaimed. Returns the result
     /// so the caller can refresh its view.
@@ -210,44 +147,113 @@ final class DashboardViewModel {
             )
         }
         let result = await cliRemovalService.remove(urls)
-        lastCleanupResult = result
+        await reconcileCleanup(result, auditKind: .runtimeVersions)
+        return result
+    }
 
-        guard result.totalBytesReclaimed > 0 else { return result }
+    func reconcileEmulatorCleanup(
+        _ result: EmulatorCleanupResult,
+        removedImages images: [EmulatorImage]
+    ) async {
+        let removedIDs = Set(result.removedIDs)
+        let removedImages = images.filter { removedIDs.contains($0.id) }
+        guard !removedImages.isEmpty else { return }
+
+        let deletedItems = removedImages.compactMap { image -> DeletedItem? in
+            guard case let .trashDirectory(url) = image.removal else { return nil }
+            return DeletedItem(originalURL: url, bytesReclaimed: image.bytes)
+        }
+        lastCleanupResult = CleanupResult(
+            deletedURLs: deletedItems.map(\.originalURL),
+            deletedItems: deletedItems,
+            failedURLs: [],
+            totalBytesReclaimed: result.totalBytesReclaimed
+        )
 
         await refreshVolumeSnapshotAsync()
+        recordEmulatorCleanupAudit(removedImages)
+        pruneSnapshot(reclaimedBytesByURL: reclaimedBytesByURL(from: deletedItems))
+    }
 
-        historyStore?.recordCleanupActions([
-            CleanupAuditEntry(
-                kind: .runtimeVersions,
-                bytesReclaimed: result.totalBytesReclaimed,
-                itemCount: result.deletedCount,
-                samplePaths: CleanupAuditRecorder.samplePaths(
-                    from: result.deletedItems.map(\.originalURL)
-                )
-            )
-        ], disk: currentScanDiskSnapshot())
+    private func reconcileCleanup(
+        _ result: CleanupResult,
+        auditKind: StorageFindingKind? = nil
+    ) async {
+        lastCleanupResult = result
+        guard !result.deletedItems.isEmpty else { return }
 
-        if let currentSnapshot = snapshot {
-            let updatedFindings = currentSnapshot.findings.map { finding -> StorageFinding in
-                guard finding.kind == .runtimeVersions else { return finding }
-                return StorageFinding(
-                    kind: finding.kind,
-                    domain: finding.domain,
-                    bytes: max(0, finding.bytes - result.totalBytesReclaimed),
-                    itemCount: finding.itemCount,
-                    safety: finding.safety,
-                    examples: finding.examples,
-                    filePaths: finding.filePaths
+        // Refresh the volume snapshot *before* recording the audit, so the
+        // "free bytes after" captured on `StoredScan` reflects the volume
+        // state once the trashed items are gone. The refresh dispatches a
+        // background task; awaiting it here keeps the audit recording in
+        // lockstep with the post-cleanup free-bytes value.
+        await refreshVolumeSnapshotAsync()
+
+        let reclaimedBytesByURL = reclaimedBytesByURL(from: result.deletedItems)
+        if let auditKind {
+            historyStore?.recordCleanupActions([
+                CleanupAuditEntry(
+                    kind: auditKind,
+                    bytesReclaimed: result.totalBytesReclaimed,
+                    itemCount: result.deletedCount,
+                    samplePaths: CleanupAuditRecorder.samplePaths(
+                        from: result.deletedItems.map(\.originalURL)
+                    )
                 )
-            }
-            snapshot = ScanSnapshot(
-                findings: updatedFindings,
-                scannedItemCount: currentSnapshot.scannedItemCount,
-                duration: currentSnapshot.duration
-            )
+            ], disk: currentScanDiskSnapshot())
+        } else {
+            recordCleanupAudit(reclaimedBytesByURL: reclaimedBytesByURL)
         }
 
-        return result
+        pruneSnapshot(reclaimedBytesByURL: reclaimedBytesByURL)
+    }
+
+    private func reclaimedBytesByURL(from deletedItems: [DeletedItem]) -> [URL: Int64] {
+        Dictionary(
+            deletedItems.map { ($0.originalURL, $0.bytesReclaimed) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    private func pruneSnapshot(reclaimedBytesByURL: [URL: Int64]) {
+        guard let currentSnapshot = snapshot, !reclaimedBytesByURL.isEmpty else { return }
+        let updatedFindings = currentSnapshot.findings.compactMap { finding in
+            pruneDeletedPaths(from: finding, reclaimedBytesByURL: reclaimedBytesByURL)
+        }
+        snapshot = ScanSnapshot(
+            findings: updatedFindings,
+            scannedItemCount: currentSnapshot.scannedItemCount,
+            duration: currentSnapshot.duration
+        )
+    }
+
+    private func recordEmulatorCleanupAudit(_ images: [EmulatorImage]) {
+        guard let historyStore else { return }
+        let grouped = Dictionary(grouping: images) { image in
+            emulatorStorageKind(for: image)
+        }
+        let entries = grouped.keys.sorted { $0.rawValue < $1.rawValue }.map { kind in
+            let images = grouped[kind, default: []]
+            let samplePaths = images.compactMap(\.trashDirectoryURL)
+            return CleanupAuditEntry(
+                kind: kind,
+                bytesReclaimed: images.reduce(0) { $0 + $1.bytes },
+                itemCount: images.count,
+                samplePaths: CleanupAuditRecorder.samplePaths(from: samplePaths)
+            )
+        }
+        historyStore.recordCleanupActions(entries, disk: currentScanDiskSnapshot())
+    }
+
+    private func emulatorStorageKind(for image: EmulatorImage) -> StorageFindingKind {
+        switch image.platform {
+        case .appleSimulator, .simulatorDevices:
+            .xcodeArtifacts
+        case .iosDeviceSupport:
+            .iosDeviceSupport
+        case .androidEmulator:
+            .androidStudioArtifacts
+        }
     }
 
     /// Removes the deleted paths from a finding and decrements its byte total using the sizes
@@ -265,7 +271,7 @@ final class DashboardViewModel {
 
         let remainingPaths = finding.filePaths.filter { scannedURL in
             !reclaimedBytesByURL.keys.contains { deletedURL in
-                deletedURL == scannedURL
+                deletedURL.matchesFilesystemURL(scannedURL)
             }
         }
         guard !remainingPaths.isEmpty else { return nil }
@@ -286,7 +292,9 @@ final class DashboardViewModel {
             safety: finding.safety,
             examples: finding.examples,
             filePaths: remainingPaths,
-            pathBytes: finding.pathBytes.filter { remainingPaths.contains($0.key) }
+            pathBytes: finding.pathBytes.filter { path, _ in
+                remainingPaths.contains { $0.matchesFilesystemURL(path) }
+            }
         )
     }
 
@@ -436,7 +444,7 @@ extension DashboardViewModel {
 
     var permissionSummary: String {
         let accessibleCount = permissionStatuses.filter { $0.state == .accessible }.count
-        if let blockedStatus = permissionStatuses.first(where: { $0.state != .accessible && $0.scope.isBlocking }) {
+        if let blockedStatus = permissionStatuses.first(where: { $0.state == .denied && $0.scope.isBlocking }) {
             return "\(blockedStatus.scope.title) access required; choose \(blockedStatus.url.path)"
         }
 

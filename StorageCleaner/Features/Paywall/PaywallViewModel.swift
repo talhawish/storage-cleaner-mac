@@ -49,15 +49,18 @@ final class PaywallViewModel {
     private(set) var highlightedPlanID: String = SubscriptionProductID.yearly
 
     private let service: any SubscriptionService
+    private let productLoadTimeout: Duration
     private let onEntitlementUpgraded: (@MainActor () -> Void)?
     private var entitlementTask: Task<Void, Never>?
     private var hasReceivedInitialEntitlement = false
 
     init(
         service: any SubscriptionService,
+        productLoadTimeout: Duration = .seconds(12),
         onEntitlementUpgraded: (@MainActor () -> Void)? = nil
     ) {
         self.service = service
+        self.productLoadTimeout = productLoadTimeout
         self.onEntitlementUpgraded = onEntitlementUpgraded
         subscribeToEntitlementStream()
     }
@@ -77,7 +80,7 @@ final class PaywallViewModel {
         defer { isLoadingProducts = false }
 
         do {
-            let loadedPlans = try await service.loadProducts()
+            let loadedPlans = try await loadProductsWithTimeout()
             if loadedPlans.isEmpty {
                 plans = fallbackPlans()
                 banner = .info(
@@ -99,6 +102,40 @@ final class PaywallViewModel {
         highlightedPlanID = plans.contains { $0.id == SubscriptionProductID.yearly }
             ? SubscriptionProductID.yearly
             : (plans.first?.id ?? SubscriptionProductID.yearly)
+    }
+
+    private func loadProductsWithTimeout() async throws -> [SubscriptionPlan] {
+        let service = service
+        let productLoadTimeout = productLoadTimeout
+        let stream = AsyncThrowingStream<[SubscriptionPlan], Error> { continuation in
+            let productTask = Task {
+                do {
+                    continuation.yield(try await service.loadProducts())
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            let timeoutTask = Task {
+                do {
+                    try await Task.sleep(for: productLoadTimeout)
+                    continuation.finish(throwing: ProductLoadTimeoutError())
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                productTask.cancel()
+                timeoutTask.cancel()
+            }
+        }
+
+        for try await plans in stream {
+            return plans
+        }
+        return []
     }
 
     /// Initiates a purchase for the given product id. The card's
@@ -245,3 +282,5 @@ final class PaywallViewModel {
         ]
     }
 }
+
+private struct ProductLoadTimeoutError: Error {}

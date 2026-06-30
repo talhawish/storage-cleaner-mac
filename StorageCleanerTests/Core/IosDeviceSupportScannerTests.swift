@@ -48,7 +48,7 @@ final class IosDeviceSupportScannerTests: XCTestCase {
         let finding = try XCTUnwrap(result.finding)
         XCTAssertEqual(finding.kind, .iosDeviceSupport)
         XCTAssertEqual(finding.domain, .appleDevelopment)
-        XCTAssertEqual(finding.safety, .review)
+        XCTAssertEqual(finding.safety, .safe)
         XCTAssertEqual(finding.itemCount, 4)
         XCTAssertEqual(finding.bytes, 65_536 + 32_768 + 16_384 + 8_192)
         XCTAssertEqual(result.inspectedItemCount, 4)

@@ -41,6 +41,13 @@ final class EmulatorsViewModel {
     /// otherwise flashes the empty / content view with no loading affordance.
     private var loadStartedAt: Date?
 
+    /// Gate checked before every deletion. Production wiring passes a
+    /// `SubscriptionController.requirePro()` check; tests leave it open.
+    /// This is the defense-in-depth layer — the UI already disables the
+    /// delete button for Free users via `canUseProActions`, but if a
+    /// call path bypasses the button handler, this gate catches it.
+    var canDelete: @MainActor () -> Bool = { true }
+
     init(
         service: any EmulatorsServicing = EmulatorManagementService.live,
         permissionHandler: any StoragePermissionHandling = FileSystemPermissionService()
@@ -106,9 +113,14 @@ final class EmulatorsViewModel {
     }
 
     /// Removes the supplied images using the injected service. Returns the service's
-    /// `EmulatorCleanupResult` so the caller can surface failures.
+    /// `EmulatorCleanupResult` so the caller can surface failures. Checks the
+    /// `canDelete` gate before proceeding — Free users get an empty result
+    /// and the caller should show no UI change.
     func delete(_ toRemove: [EmulatorImage]) async -> EmulatorCleanupResult {
-        await service.remove(toRemove)
+        guard canDelete() else {
+            return EmulatorCleanupResult(removedIDs: [], totalBytesReclaimed: 0, failures: [])
+        }
+        return await service.remove(toRemove)
     }
 
     /// Cancels any in-flight discovery. Called when the view disappears; the next appearance

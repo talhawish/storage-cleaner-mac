@@ -192,8 +192,7 @@ enum DependencyPaths {
             home("Library/Android/sdk"),
             home("Library/Android/sdk/system-images"),
             home(".android/avd"),
-            home("Library/Caches/Google/AndroidStudio"),
-            home(".gradle/caches")
+            home("Library/Caches/Google/AndroidStudio")
         ]
     }
 

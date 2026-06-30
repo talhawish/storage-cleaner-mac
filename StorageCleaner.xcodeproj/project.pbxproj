@@ -168,7 +168,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2650;
+				LastUpgradeCheck = 2660;
 				TargetAttributes = {
 					7D644E1763C5644866325F31 = {
 						ProvisioningStyle = Automatic;
@@ -252,10 +252,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = StorageCleaner/StorageCleaner.entitlements;
-				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 848R6Y8374;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Storage Cleaner";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -265,7 +266,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
 				SDKROOT = macosx;
-				DEVELOPMENT_TEAM = 848R6Y8374;
 			};
 			name = Release;
 		};
@@ -480,6 +480,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 848R6Y8374;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Storage Cleaner";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -489,7 +490,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
 				SDKROOT = macosx;
-				DEVELOPMENT_TEAM = 848R6Y8374;
 			};
 			name = Debug;
 		};

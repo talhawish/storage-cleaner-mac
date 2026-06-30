@@ -285,7 +285,8 @@ struct CategoryDetailView: View {
 
     private var fileList: some View {
         List {
-            ForEach(filteredURLs, id: \.self) { url in
+            ForEach(URLRowIdentity.rows(for: filteredURLs)) { row in
+                let url = row.url
                 FileRowView(
                     url: url,
                     isSelected: selectedURLs.contains(url),

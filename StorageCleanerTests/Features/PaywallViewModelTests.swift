@@ -72,6 +72,36 @@ final class PaywallViewModelTests: XCTestCase {
         _ = failingService
     }
 
+    func testLoadProductsEmptyCatalogShowsFallbackPlans() async {
+        let emptyService = EmptyCatalogService()
+        let viewModel = PaywallViewModel(service: emptyService)
+
+        await viewModel.loadProducts()
+
+        XCTAssertFalse(viewModel.isLoadingProducts)
+        XCTAssertEqual(viewModel.plans.count, 3)
+        guard case let .info(message) = viewModel.banner else {
+            return XCTFail("Expected info banner, got \(viewModel.banner)")
+        }
+        XCTAssertTrue(message.lowercased().contains("fallback"))
+    }
+
+    func testLoadProductsTimeoutShowsFallbackPlans() async {
+        let hangingService = HangingLoadService()
+        let viewModel = PaywallViewModel(
+            service: hangingService,
+            productLoadTimeout: .milliseconds(10)
+        )
+
+        await viewModel.loadProducts()
+
+        XCTAssertFalse(viewModel.isLoadingProducts)
+        XCTAssertEqual(viewModel.plans.count, 3)
+        guard case .error = viewModel.banner else {
+            return XCTFail("Expected error banner, got \(viewModel.banner)")
+        }
+    }
+
     // MARK: - Purchase
 
     func testPurchaseSuccessUpdatesEntitlementAndShowsSuccessBanner() async {
@@ -244,6 +274,35 @@ private final class ThrowingLoadService: SubscriptionService, @unchecked Sendabl
             let errorDescription: String? = "load failed"
         }
         throw LoadBoom()
+    }
+    func purchase(productID: String) async throws -> PurchaseOutcome { .cancelled }
+    func restore() async throws -> SubscriptionEntitlement { await currentEntitlement() }
+
+    @MainActor
+    func showManageSubscriptions() {}
+}
+
+private final class EmptyCatalogService: SubscriptionService, @unchecked Sendable {
+    func currentEntitlement() async -> SubscriptionEntitlement { .free }
+    func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
+        AsyncStream { $0.yield(.free); $0.finish() }
+    }
+    func loadProducts() async throws -> [SubscriptionPlan] { [] }
+    func purchase(productID: String) async throws -> PurchaseOutcome { .cancelled }
+    func restore() async throws -> SubscriptionEntitlement { await currentEntitlement() }
+
+    @MainActor
+    func showManageSubscriptions() {}
+}
+
+private final class HangingLoadService: SubscriptionService, @unchecked Sendable {
+    func currentEntitlement() async -> SubscriptionEntitlement { .free }
+    func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
+        AsyncStream { $0.yield(.free); $0.finish() }
+    }
+    func loadProducts() async throws -> [SubscriptionPlan] {
+        try await Task.sleep(for: .seconds(60))
+        return []
     }
     func purchase(productID: String) async throws -> PurchaseOutcome { .cancelled }
     func restore() async throws -> SubscriptionEntitlement { await currentEntitlement() }

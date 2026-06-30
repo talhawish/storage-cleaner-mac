@@ -12,10 +12,9 @@ struct XcodeStorageScanner: StorageCategoryScanning {
             paths: [
                 DependencyPaths.Apple.derivedData,
                 DependencyPaths.Apple.archives,
-                DependencyPaths.Apple.coreSimulator,
                 DependencyPaths.Apple.swiftPM
             ],
-            safety: .safe,
+            safety: .review,
             collector: collector
         )
     }

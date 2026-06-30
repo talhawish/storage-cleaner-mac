@@ -238,7 +238,8 @@ private struct CleanupCategoryRow: View {
 
     private var pathList: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(summary.samplePaths, id: \.self) { url in
+            ForEach(URLRowIdentity.rows(for: summary.samplePaths)) { row in
+                let url = row.url
                 HStack(spacing: 6) {
                     Image(systemName: "doc")
                         .font(.caption2)

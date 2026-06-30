@@ -113,7 +113,10 @@ private extension AppShellView {
                         case .section(.simulatorsEmulators):
                             EmulatorsView(
                                 canUseProActions: viewModel.canCleanup,
-                                onRequirePro: { _ = viewModel.gateFileAction() }
+                                onRequirePro: { _ = viewModel.gateFileAction() },
+                                onCleanupComplete: { result, images in
+                                    await viewModel.reconcileEmulatorCleanup(result, removedImages: images)
+                                }
                             )
                         case .section(.largeFiles):
                             largeFilesView(

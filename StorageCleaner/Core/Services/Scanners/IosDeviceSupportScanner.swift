@@ -41,7 +41,7 @@ struct IosDeviceSupportScanner: StorageCategoryScanning {
             kind: kind,
             domain: .appleDevelopment,
             candidates: candidates,
-            safety: .review
+            safety: .safe
         )
 
         return CategoryScanResult(

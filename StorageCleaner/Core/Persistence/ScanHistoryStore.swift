@@ -93,9 +93,10 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
     }
 
     func recordCleanupActions(_ entries: [CleanupAuditEntry], disk: ScanDiskSnapshot) {
+        let entries = sanitizedEntries(from: entries)
         guard !entries.isEmpty else { return }
 
-        let scan = mostRecentScan()
+        let scan = mostRecentScan() ?? createCleanupOnlyScan(disk: disk)
         let newBytes = saturatedCleanupTotal(for: entries)
         for entry in entries {
             let action = StoredCleanupAction(
@@ -109,13 +110,25 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         }
         // Update the scan's running total in-place so the Cleanup History row can read a
         // single field for the "storage recovered" call-out without re-summing actions.
-        if let scan {
-            scan.cleanedBytes = saturatedAdd(scan.cleanedBytes, newBytes)
-            if disk.isAvailable {
-                scan.freeBytesAfter = disk.freeBytes
-            }
+        scan.cleanedBytes = saturatedAdd(scan.cleanedBytes, newBytes)
+        if disk.isAvailable {
+            scan.freeBytesAfter = disk.freeBytes
         }
         save()
+    }
+
+    private static let samplePathLimit = 5
+
+    private func sanitizedEntries(from entries: [CleanupAuditEntry]) -> [CleanupAuditEntry] {
+        entries.compactMap { entry in
+            guard entry.itemCount > 0, entry.bytesReclaimed >= 0 else { return nil }
+            return CleanupAuditEntry(
+                kind: entry.kind,
+                bytesReclaimed: entry.bytesReclaimed,
+                itemCount: entry.itemCount,
+                samplePaths: Self.samplePaths(from: entry.samplePaths)
+            )
+        }
     }
 
     private func mostRecentScan() -> StoredScan? {
@@ -124,6 +137,32 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         )
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first
+    }
+
+    private func createCleanupOnlyScan(disk: ScanDiskSnapshot) -> StoredScan {
+        let scan = StoredScan(
+            durationSeconds: 0,
+            scannedItemCount: 0,
+            reclaimableBytes: 0,
+            volumeTotalBytes: disk.totalBytes,
+            freeBytesBefore: 0,
+            freeBytesAfter: disk.isAvailable ? disk.freeBytes : 0,
+            findings: []
+        )
+        context.insert(scan)
+        return scan
+    }
+
+    private static func samplePaths<S: Sequence>(from paths: S) -> [URL] where S.Element == URL {
+        var seen = Set<String>()
+        var samples: [URL] = []
+        for path in paths {
+            let normalizedPath = path.normalizedFilesystemPath
+            guard seen.insert(normalizedPath).inserted else { continue }
+            samples.append(path)
+            if samples.count == samplePathLimit { break }
+        }
+        return samples
     }
 
     private func saturatedCleanupTotal(for entries: [CleanupAuditEntry]) -> Int64 {

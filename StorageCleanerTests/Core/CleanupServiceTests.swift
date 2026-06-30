@@ -41,6 +41,20 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 12_288)
     }
 
+    func testDeleteDirectoryCountsHiddenFilesInReclaimedBytes() async throws {
+        let directory = temporaryDirectory.appending(path: "hidden-cache", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 4_096).write(to: directory.appending(path: ".cache"))
+        try Data(repeating: 2, count: 4_096).write(to: directory.appending(path: "visible-cache"))
+
+        let result = await FileManagerCleanupService().delete(urls: [directory])
+        trashedURLs.append(contentsOf: result.deletedURLs)
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertGreaterThanOrEqual(result.deletedItems.first?.bytesReclaimed ?? 0, 8_192)
+        XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 8_192)
+    }
+
     func testDeletePermanentlyRemovesItemAlreadyInTrash() async throws {
         let file = temporaryDirectory.appending(path: "trash-me.bin")
         try Data(repeating: 3, count: 4_096).write(to: file)

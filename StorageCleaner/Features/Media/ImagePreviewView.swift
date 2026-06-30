@@ -167,10 +167,11 @@ struct ZoomableImageView: View {
 
 // MARK: - SVG
 
-/// Renders an SVG through the same WebKit-backed rasterizer used by thumbnails.
-/// Embedding a live `WKWebView` in the detail modal can fail to paint in some
-/// SwiftUI sheet layouts; a rasterized `NSImage` is deterministic and still
-/// sharp at the modal's display size.
+/// Renders an SVG through the same provider used by grid/list thumbnails.
+/// That keeps the full fallback chain intact: Quick Look first, native image
+/// loading second, and the WebKit-backed SVG rasterizer last. Large generated
+/// SVGs can be expensive for the rasterizer, while Quick Look often handles
+/// them correctly.
 struct SVGImagePreview: View {
     let url: URL
     let permissionHandler: (any StoragePermissionHandling)?
@@ -214,13 +215,12 @@ struct SVGImagePreview: View {
     private func load(for size: CGSize) async {
         let sideLength = max(1, max(size.width, size.height))
         let scale = await MainActor.run { NSScreen.main?.backingScaleFactor ?? 2 }
-        let rendered = await withPreviewAccess {
-            await SVGImageRenderer.shared.rasterize(
-                url: url,
-                sideLength: sideLength,
-                scale: scale
-            )
-        }
+        let rendered = await MediaThumbnailProvider.shared.generateThumbnail(
+            for: url,
+            sideLength: sideLength,
+            scale: scale,
+            permissionHandler: permissionHandler
+        )
         guard !Task.isCancelled else { return }
         if let rendered {
             image = rendered
@@ -231,14 +231,6 @@ struct SVGImagePreview: View {
         }
     }
 
-    private func withPreviewAccess<T>(_ body: () async -> T) async -> T {
-        guard let permissionHandler else {
-            return await body()
-        }
-        let access = permissionHandler.beginHomeFolderAccess()
-        defer { access?.stop() }
-        return await body()
-    }
 }
 
 // MARK: - Video

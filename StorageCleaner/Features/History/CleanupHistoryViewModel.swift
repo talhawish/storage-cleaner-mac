@@ -176,6 +176,7 @@ final class CleanupHistoryViewModel {
         let categories = scan.cleanupActions
             .compactMap { action -> CleanupCategorySummary? in
                 guard let kind = StorageFindingKind(rawValue: action.kindRaw) else { return nil }
+                guard action.itemCount > 0, action.bytesReclaimed >= 0 else { return nil }
                 return CleanupCategorySummary(
                     kind: kind,
                     bytesReclaimed: action.bytesReclaimed,

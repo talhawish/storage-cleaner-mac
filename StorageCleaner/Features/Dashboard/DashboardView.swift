@@ -8,6 +8,7 @@ struct DashboardView: View {
     @AppStorage("showReviewItems")
     private var showReviewItems = true
     @State private var showQuickClean = false
+    @State private var showPostScanPaywall = true
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -142,6 +143,15 @@ struct DashboardView: View {
                     startScan: viewModel.startScan,
                     quickClean: { showQuickClean = true }
                 )
+
+                if showPostScanPaywall, !viewModel.currentEntitlement.isPro {
+                    PostScanPaywallCard(
+                        reclaimableBytes: viewModel.totalReclaimableBytes,
+                        onUpgrade: { _ = viewModel.gateFileAction() },
+                        onDismiss: { showPostScanPaywall = false }
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 let domainTiles = StorageOverview.tiles(in: snapshot.findings, maxTiles: 6)
                 if !domainTiles.isEmpty {

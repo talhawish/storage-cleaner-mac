@@ -112,6 +112,13 @@ struct EmulatorImage: Identifiable, Hashable, Sendable {
     let lastUsed: Date?
 }
 
+extension EmulatorImage {
+    var trashDirectoryURL: URL? {
+        guard case let .trashDirectory(url) = removal else { return nil }
+        return url
+    }
+}
+
 /// Outcome of removing a set of emulator images.
 struct EmulatorCleanupResult: Sendable {
     let removedIDs: [String]

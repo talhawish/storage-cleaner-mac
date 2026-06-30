@@ -22,6 +22,14 @@ final class CLIRemovalServiceTests: XCTestCase {
         XCTAssertEqual(CLIRemovalService.classify(versionDir), .other)
     }
 
+    func testClassifyRequiresManualRemovalForSystemJDK() {
+        let jdk = URL(fileURLWithPath: "/Library/Java/JavaVirtualMachines/temurin-21.jdk", isDirectory: true)
+
+        guard case .manualRemovalRequired = CLIRemovalService.classify(jdk) else {
+            return XCTFail("System JDKs must not be trashed automatically")
+        }
+    }
+
     // MARK: - Homebrew uninstall
 
     func testFormulaIsUninstalledViaBrewAndNotTrashed() async {
@@ -100,6 +108,21 @@ final class CLIRemovalServiceTests: XCTestCase {
 
         XCTAssertTrue(result.deletedURLs.isEmpty)
         XCTAssertEqual(result.failedCount, 1)
+    }
+
+    func testSystemJDKRemovalReportsManualFailureWithoutTrash() async {
+        let jdk = URL(fileURLWithPath: "/Library/Java/JavaVirtualMachines/temurin-21.jdk", isDirectory: true)
+        let recorder = Recorder()
+        let service = makeService(recorder: recorder)
+
+        let result = await service.remove([jdk])
+
+        XCTAssertTrue(recorder.trashed.isEmpty)
+        XCTAssertTrue(result.deletedURLs.isEmpty)
+        XCTAssertEqual(result.failedCount, 1)
+        guard case CLIRemovalError.manualRemovalRequired? = result.failedURLs.first?.1 else {
+            return XCTFail("Expected manualRemovalRequired")
+        }
     }
 
     // MARK: - Broken-symlink sweep

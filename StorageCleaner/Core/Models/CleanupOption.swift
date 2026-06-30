@@ -107,9 +107,9 @@ enum CleanupOptionsRegistry {
             icon: "wind",
             iconColor: "cyan",
             domain: .mobileDevelopment,
-            safety: .review,
+            safety: .safe,
             paths: ["~/.pub-cache", "~/Library/Caches/flutter"],
-            isSafeByDefault: false,
+            isSafeByDefault: true,
             category: .developerTools,
             storageKind: .flutterArtifacts
         ),
@@ -137,9 +137,9 @@ enum CleanupOptionsRegistry {
             icon: "chevron.left.forwardslash.chevron.right",
             iconColor: "orange",
             domain: .otherCaches,
-            safety: .review,
+            safety: .safe,
             paths: ["~/.cargo/registry", "~/.cargo/git/db"],
-            isSafeByDefault: false,
+            isSafeByDefault: true,
             category: .developerTools,
             storageKind: .rustDependencies
         ),
@@ -169,12 +169,12 @@ enum CleanupOptionsRegistry {
             icon: "chevron.left.forwardslash.chevron.right",
             iconColor: "purple",
             domain: .otherCaches,
-            safety: .review,
+            safety: .safe,
             paths: [
                 "~/Library/Caches/composer",
                 "~/.composer/cache"
             ],
-            isSafeByDefault: false,
+            isSafeByDefault: true,
             category: .developerTools,
             storageKind: .phpDependencies
         ),
@@ -185,12 +185,12 @@ enum CleanupOptionsRegistry {
             icon: "chevron.left.forwardslash.chevron.right",
             iconColor: "red",
             domain: .otherCaches,
-            safety: .review,
+            safety: .safe,
             paths: [
                 "~/Library/Caches/gems",
                 "~/.gem/cache"
             ],
-            isSafeByDefault: false,
+            isSafeByDefault: true,
             category: .developerTools,
             storageKind: .rubyDependencies
         ),
@@ -218,9 +218,9 @@ enum CleanupOptionsRegistry {
             icon: "chevron.left.forwardslash.chevron.right",
             iconColor: "cyan",
             domain: .otherCaches,
-            safety: .review,
+            safety: .safe,
             paths: ["~/go/pkg/mod"],
-            isSafeByDefault: false,
+            isSafeByDefault: true,
             category: .developerTools,
             storageKind: .goDependencies
         ),
@@ -345,14 +345,14 @@ enum CleanupOptionsRegistry {
             icon: "ladybug.fill",
             iconColor: "violet",
             domain: .appleDevelopment,
-            safety: .review,
+            safety: .safe,
             paths: [
                 "~/Library/Developer/Xcode/iOS DeviceSupport",
                 "~/Library/Developer/Xcode/tvOS DeviceSupport",
                 "~/Library/Developer/Xcode/watchOS DeviceSupport",
                 "~/Library/Developer/Xcode/visionOS DeviceSupport"
             ],
-            isSafeByDefault: false,
+            isSafeByDefault: true,
             category: .emulators,
             storageKind: .iosDeviceSupport
         ),

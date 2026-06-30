@@ -48,56 +48,76 @@ struct FileManagerCleanupService: CleanupService {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
-        let task = Task.detached(priority: .userInitiated) {
-            Self.deleteSynchronously(urls: urls)
-        }
+        return await withTaskGroup(of: CleanupResult.self) { group in
+            for url in urls {
+                group.addTask(priority: .userInitiated) {
+                    Self.deleteSynchronously(url: url)
+                }
+            }
 
-        return await withTaskCancellationHandler {
-            await task.value
-        } onCancel: {
-            task.cancel()
+            var trashed: [URL] = []
+            var deletedItems: [DeletedItem] = []
+            var failed: [(URL, Error)] = []
+            for await result in group {
+                trashed.append(contentsOf: result.deletedURLs)
+                deletedItems.append(contentsOf: result.deletedItems)
+                failed.append(contentsOf: result.failedURLs)
+            }
+            return CleanupResult(
+                deletedURLs: trashed,
+                deletedItems: deletedItems,
+                failedURLs: failed,
+                totalBytesReclaimed: deletedItems.reduce(0) { $0 + $1.bytesReclaimed }
+            )
         }
     }
 
-    private static func deleteSynchronously(urls: [URL]) -> CleanupResult {
+    private static func deleteSynchronously(url: URL) -> CleanupResult {
         let fileManager = FileManager.default
         var trashed: [URL] = []
         var deletedItems: [DeletedItem] = []
         var failed: [(URL, Error)] = []
         var totalBytes: Int64 = 0
 
-        for url in urls {
-            guard !Task.isCancelled else { break }
+        guard !Task.isCancelled else {
+            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+        }
 
-            guard fileManager.fileExists(atPath: url.path) else {
-                failed.append((url, CleanupError.fileNotFound(url)))
-                continue
+        guard fileManager.fileExists(atPath: url.path) else {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [(url, CleanupError.fileNotFound(url))],
+                totalBytesReclaimed: 0
+            )
+        }
+
+        guard let size = sizeOfItem(at: url, fileManager: fileManager) else {
+            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+        }
+        guard !Task.isCancelled else {
+            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+        }
+
+        if url.path.hasPrefix(Self.trashPrefix) {
+            do {
+                try fileManager.removeItem(at: url)
+            } catch {
+                failed.append((url, error))
             }
-
-            guard let size = sizeOfItem(at: url, fileManager: fileManager) else { break }
-            guard !Task.isCancelled else { break }
-
-            if url.path.hasPrefix(Self.trashPrefix) {
-                do {
-                    try fileManager.removeItem(at: url)
-                } catch {
-                    failed.append((url, error))
-                    continue
-                }
-            } else {
-                do {
-                    var resultingURL: NSURL?
-                    try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
-                    trashed.append(resultingURL as? URL ?? url)
-                } catch {
-                    failed.append((url, error))
-                    continue
-                }
+        } else {
+            do {
+                var resultingURL: NSURL?
+                try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
+                trashed.append(resultingURL as? URL ?? url)
+            } catch {
+                failed.append((url, error))
             }
+        }
+        if failed.isEmpty {
             deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
             totalBytes += size
         }
-
         return CleanupResult(
             deletedURLs: trashed,
             deletedItems: deletedItems,
@@ -124,7 +144,7 @@ struct FileManagerCleanupService: CleanupService {
         guard let enumerator = fileManager.enumerator(
             at: url,
             includingPropertiesForKeys: resourceKeys,
-            options: [.skipsHiddenFiles]
+            options: []
         ) else {
             return 0
         }

@@ -79,21 +79,7 @@ extension StorageFinding {
     /// dashboard finding (or the parent finding for a child path).
     func contains(_ url: URL) -> Bool {
         trackedURLs.contains { scannedURL in
-            scannedURL == url || scannedURL.isAncestor(of: url)
+            scannedURL.matchesFilesystemURL(url) || scannedURL.isAncestor(of: url)
         }
-    }
-}
-
-extension URL {
-    /// True when this URL is an ancestor of `descendant` on the filesystem.
-    /// Distinguishes genuine parent paths from coincidental string prefixes
-    /// (e.g. "Chrome" must not claim "ChromeX") by requiring a `/`
-    /// separator between the two path components.
-    func isAncestor(of descendant: URL) -> Bool {
-        let ancestorPath = standardizedFileURL.path
-        let descendantPath = descendant.standardizedFileURL.path
-        guard descendantPath.hasPrefix(ancestorPath) else { return false }
-        let remainder = descendantPath.dropFirst(ancestorPath.count)
-        return remainder.first == "/"
     }
 }

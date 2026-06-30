@@ -94,6 +94,7 @@ final class SystemJunkScannersTests: XCTestCase {
 
         let finding = try XCTUnwrap(result.finding)
         XCTAssertEqual(finding.kind, .orphanedAppCaches)
+        XCTAssertEqual(finding.safety, .safe)
         XCTAssertEqual(finding.itemCount, 1)
         XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["OrphanedCaches"])
     }
@@ -212,7 +213,7 @@ final class SystemJunkScannersTests: XCTestCase {
         let finding = try XCTUnwrap(result.finding)
         XCTAssertEqual(finding.kind, .oldCrashReports)
         XCTAssertEqual(finding.domain, .systemJunk)
-        XCTAssertEqual(finding.safety, .review)
+        XCTAssertEqual(finding.safety, .safe)
         XCTAssertEqual(finding.itemCount, 8)
         let names = Set(finding.filePaths.map(\.lastPathComponent))
         XCTAssertEqual(

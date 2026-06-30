@@ -181,6 +181,38 @@ final class CleanupHistoryViewModelTests: XCTestCase {
         XCTAssertEqual(summary.totalItemsCleaned, 1)
     }
 
+    func testSummarySkipsMalformedCleanupActions() throws {
+        let fixture = makeFixture()
+        let scan = makeScan(in: fixture.context)
+        makeCleanup(in: fixture.context, scan: scan, kind: .junkFiles, bytes: 1_000, items: 1)
+
+        let negativeBytes = StoredCleanupAction(
+            kindRaw: StorageFindingKind.trash.rawValue,
+            bytesReclaimed: -100,
+            itemCount: 1
+        )
+        negativeBytes.scan = scan
+        fixture.context.insert(negativeBytes)
+
+        let zeroItems = StoredCleanupAction(
+            kindRaw: StorageFindingKind.browserCaches.rawValue,
+            bytesReclaimed: 500,
+            itemCount: 0
+        )
+        zeroItems.scan = scan
+        fixture.context.insert(zeroItems)
+        try fixture.context.save()
+
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
+        let viewModel = CleanupHistoryViewModel()
+        viewModel.update(with: scans)
+
+        let summary = try XCTUnwrap(viewModel.summaries.first)
+        XCTAssertEqual(summary.categories.map(\.kind), [.junkFiles])
+        XCTAssertEqual(summary.totalBytesCleaned, 1_000)
+        XCTAssertEqual(summary.totalItemsCleaned, 1)
+    }
+
     func testSummaryWithoutCleanupMarksHasCleanupFalse() throws {
         let fixture = makeFixture()
         _ = makeScan(in: fixture.context)

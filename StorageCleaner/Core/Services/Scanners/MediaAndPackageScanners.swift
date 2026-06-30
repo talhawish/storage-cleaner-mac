@@ -50,7 +50,7 @@ struct RustDependencyScanner: StorageCategoryScanning {
             kind: .rustDependencies,
             domain: .otherCaches,
             paths: DependencyPaths.Rust.cacheDirs,
-            safety: .review,
+            safety: .safe,
             collector: collector
         )
     }
@@ -70,7 +70,7 @@ struct GoDependencyScanner: StorageCategoryScanning {
             kind: .goDependencies,
             domain: .otherCaches,
             paths: DependencyPaths.Golang.cacheDirs,
-            safety: .review,
+            safety: .safe,
             collector: collector
         )
     }

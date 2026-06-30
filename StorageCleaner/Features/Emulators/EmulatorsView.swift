@@ -10,6 +10,7 @@ import SwiftUI
 struct EmulatorsView: View {
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
+    var onCleanupComplete: (EmulatorCleanupResult, [EmulatorImage]) async -> Void = { _, _ in }
 
     @State private var viewModel: EmulatorsViewModel
     @Environment(\.accessibilityReduceMotion)
@@ -18,10 +19,13 @@ struct EmulatorsView: View {
     init(
         viewModel: EmulatorsViewModel = EmulatorsViewModel(),
         canUseProActions: Bool = true,
-        onRequirePro: @escaping () -> Void = {}
+        onRequirePro: @escaping () -> Void = {},
+        onCleanupComplete: @escaping (EmulatorCleanupResult, [EmulatorImage]) async -> Void = { _, _ in }
     ) {
         self.canUseProActions = canUseProActions
         self.onRequirePro = onRequirePro
+        self.onCleanupComplete = onCleanupComplete
+        viewModel.canDelete = { canUseProActions }
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -59,7 +63,8 @@ struct EmulatorsView: View {
                     viewModel.selectedIDs.removeAll()
                     viewModel.showConfirmation = false
                     Task {
-                        _ = await viewModel.delete(toRemove)
+                        let result = await viewModel.delete(toRemove)
+                        await onCleanupComplete(result, toRemove)
                         viewModel.start()
                     }
                 },

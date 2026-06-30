@@ -33,10 +33,12 @@ extension DashboardViewModel {
         deletedURLs: [URL: Int64]
     ) -> [DuplicateGroup] {
         groups.compactMap { group in
-            let remainingFiles = group.files.filter { deletedURLs[$0.url] == nil }
+            let remainingFiles = group.files.filter { file in
+                !deletedURLs.keys.contains { $0.matchesFilesystemURL(file.url) }
+            }
             guard remainingFiles.count > 1 else { return nil }
 
-            let keepURL = remainingFiles.contains(where: { $0.url == group.keepURL })
+            let keepURL = remainingFiles.contains(where: { $0.url.matchesFilesystemURL(group.keepURL) })
                 ? group.keepURL
                 : DuplicateKeepStrategy.bestToKeep(from: remainingFiles).url
             return DuplicateGroup(contentHash: group.contentHash, files: remainingFiles, keepURL: keepURL)

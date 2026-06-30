@@ -93,3 +93,16 @@ struct FindingFileRecordsIdentity: Hashable {
         let path: String
     }
 }
+
+struct IdentifiedURLRow: Identifiable, Equatable, Sendable {
+    let id: Int
+    let url: URL
+}
+
+enum URLRowIdentity {
+    static func rows(for urls: [URL]) -> [IdentifiedURLRow] {
+        urls.enumerated().map { offset, url in
+            IdentifiedURLRow(id: offset, url: url)
+        }
+    }
+}

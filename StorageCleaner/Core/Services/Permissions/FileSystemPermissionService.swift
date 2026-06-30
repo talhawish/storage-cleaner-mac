@@ -29,7 +29,11 @@ struct FileSystemPermissionService: StoragePermissionHandling {
     }
 
     func currentStatuses() -> [StoragePermissionStatus] {
-        let homeAccessible = resolveBookmarkedHome() != nil
+        let resolvedHome = resolveBookmarkedHome()
+        if let resolvedHome {
+            refreshMissingChildBookmarks(for: resolvedHome)
+        }
+        let homeAccessible = resolvedHome != nil
         var statuses: [StoragePermissionStatus] = [
             StoragePermissionStatus(
                 scope: .home,
@@ -111,6 +115,7 @@ struct FileSystemPermissionService: StoragePermissionHandling {
 
         var accesses: [SecurityScopedResourceAccess] = []
         accesses.append(SecurityScopedResourceAccess(url: home, didStartAccessing: didStartHomeAccess))
+        refreshMissingChildBookmarksWhileHomeAccessIsActive(for: home)
 
         for url in resolveChildBookmarks(homeDirectory: home) {
             let didStartChildAccess = url.startAccessingSecurityScopedResource()
@@ -202,6 +207,32 @@ struct FileSystemPermissionService: StoragePermissionHandling {
         }
 
         for folder in Self.scopedChildFolders {
+            let childURL = homeURL.appending(path: folder.relativePath, directoryHint: folder.directoryHint)
+            guard FileManager.default.fileExists(atPath: childURL.path) else {
+                bookmarkStore.removeObject(forKey: folder.bookmarkKey)
+                continue
+            }
+            do {
+                try refreshBookmark(for: childURL, key: folder.bookmarkKey)
+            } catch {
+                bookmarkStore.removeObject(forKey: folder.bookmarkKey)
+            }
+        }
+    }
+
+    private func refreshMissingChildBookmarks(for homeURL: URL) {
+        let didStart = homeURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStart {
+                homeURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        refreshMissingChildBookmarksWhileHomeAccessIsActive(for: homeURL)
+    }
+
+    private func refreshMissingChildBookmarksWhileHomeAccessIsActive(for homeURL: URL) {
+        for folder in Self.scopedChildFolders where bookmarkStore.data(forKey: folder.bookmarkKey) == nil {
             let childURL = homeURL.appending(path: folder.relativePath, directoryHint: folder.directoryHint)
             guard FileManager.default.fileExists(atPath: childURL.path) else {
                 bookmarkStore.removeObject(forKey: folder.bookmarkKey)

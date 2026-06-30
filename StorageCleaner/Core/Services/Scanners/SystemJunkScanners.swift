@@ -220,7 +220,7 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
             kind: kind,
             domain: .systemJunk,
             candidates: result.candidates,
-            safety: .review
+            safety: .safe
         )
 
         return CategoryScanResult(
@@ -298,7 +298,8 @@ struct OrphanedAppCachesScanner: StorageCategoryScanning {
                 catalog: catalog,
                 limit: 200
             )],
-            collector: collector
+            collector: collector,
+            safety: .safe
         )
     }
 
@@ -312,7 +313,8 @@ struct OrphanedAppCachesScanner: StorageCategoryScanning {
         scanner = OrphanedDirectoriesScanner(
             kind: .orphanedAppCaches,
             resolvers: [OrphanDirectoryResolver(root: root, catalog: catalog, limit: 200)],
-            collector: collector
+            collector: collector,
+            safety: .safe
         )
     }
 

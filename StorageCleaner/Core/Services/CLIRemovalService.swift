@@ -3,6 +3,7 @@ import Foundation
 enum CLIRemovalError: Error, LocalizedError, Equatable {
     case homebrewUninstallFailed(name: String, message: String)
     case nodeUninstallFailed(package: String, message: String)
+    case manualRemovalRequired(URL, message: String)
     case removalFailed(URL, message: String)
 
     var errorDescription: String? {
@@ -11,6 +12,8 @@ enum CLIRemovalError: Error, LocalizedError, Equatable {
             "Couldn't uninstall \(name): \(message)"
         case let .nodeUninstallFailed(package, message):
             "Couldn't uninstall \(package): \(message)"
+        case let .manualRemovalRequired(url, message):
+            "Manual removal required for \(url.lastPathComponent): \(message)"
         case let .removalFailed(url, message):
             "Couldn't remove \(url.lastPathComponent): \(message)"
         }
@@ -93,6 +96,8 @@ struct CLIRemovalService: Sendable {
                 await removeHomebrew(url, name: name, isCask: isCask, brew: brew, into: &outcome)
             case let .nodeGlobal(plan):
                 await removeNodeGlobal(url, plan: plan, into: &outcome)
+            case let .manualRemovalRequired(message):
+                outcome.recordFailure(url, CLIRemovalError.manualRemovalRequired(url, message: message))
             case .other:
                 trash(url, into: &outcome)
             }
@@ -199,6 +204,7 @@ extension CLIRemovalService {
     enum ProgramKind: Equatable {
         case homebrew(name: String, isCask: Bool)
         case nodeGlobal(NodeGlobalRemoval)
+        case manualRemovalRequired(message: String)
         case other
     }
 
@@ -214,6 +220,12 @@ extension CLIRemovalService {
 
     /// Classifies a program URL so it can be removed by the right mechanism.
     static func classify(_ url: URL) -> ProgramKind {
+        if isSystemJDK(url) {
+            return .manualRemovalRequired(
+                message: "System JDKs under /Library/Java are managed by macOS or their installer."
+            )
+        }
+
         switch url.deletingLastPathComponent().lastPathComponent {
         case "Cellar":
             return .homebrew(name: url.lastPathComponent, isCask: false)
@@ -227,6 +239,14 @@ extension CLIRemovalService {
             return .nodeGlobal(plan)
         }
         return .other
+    }
+
+    private static func isSystemJDK(_ url: URL) -> Bool {
+        let root = URL(fileURLWithPath: "/Library/Java/JavaVirtualMachines", isDirectory: true)
+        guard root.matchesFilesystemURL(url) || root.isAncestor(of: url) else { return false }
+        return url.pathExtension.lowercased() == "jdk"
+            || url.pathComponents.contains { $0.lowercased().hasSuffix(".jdk") }
+            || root.matchesFilesystemURL(url)
     }
 
     /// Builds an uninstall plan for a package that lives in a `node_modules` tree,
