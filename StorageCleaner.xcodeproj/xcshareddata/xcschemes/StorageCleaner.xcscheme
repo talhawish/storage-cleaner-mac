@@ -109,9 +109,7 @@
             ReferencedContainer = "container:StorageCleaner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <StoreKitConfigurationFileReference
-         identifier = "StorageCleaner/Resources/StorageCleanerPro.storekit">
-      </StoreKitConfigurationFileReference>
+
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
