@@ -11,10 +11,6 @@ final class PaywallViewModelTests: XCTestCase {
         upgradedCallbackCount = 0
     }
 
-    /// Waits up to 50 yields for the VM's entitlement to settle
-    /// onto `target`. The entitlement comes from an `AsyncStream`
-    /// so a one-shot `setEntitlement(_:)` call needs at least one
-    /// scheduler tick to reach the consumer.
     private func waitForEntitlement(
         _ viewModel: PaywallViewModel,
         _ target: SubscriptionEntitlement
@@ -49,57 +45,27 @@ final class PaywallViewModelTests: XCTestCase {
     }
 
     func testLoadProductsFailureShowsErrorBanner() async {
-        service.purchaseError = nil
-        struct LoadFailure: Error, LocalizedError {
-            let errorDescription: String? = "boom"
-        }
-        let viewModel = makeViewModel()
-        // Simulate a load failure by swapping loadProducts to throw.
         let failingService = ThrowingLoadService()
-        let failingViewModel = PaywallViewModel(
-            service: failingService,
-            onEntitlementUpgraded: nil
-        )
-        await failingViewModel.loadProducts()
-        XCTAssertFalse(failingViewModel.isLoadingProducts)
-        guard case .error = failingViewModel.banner else {
-            return XCTFail("Expected error banner, got \(failingViewModel.banner)")
+        let viewModel = PaywallViewModel(service: failingService)
+
+        await viewModel.loadProducts()
+
+        XCTAssertFalse(viewModel.isLoadingProducts)
+        XCTAssertTrue(viewModel.plans.isEmpty)
+        guard case let .error(message) = viewModel.banner else {
+            return XCTFail("Expected error banner, got \(viewModel.banner)")
         }
-        // Plans should fall back to the static catalog so the UI stays
-        // interactive even when the network is down.
-        XCTAssertEqual(failingViewModel.plans.count, 3)
-        _ = viewModel
-        _ = failingService
+        XCTAssertTrue(message.contains("load failed"))
     }
 
-    func testLoadProductsEmptyCatalogShowsFallbackPlans() async {
+    func testLoadProductsEmptyCatalogKeepsPlansEmpty() async {
         let emptyService = EmptyCatalogService()
         let viewModel = PaywallViewModel(service: emptyService)
 
         await viewModel.loadProducts()
 
         XCTAssertFalse(viewModel.isLoadingProducts)
-        XCTAssertEqual(viewModel.plans.count, 3)
-        guard case let .info(message) = viewModel.banner else {
-            return XCTFail("Expected info banner, got \(viewModel.banner)")
-        }
-        XCTAssertTrue(message.lowercased().contains("fallback"))
-    }
-
-    func testLoadProductsTimeoutShowsFallbackPlans() async {
-        let hangingService = HangingLoadService()
-        let viewModel = PaywallViewModel(
-            service: hangingService,
-            productLoadTimeout: .milliseconds(10)
-        )
-
-        await viewModel.loadProducts()
-
-        XCTAssertFalse(viewModel.isLoadingProducts)
-        XCTAssertEqual(viewModel.plans.count, 3)
-        guard case .error = viewModel.banner else {
-            return XCTFail("Expected error banner, got \(viewModel.banner)")
-        }
+        XCTAssertTrue(viewModel.plans.isEmpty)
     }
 
     // MARK: - Purchase
@@ -161,14 +127,11 @@ final class PaywallViewModelTests: XCTestCase {
         let viewModel = makeViewModel()
         await viewModel.loadProducts()
 
-        // Fire two purchases "concurrently"; only the first should
-        // set the in-flight flag, the second should no-op.
         let task1 = Task { await viewModel.purchase(productID: SubscriptionProductID.monthly) }
         let task2 = Task { await viewModel.purchase(productID: SubscriptionProductID.monthly) }
         await task1.value
         await task2.value
 
-        // After both complete, no purchase should be in flight.
         XCTAssertNil(viewModel.purchasingProductID)
     }
 
@@ -220,8 +183,6 @@ final class PaywallViewModelTests: XCTestCase {
         let viewModel = makeViewModel()
         await waitForEntitlement(viewModel, .free)
 
-        // Simulate an external entitlement change (e.g. a renewal
-        // observed by the live StoreKit listener).
         service.setEntitlement(.lifetime)
         await waitForEntitlement(viewModel, .lifetime)
     }
@@ -245,8 +206,6 @@ final class PaywallViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.shouldAutoDismissOnPurchase)
 
         await viewModel.purchase(productID: SubscriptionProductID.yearly)
-        // Callback still fires for the actual upgrade, just not via
-        // the auto-dismiss path.
         XCTAssertEqual(upgradedCallbackCount, 1)
     }
 
@@ -262,8 +221,6 @@ final class PaywallViewModelTests: XCTestCase {
     }
 }
 
-/// Test double that always throws from `loadProducts()`. Used to
-/// verify the paywall's fallback-catalog behavior.
 private final class ThrowingLoadService: SubscriptionService, @unchecked Sendable {
     func currentEntitlement() async -> SubscriptionEntitlement { .free }
     func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
@@ -288,22 +245,6 @@ private final class EmptyCatalogService: SubscriptionService, @unchecked Sendabl
         AsyncStream { $0.yield(.free); $0.finish() }
     }
     func loadProducts() async throws -> [SubscriptionPlan] { [] }
-    func purchase(productID: String) async throws -> PurchaseOutcome { .cancelled }
-    func restore() async throws -> SubscriptionEntitlement { await currentEntitlement() }
-
-    @MainActor
-    func showManageSubscriptions() {}
-}
-
-private final class HangingLoadService: SubscriptionService, @unchecked Sendable {
-    func currentEntitlement() async -> SubscriptionEntitlement { .free }
-    func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
-        AsyncStream { $0.yield(.free); $0.finish() }
-    }
-    func loadProducts() async throws -> [SubscriptionPlan] {
-        try await Task.sleep(for: .seconds(60))
-        return []
-    }
     func purchase(productID: String) async throws -> PurchaseOutcome { .cancelled }
     func restore() async throws -> SubscriptionEntitlement { await currentEntitlement() }
 

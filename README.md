@@ -74,7 +74,7 @@ verification pipeline.
    make bootstrap
    ```
 
-No API keys, database, code generation, environment files, or external services are currently required.
+No API keys, database, code generation, or external services are currently required.
 
 ## Open and run in Xcode
 
@@ -138,6 +138,18 @@ cleanup and deletion workflows require complete branch coverage.
 
 Build a signed, notarized `.app` for sharing with other developers.
 
+### Quick build
+
+Ensure `.env` has the app-specific password (see below), then run:
+
+```bash
+./build.sh
+```
+
+Output: `~/Desktop/StorageCleaner.dmg` — open it and drag the app to `/Applications`.
+
+### Manual build
+
 ### Prerequisites
 
 - Apple Developer Program account
@@ -146,12 +158,19 @@ Build a signed, notarized `.app` for sharing with other developers.
 ### One-time credential setup
 
 Create an [app-specific password](https://appleid.apple.com) named `StorageCleaner Notarization`,
-then store it for `notarytool`:
+add it to `.env`:
+
+```env
+APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
+```
+
+Then store it for `notarytool` (uses the password from `.env`):
 
 ```bash
-xcrun notarytool store-credentials "StorageCleaner" \
+source .env && xcrun notarytool store-credentials "StorageCleaner" \
   --apple-id "muhammadrizwan5040@gmail.com" \
-  --team-id "848R6Y8374"
+  --team-id "848R6Y8374" \
+  --password "$APP_SPECIFIC_PASSWORD"
 ```
 
 ### Archive, notarize, and staple
@@ -371,6 +390,42 @@ rm -rf ~/Library/Developer/Xcode/DerivedData/StorageCleaner-*
 See `TODO.md` for planned scanner domains and release milestones. The immediate next milestone is the
 production read-only filesystem inventory engine with permission handling, streaming traversal, cancellation,
 and deterministic scanner fixtures.
+
+## Landing page
+
+The landing page is a Nuxt 4 static site in `landing/`.
+
+### Setup
+
+```bash
+cd landing
+npm install
+```
+
+### Development
+
+```bash
+cd landing
+npm run dev        # local dev server
+```
+
+### Build
+
+```bash
+cd landing
+npm run build      # outputs to .output/public/
+```
+
+### Deploy to Firebase
+
+The project is configured for Firebase Hosting (`storage-cleaner-a0c0f`).
+
+Prerequisites: [Firebase CLI](https://firebase.google.com/docs/cli) installed and logged in.
+
+```bash
+cd landing && npm run build  # build first
+firebase deploy --only hosting
+```
 
 ## License
 

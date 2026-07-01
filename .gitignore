@@ -29,6 +29,11 @@ reports/
 *.dSYM.zip
 *.dSYM
 
+# Firebase
+.firebase/
+
 # Project Specific
 .commandcode/
+
+.env
 

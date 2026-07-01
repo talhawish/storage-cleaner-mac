@@ -1,0 +1,18 @@
+{
+  "hosting": {
+    "public": "landing/.output/public",
+    "ignore": [
+      "firebase.json",
+      ".firebase/**",
+      ".firebaserc"
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

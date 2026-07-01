@@ -1,7 +1,23 @@
 {
   "identifier" : "StorageCleanerProStore",
   "nonRenewingSubscriptions" : [],
-  "products" : [],
+  "products" : [
+    {
+      "displayPrice" : "49.99",
+      "familyShareable" : false,
+      "internalID" : "FFF08B93",
+      "localizations" : [
+        {
+          "description" : "One purchase, yours forever.",
+          "displayName" : "Storage Cleaner Pro Lifetime",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.storagecleaner.developer.pro.lifetime",
+      "referenceName" : "Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
   "settings" : {
     "_compatibilityTimeRate" : 1,
     "_locale" : "en_US",
@@ -61,27 +77,6 @@
           "referenceName" : "Pro Yearly",
           "subscriptionGroupID" : "20847C23",
           "type" : "RecurringSubscription"
-        },
-        {
-          "adHocOffers" : null,
-          "codeOffers" : null,
-          "displayPrice" : "49.99",
-          "familyShareable" : false,
-          "groupNumber" : 3,
-          "internalID" : "FFF08B93",
-          "introductoryOffer" : null,
-          "localizations" : [
-            {
-              "description" : "One purchase, yours forever.",
-              "displayName" : "Storage Cleaner Pro Lifetime",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.storagecleaner.developer.pro.lifetime",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Pro Lifetime",
-          "subscriptionGroupID" : "20847C23",
-          "type" : "NonConsumable"
         }
       ]
     }

@@ -67,19 +67,44 @@ actor StoreKitSubscriptionService: SubscriptionService {
     /// of any active subscriptions. Picks the lifetime product over
     /// yearly over monthly so an active Pro user who happens to have
     /// both never gets downgraded by a UI bug.
+    ///
+    /// Wraps the iteration in a 5-second timeout so a misbehaving
+    /// StoreKit daemon (e.g. no .storekit config on macOS) cannot
+    /// block the actor and prevent product loading.
     private func refreshEntitlementFromCurrentEntitlements() async {
-        var best: SubscriptionEntitlement = .free
-        for await result in Transaction.currentEntitlements {
-            guard case .verified(let txn) = result else { continue }
-            guard let ent = SubscriptionEntitlement.from(productID: txn.productID) else { continue }
-            if priority(ent) > priority(best) {
-                best = ent
+        let best: SubscriptionEntitlement
+        do {
+            best = try await withThrowingTaskGroup(of: SubscriptionEntitlement.self) { group in
+                group.addTask {
+                    var best: SubscriptionEntitlement = .free
+                    for await result in Transaction.currentEntitlements {
+                        guard case .verified(let txn) = result else { continue }
+                        guard let ent = SubscriptionEntitlement.from(productID: txn.productID) else { continue }
+                        if Self.priority(ent) > Self.priority(best) {
+                            best = ent
+                        }
+                    }
+                    return best
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(5))
+                    throw EntitlementRefreshTimeoutError()
+                }
+                guard let result = try await group.next() else {
+                    throw EntitlementRefreshTimeoutError()
+                }
+                group.cancelAll()
+                return result
             }
+        } catch {
+            best = .free
         }
         setEntitlement(best)
     }
 
-    private func priority(_ entitlement: SubscriptionEntitlement) -> Int {
+    private struct EntitlementRefreshTimeoutError: Error {}
+
+    private static func priority(_ entitlement: SubscriptionEntitlement) -> Int {
         switch entitlement {
         case .free: 0
         case .monthly: 1
@@ -138,7 +163,6 @@ actor StoreKitSubscriptionService: SubscriptionService {
     }
 
     func loadProducts() async throws -> [SubscriptionPlan] {
-        await startIfNeeded()
         let storeProducts = try await Product.products(for: SubscriptionProductID.all)
         cachedProducts = Dictionary(
             uniqueKeysWithValues: storeProducts.map { ($0.id, $0) }

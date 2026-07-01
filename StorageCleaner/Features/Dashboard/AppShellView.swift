@@ -249,9 +249,9 @@ private extension AppShellView {
 
 /// The actual sheet. Creates a fresh `PaywallViewModel` per
 /// presentation so the banner / spinner state never leaks between
-/// sessions. The model's `onDismiss` calls back into the controller
-/// so dismissing via "X" or a successful purchase is the same code
-/// path.
+/// sessions. The view model is stored in `@State` so it survives
+/// parent re-renders — if it were recreated mid-flight the paywall
+/// would snap back to skeleton state and never resolve.
 private struct PaywallSheet: View {
     let controller: SubscriptionController
     let trigger: PaywallTrigger
@@ -259,14 +259,22 @@ private struct PaywallSheet: View {
     @Environment(\.openURL)
     private var openURL
 
+    @State private var viewModel: PaywallViewModel
+
+    init(controller: SubscriptionController, trigger: PaywallTrigger) {
+        self.controller = controller
+        self.trigger = trigger
+        _viewModel = State(initialValue: PaywallViewModel(
+            service: controller.service,
+            onEntitlementUpgraded: { [weak controller] in
+                controller?.dismissPaywall()
+            }
+        ))
+    }
+
     var body: some View {
         PaywallView(
-            viewModel: PaywallViewModel(
-                service: controller.service,
-                onEntitlementUpgraded: { [weak controller] in
-                    controller?.dismissPaywall()
-                }
-            ),
+            viewModel: viewModel,
             onTermsTapped: { openURL(AppLinks.terms) },
             onPrivacyTapped: { openURL(AppLinks.privacy) }
         )
