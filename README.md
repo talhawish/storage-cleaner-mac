@@ -393,7 +393,7 @@ and deterministic scanner fixtures.
 
 ## Landing page
 
-The landing page is a Nuxt 4 static site in `landing/`.
+The landing page is a Nuxt 4 static site (SSG, pre-rendered HTML for SEO) in `landing/`.
 
 ### Setup
 
@@ -413,7 +413,7 @@ npm run dev        # local dev server
 
 ```bash
 cd landing
-npm run build      # outputs to .output/public/
+npm run build      # outputs pre-rendered static site to .output/public/
 ```
 
 ### Deploy to Firebase

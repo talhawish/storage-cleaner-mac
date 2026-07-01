@@ -42,7 +42,9 @@ export default defineNuxtConfig({
     description: 'A native macOS app that helps developers understand, scan and safely reclaim storage used by build artifacts, caches, simulators, Docker, and more.',
     defaultLocale: 'en',
     /** Primary contact email — read at runtime via `useSiteConfig().email`. */
-    email: 'info@horizam.com'
+    email: 'info@horizam.com',
+    /** Mac App Store URL. */
+    appStoreUrl: 'https://apps.apple.com/app/storage-cleaner-for-developers/id6784308176'
   },
 
   ogImage: {
@@ -60,6 +62,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    preset: 'static',
     prerender: {
       crawlLinks: true,
       routes: ['/', '/terms', '/privacy', '/contact', '/sitemap.xml', '/robots.txt']

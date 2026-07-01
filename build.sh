@@ -70,19 +70,25 @@ rm "$EXPORT_PLIST"
 echo "→ Creating DMG..."
 APP_BUNDLE="$EXPORT_PATH/$SCHEME.app"
 DMG_PATH="$HOME/Desktop/$SCHEME.dmg"
+DMG_RW="$HOME/Desktop/$SCHEME-rw.dmg"
 STAGING_DIR=$(mktemp -d)
 cp -R "$APP_BUNDLE" "$STAGING_DIR/"
 ln -s /Applications "$STAGING_DIR/Applications"
 
-# Volume icon from the app icon
+# Volume icon
 ICNS_SRC="StorageCleaner/Assets.xcassets/AppIcon.appiconset/1024.png"
 ICNS_PATH=$(mktemp).icns
 sips -s format icns "$ICNS_SRC" --out "$ICNS_PATH" &>/dev/null
-cp "$ICNS_PATH" "$STAGING_DIR/.VolumeIcon.icns"
-rm "$ICNS_PATH"
-SetFile -a C "$STAGING_DIR"
 
-hdiutil create -volname "$SCHEME" -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
+# Create RW DMG, attach, set icon, detach, convert to compressed
+hdiutil create -volname "$SCHEME" -srcfolder "$STAGING_DIR" -ov -format UDRW "$DMG_RW"
+DEVICE=$(hdiutil attach -readwrite -noverify -mountpoint "/Volumes/$SCHEME" "$DMG_RW" | tail -1 | awk '{print $1}')
+cp "$ICNS_PATH" "/Volumes/$SCHEME/.VolumeIcon.icns"
+SetFile -a C "/Volumes/$SCHEME"
+rm "$ICNS_PATH"
+hdiutil detach "$DEVICE"
+hdiutil convert "$DMG_RW" -format UDZO -o "$DMG_PATH"
+rm -f "$DMG_RW"
 rm -rf "$STAGING_DIR"
 
 # ── notarize ────────────────────────────────────────────────────────
