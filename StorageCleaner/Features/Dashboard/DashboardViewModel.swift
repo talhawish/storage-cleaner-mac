@@ -103,20 +103,6 @@ final class DashboardViewModel {
         }
     }
 
-    func deleteFiles(_ urls: [URL]) async -> CleanupResult {
-        guard gateCleanup() else {
-            return CleanupResult(
-                deletedURLs: [],
-                deletedItems: [],
-                failedURLs: [],
-                totalBytesReclaimed: 0
-            )
-        }
-        let result = await cleanupService.delete(urls: urls)
-        await reconcileCleanup(result)
-        return result
-    }
-
     /// Properly uninstalls CLI programs (Homebrew via `brew uninstall`, others by
     /// trashing) so nothing is left abandoned, then reconciles the `cliApps` finding
     /// and records history. Returns the result so the caller can refresh its view.
@@ -533,5 +519,39 @@ extension DashboardViewModel {
     func openSystemSettings() {
         guard let url = SystemSettingsPane.fullDiskAccess.url else { return }
         NSWorkspace.shared.open(url)
+    }
+}
+
+extension DashboardViewModel {
+    func deleteFiles(_ urls: [URL]) async -> CleanupResult {
+        guard gateCleanup() else {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [],
+                totalBytesReclaimed: 0
+            )
+        }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
+        let result = await cleanupService.delete(urls: urls)
+        await reconcileCleanup(result)
+        return result
+    }
+
+    func deleteFilesPermanently(_ urls: [URL]) async -> CleanupResult {
+        guard gateCleanup() else {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [],
+                totalBytesReclaimed: 0
+            )
+        }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
+        let result = await cleanupService.deletePermanently(urls: urls)
+        await reconcileCleanup(result)
+        return result
     }
 }

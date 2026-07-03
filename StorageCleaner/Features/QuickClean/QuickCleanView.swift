@@ -193,6 +193,7 @@ struct QuickCleanView: View {
             cleanedCategories: cleanedCategories(),
             freeBytesBefore: viewModel.freeBytesAtStart,
             freeBytesAfter: viewModel.freeBytesAtEnd,
+            failureMessage: viewModel.failureMessage,
             onScanAgain: { viewModel.startScan() },
             onClose: { dismiss() }
         )

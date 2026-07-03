@@ -228,7 +228,7 @@ private extension StorageFindingKind {
         case .runtimeVersions: .otherCaches
         case .installerLeftovers: .leftovers
         case .orphanedAppSupport, .orphanedAppCaches, .orphanedAppContainers,
-             .orphanedAppPreferences, .oldCrashReports: .systemJunk
+             .orphanedAppPreferences, .orphanedSavedApplicationState, .oldCrashReports: .systemJunk
         case .trash: .trash
         }
     }

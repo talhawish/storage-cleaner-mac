@@ -32,26 +32,42 @@ struct CleanupResult: Sendable {
     let totalBytesReclaimed: Int64
 
     var succeeded: Bool { failedURLs.isEmpty }
-    var deletedCount: Int { deletedURLs.count }
+    var deletedCount: Int { deletedItems.count }
     var failedCount: Int { failedURLs.count }
 }
 
 protocol CleanupService: Sendable {
     func delete(urls: [URL]) async -> CleanupResult
+    func deletePermanently(urls: [URL]) async -> CleanupResult
+}
+
+extension CleanupService {
+    func deletePermanently(urls: [URL]) async -> CleanupResult {
+        await delete(urls: urls)
+    }
 }
 
 struct FileManagerCleanupService: CleanupService {
     private static var trashPrefix: String { UserHomeDirectory.path + "/.Trash/" }
 
     func delete(urls: [URL]) async -> CleanupResult {
-        guard !urls.isEmpty else {
+        await delete(urls: urls, mode: .trashUnlessAlreadyTrashed)
+    }
+
+    func deletePermanently(urls: [URL]) async -> CleanupResult {
+        await delete(urls: urls, mode: .permanent)
+    }
+
+    private func delete(urls: [URL], mode: DeletionMode) async -> CleanupResult {
+        let deletionURLs = Self.normalizedDeletionURLs(urls)
+        guard !deletionURLs.isEmpty else {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
         return await withTaskGroup(of: CleanupResult.self) { group in
-            for url in urls {
+            for url in deletionURLs {
                 group.addTask(priority: .userInitiated) {
-                    Self.deleteSynchronously(url: url)
+                    Self.deleteSynchronously(url: url, mode: mode)
                 }
             }
 
@@ -72,7 +88,12 @@ struct FileManagerCleanupService: CleanupService {
         }
     }
 
-    private static func deleteSynchronously(url: URL) -> CleanupResult {
+    private enum DeletionMode {
+        case trashUnlessAlreadyTrashed
+        case permanent
+    }
+
+    private static func deleteSynchronously(url: URL, mode: DeletionMode) -> CleanupResult {
         let fileManager = FileManager.default
         var trashed: [URL] = []
         var deletedItems: [DeletedItem] = []
@@ -99,7 +120,7 @@ struct FileManagerCleanupService: CleanupService {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
-        if url.path.hasPrefix(Self.trashPrefix) {
+        if mode == .permanent || url.path.hasPrefix(Self.trashPrefix) {
             do {
                 try fileManager.removeItem(at: url)
             } catch {
@@ -124,6 +145,25 @@ struct FileManagerCleanupService: CleanupService {
             failedURLs: failed,
             totalBytesReclaimed: totalBytes
         )
+    }
+
+    /// Deleting both a directory and one of its descendants concurrently races the filesystem:
+    /// whichever task wins makes the other path disappear and turns a successful cleanup into a
+    /// false failure. Keep the highest selected ancestor only, while preserving distinct siblings.
+    private static func normalizedDeletionURLs(_ urls: [URL]) -> [URL] {
+        let unique = Array(Set(urls.map { $0.standardizedFileURL }))
+            .sorted {
+                if $0.pathComponents.count != $1.pathComponents.count {
+                    return $0.pathComponents.count < $1.pathComponents.count
+                }
+                return $0.path.localizedStandardCompare($1.path) == .orderedAscending
+            }
+
+        var result: [URL] = []
+        for url in unique where !result.contains(where: { url.isDescendant(of: $0) }) {
+            result.append(url)
+        }
+        return result
     }
 
     private static func sizeOfItem(at url: URL, fileManager: FileManager) -> Int64? {
@@ -157,5 +197,14 @@ struct FileManagerCleanupService: CleanupService {
             total += Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
         }
         return total
+    }
+}
+
+private extension URL {
+    func isDescendant(of possibleAncestor: URL) -> Bool {
+        let childComponents = standardizedFileURL.pathComponents
+        let ancestorComponents = possibleAncestor.standardizedFileURL.pathComponents
+        guard childComponents.count > ancestorComponents.count else { return false }
+        return zip(childComponents, ancestorComponents).allSatisfy { $0 == $1 }
     }
 }

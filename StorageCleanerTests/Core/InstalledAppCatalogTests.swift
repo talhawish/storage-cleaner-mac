@@ -57,6 +57,23 @@ final class InstalledAppCatalogTests: XCTestCase {
         )
     }
 
+    func testCatalogDiscoversAppsNestedUnderInstallRoot() throws {
+        let nested = temporaryDirectory.appending(path: "Productivity", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try writeApp(named: "WhatsApp", bundleID: "net.whatsapp.WhatsApp", in: nested)
+
+        let catalog = InstalledAppCatalog(searchRoots: [temporaryDirectory])
+
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "net.whatsapp.WhatsApp"))
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "group.net.whatsapp.WhatsApp.shared"))
+    }
+
+    func testCatalogTreatsBundleIDHelpersAsOwned() {
+        let catalog = InstalledAppCatalog(searchRoots: [])
+
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "com.microsoft.VSCode.ShipIt"))
+    }
+
     func testCatalogHandlesMalformedAppBundlesGracefully() throws {
         // An .app folder with no Info.plist must not crash or fail the scan.
         let malformed = temporaryDirectory.appending(path: "MalformedApp.app")

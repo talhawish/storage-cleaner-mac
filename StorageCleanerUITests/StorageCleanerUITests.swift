@@ -155,7 +155,7 @@ final class StorageCleanerUITests: XCTestCase {
 
     /// Regression for the bulk-removal UX on the System Junk page: the inline "Clean All" button
     /// (sitting above the file list, not in the toolbar) must pre-select every visible item and
-    /// open the destructive confirmation so the user can review before trashing.
+    /// open the destructive confirmation so the user can review before permanent deletion.
     @MainActor
     func testSystemJunkCleanAllOpensDeleteConfirmation() {
         let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
@@ -168,10 +168,10 @@ final class StorageCleanerUITests: XCTestCase {
         XCTAssertTrue(cleanButton.waitForExistence(timeout: 4))
         cleanButton.click()
 
-        // The confirmation modal's primary action is "Move to Trash" — verifying it appears
+        // The confirmation modal's primary action is "Delete Permanently" — verifying it appears
         // confirms the modal opened with the right destructive context.
-        let moveToTrash = app.buttons["Move to Trash"]
-        XCTAssertTrue(moveToTrash.waitForExistence(timeout: 4))
+        let deletePermanently = app.buttons["Delete Permanently"]
+        XCTAssertTrue(deletePermanently.waitForExistence(timeout: 4))
     }
 
     /// The master checkbox above the file list toggles the visible selection. After clicking it,

@@ -56,7 +56,24 @@ struct InstalledAppCatalog: Sendable {
     func ownsLibraryEntry(named entryName: String) -> Bool {
         guard !entryName.isEmpty else { return false }
         let lower = entryName.lowercased()
-        return bundleIDs.contains(lower) || directoryNames.contains(lower)
+        if bundleIDs.contains(lower) || directoryNames.contains(lower) {
+            return true
+        }
+
+        // Any `com.apple.*` entry not already matched above is a macOS system framework
+        // or daemon that writes to user Library. These were never user-installed and must
+        // never be flagged as orphaned. Apple apps that ARE installed in /Applications
+        // are already in `bundleIDs` from the search-root walk, so this guard only fires
+        // for system frameworks that would otherwise slip through the curated
+        // `appleBundleIDs` list (e.g. com.apple.avfoundation, com.apple.audio, etc.).
+        if lower.hasPrefix("com.apple.") {
+            return true
+        }
+
+        return bundleIDs.contains { bundleID in
+            lower.hasPrefix(bundleID + ".")
+                || lower.hasPrefix("group." + bundleID)
+        }
     }
 
     // MARK: - Collection
@@ -68,18 +85,15 @@ struct InstalledAppCatalog: Sendable {
     ) {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: root.path) else { return }
-        let candidates: [URL]
-        do {
-            candidates = try fileManager.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )
-        } catch {
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
             return
         }
 
-        for candidate in candidates {
+        for case let candidate as URL in enumerator {
             guard (try? candidate.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
             guard candidate.pathExtension.lowercased() == "app" else { continue }
 

@@ -98,7 +98,8 @@ private extension AppShellView {
                         case .section(.projectActivity):
                             ProjectActivityView(
                                 canUseProActions: viewModel.canCleanup,
-                                onRequirePro: { _ = viewModel.gateFileAction() }
+                                onRequirePro: { _ = viewModel.gateFileAction() },
+                                permissionHandler: viewModel.permissionHandler
                             )
                         case .section(.developerStorage):
                             developerStorageView()

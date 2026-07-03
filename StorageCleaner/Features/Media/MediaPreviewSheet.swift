@@ -5,7 +5,7 @@ import SwiftUI
 /// dimensions, color profile, modified date, full path) with a body that
 /// dispatches to `ImagePreviewView` for the actual content. The action bar
 /// exposes the most common next steps: open in Finder, reveal in Finder's
-/// containing folder, open with the system default app, and copy the path.
+/// containing folder, and open with the system default app.
 struct MediaPreviewSheet: View {
     let url: URL
     let permissionHandler: (any StoragePermissionHandling)?
@@ -18,9 +18,6 @@ struct MediaPreviewSheet: View {
     @State private var imageMetadata: ImageMetadata = .unknown
     @State private var bytes: Int64 = 0
     @State private var modifiedAt: Date?
-    @State private var showCopiedFeedback = false
-    @State private var copyFeedbackTask: Task<Void, Never>?
-
     init(
         url: URL,
         permissionHandler: (any StoragePermissionHandling)? = nil,
@@ -112,14 +109,6 @@ struct MediaPreviewSheet: View {
     private var actions: [AppModalActionBar.Action] {
         [
             AppModalActionBar.Action(
-                title: showCopiedFeedback ? "Copied" : "Copy Path",
-                systemImage: showCopiedFeedback ? "checkmark.circle.fill" : "doc.on.doc",
-                tint: showCopiedFeedback ? AppTheme.mint : AppTheme.accent,
-                isProminent: false,
-                isDefault: false,
-                action: copyPath
-            ),
-            AppModalActionBar.Action(
                 title: "Show in Finder",
                 systemImage: "folder",
                 tint: AppTheme.accent,
@@ -152,19 +141,6 @@ struct MediaPreviewSheet: View {
         let access = permissionHandler.beginHomeFolderAccess()
         defer { access?.stop() }
         return await body()
-    }
-
-    private func copyPath() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(url.path, forType: .string)
-        showCopiedFeedback = true
-        copyFeedbackTask?.cancel()
-        copyFeedbackTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.4))
-            guard !Task.isCancelled else { return }
-            showCopiedFeedback = false
-        }
     }
 
     private func showInFinder() {

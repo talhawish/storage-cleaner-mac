@@ -92,6 +92,68 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot?.findings.first?.itemCount, 1)
     }
 
+    func testPermanentDeleteUsesPermanentCleanupAndPrunesSystemJunk() async {
+        let removed = URL(fileURLWithPath: "/Users/test/Library/Caches/StaleApp", isDirectory: true)
+        let kept = URL(fileURLWithPath: "/Users/test/Library/Caches/OtherApp", isDirectory: true)
+        let finding = StorageFinding(
+            kind: .orphanedAppCaches,
+            domain: .systemJunk,
+            bytes: 100,
+            itemCount: 2,
+            safety: .safe,
+            examples: [],
+            filePaths: [removed, kept],
+            pathBytes: [removed: 40, kept: 60]
+        )
+        let viewModel = makeViewModel(
+            finding: finding,
+            cleanupService: PermanentOnlyCleanupService(reclaimedBytesByURL: [removed: 40])
+        )
+        await loadSnapshot(in: viewModel)
+
+        let result = await viewModel.deleteFilesPermanently([removed])
+
+        XCTAssertEqual(result.totalBytesReclaimed, 40)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(viewModel.snapshot?.findings.first?.filePaths, [kept])
+        XCTAssertEqual(viewModel.snapshot?.findings.first?.bytes, 60)
+        XCTAssertEqual(viewModel.snapshot?.findings.first?.pathBytes, [kept: 60])
+    }
+
+    func testDeleteRunsCleanupInsideHomeFolderAccessScope() async {
+        let removed = URL(fileURLWithPath: "/Users/test/Library/Caches/SafeCache", isDirectory: true)
+        let permissionHandler = RecordingPermissionHandler()
+        let cleanupService = ScopeCheckingCleanupService(permissionHandler: permissionHandler)
+        let viewModel = DashboardViewModel(
+            scanner: FixedSnapshotScanner(snapshot: ScanSnapshot(
+                findings: [
+                    StorageFinding(
+                        kind: .browserCaches,
+                        domain: .browserData,
+                        bytes: 40,
+                        itemCount: 1,
+                        safety: .safe,
+                        examples: [],
+                        filePaths: [removed],
+                        pathBytes: [removed: 40]
+                    )
+                ],
+                scannedItemCount: 1,
+                duration: .seconds(1)
+            )),
+            permissionHandler: permissionHandler,
+            cleanupService: cleanupService
+        )
+        await loadSnapshot(in: viewModel)
+        let accessCountBeforeCleanup = permissionHandler.beginAccessCount
+
+        _ = await viewModel.deleteFiles([removed])
+
+        XCTAssertEqual(permissionHandler.beginAccessCount, accessCountBeforeCleanup + 1)
+        XCTAssertTrue(cleanupService.deletedWhileAccessWasActive)
+        XCTAssertFalse(permissionHandler.isAccessActive)
+    }
+
     func testEmulatorCleanupReconcilesPathBackedDashboardFindingsAndHistory() async {
         let pack = URL(fileURLWithPath: "/Users/test/Library/Developer/Xcode/iOS DeviceSupport/26.0")
         let store = SpyHistoryStore()
@@ -135,6 +197,7 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
     private func makeViewModel(
         finding: StorageFinding,
         cliSizes: [URL: Int64] = [:],
+        cleanupService: CleanupService = StubCleanupService(reclaimedBytesByURL: [:]),
         historyStore: SpyHistoryStore? = nil
     ) -> DashboardViewModel {
         DashboardViewModel(
@@ -144,6 +207,7 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
                 duration: .seconds(1)
             )),
             permissionHandler: StubPermissionHandler(statuses: allAccessibleStatuses),
+            cleanupService: cleanupService,
             cliRemovalService: cliRemovalService(sizes: cliSizes),
             historyStore: historyStore
         )
@@ -169,5 +233,87 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         for _ in 0..<20 where viewModel.phase != .results {
             await Task.yield()
         }
+    }
+}
+
+private struct PermanentOnlyCleanupService: CleanupService {
+    let reclaimedBytesByURL: [URL: Int64]
+
+    func delete(urls: [URL]) async -> CleanupResult {
+        CleanupResult(
+            deletedURLs: [],
+            deletedItems: [],
+            failedURLs: urls.map { ($0, CleanupError.deletionFailed($0, CocoaError(.fileWriteUnknown))) },
+            totalBytesReclaimed: 0
+        )
+    }
+
+    func deletePermanently(urls: [URL]) async -> CleanupResult {
+        let deletedItems = urls.map {
+            DeletedItem(originalURL: $0, bytesReclaimed: reclaimedBytesByURL[$0] ?? 0)
+        }
+        return CleanupResult(
+            deletedURLs: [],
+            deletedItems: deletedItems,
+            failedURLs: [],
+            totalBytesReclaimed: deletedItems.reduce(Int64(0)) { $0 + $1.bytesReclaimed }
+        )
+    }
+}
+
+private final class RecordingPermissionHandler: @unchecked Sendable, StoragePermissionHandling {
+    private let lock = NSLock()
+    private var active = false
+    private var accessCount = 0
+
+    var isAccessActive: Bool {
+        lock.withLock { active }
+    }
+
+    var beginAccessCount: Int {
+        lock.withLock { accessCount }
+    }
+
+    func currentStatuses() -> [StoragePermissionStatus] {
+        allAccessibleStatuses
+    }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        lock.withLock {
+            accessCount += 1
+            active = true
+        }
+        return SecurityScopedResourceAccess { [weak self] in
+            self?.lock.withLock {
+                self?.active = false
+            }
+        }
+    }
+}
+
+private final class ScopeCheckingCleanupService: @unchecked Sendable, CleanupService {
+    private let permissionHandler: RecordingPermissionHandler
+    private let lock = NSLock()
+    private var wasActive = false
+
+    var deletedWhileAccessWasActive: Bool {
+        lock.withLock { wasActive }
+    }
+
+    init(permissionHandler: RecordingPermissionHandler) {
+        self.permissionHandler = permissionHandler
+    }
+
+    func delete(urls: [URL]) async -> CleanupResult {
+        lock.withLock {
+            wasActive = permissionHandler.isAccessActive
+        }
+        let deletedItems = urls.map { DeletedItem(originalURL: $0, bytesReclaimed: 40) }
+        return CleanupResult(
+            deletedURLs: urls,
+            deletedItems: deletedItems,
+            failedURLs: [],
+            totalBytesReclaimed: 40
+        )
     }
 }

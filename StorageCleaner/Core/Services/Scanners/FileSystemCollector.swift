@@ -106,12 +106,13 @@ struct FileSystemCollector: Sendable {
         at roots: [URL],
         extensions allowedExtensions: Set<String>,
         minimumBytes: Int64,
-        limit: Int = 2_000
+        limit: Int = 2_000,
+        excluding isExcluded: @Sendable (URL) -> Bool = { _ in false }
     ) -> DuplicateCollectionResult {
         let result = collectFiles(
             at: roots,
             matching: { url in
-                allowedExtensions.contains(url.pathExtension.lowercased())
+                allowedExtensions.contains(url.pathExtension.lowercased()) && !isExcluded(url)
             },
             limit: limit
         )

@@ -78,6 +78,23 @@ final class SystemJunkScannersTests: XCTestCase {
         XCTAssertNil(result.finding)
     }
 
+    func testOrphanedAppSupportSkipsReservedProtectedLibraryEntries() async throws {
+        try makeDirectory(relativeTo: "Application Support/CallHistoryDB")
+        try makeDirectory(relativeTo: "Application Support/Google")
+        try makeDirectory(relativeTo: "Application Support/OrphanedTool")
+        try writeBytes(1024, to: "Application Support/OrphanedTool/data.bin")
+
+        let scanner = OrphanedAppSupportScanner(
+            collector: collector,
+            catalog: InstalledAppCatalog(searchRoots: []),
+            root: temporaryLibrary.appending(path: "Application Support")
+        )
+        let result = await scanner.scan()
+
+        let finding = try XCTUnwrap(result.finding)
+        XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["OrphanedTool"])
+    }
+
     // MARK: - Orphaned Caches
 
     func testOrphanedAppCachesFindsDirectoriesNotInCatalog() async throws {

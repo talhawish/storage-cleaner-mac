@@ -255,13 +255,16 @@ enum CleanupOptionsRegistry {
         CleanupOption(
             id: "system-logs",
             name: "System Logs",
-            description: "Older system and application log files",
+            description: "Crash reports and diagnostic logs",
             icon: "doc.text.fill",
             iconColor: "orange",
             domain: .otherCaches,
-            safety: .safe,
-            paths: ["~/Library/Logs"],
-            isSafeByDefault: true,
+            safety: .review,
+            paths: [
+                "~/Library/Logs/DiagnosticReports",
+                "~/Library/Logs/CrashReporter"
+            ],
+            isSafeByDefault: false,
             category: .caches,
             storageKind: .junkFiles
         ),
@@ -305,7 +308,7 @@ enum CleanupOptionsRegistry {
             iconColor: "orange",
             domain: .otherCaches,
             safety: .safe,
-            paths: ["/tmp", "~/Library/Caches/com.apple-crashreporter"],
+            paths: ["~/Library/Caches/com.apple-crashreporter"],
             isSafeByDefault: true,
             category: .system,
             storageKind: .junkFiles

@@ -212,6 +212,7 @@ extension LiveStorageScanner {
             OrphanedAppCachesScanner(collector: collector, catalog: appCatalog),
             OrphanedAppContainersScanner(collector: collector, catalog: appCatalog),
             OrphanedPreferencesScanner(catalog: appCatalog, collector: collector),
+            OrphanedSavedAppStateScanner(collector: collector, catalog: appCatalog),
             OldCrashReportsScanner(collector: collector),
             TrashStorageScanner(collector: collector)
         ]

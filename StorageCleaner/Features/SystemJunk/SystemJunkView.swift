@@ -1,18 +1,20 @@
 import SwiftUI
 
 /// Lists orphaned app data and stale crash reports across `~/Library` and lets the user review
-/// and move selected items to the Trash. The list is dynamically discovered at scan time — what
+/// and permanently delete selected items. The list is dynamically discovered at scan time — what
 /// appears depends on which apps are installed and what they've left behind in user Library.
 struct SystemJunkView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
-    let onDelete: ([URL]) -> Void
+    let onDelete: ([URL]) async -> CleanupResult
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
 
     @State private var typeFilter: SystemJunkTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: SystemJunkCleanupRequest?
+    @State private var cleanupFailureMessage: String?
+    @State private var isDeleting = false
 
     /// Per-filter aggregates from the scan results — bytes and item counts are pre-computed off
     /// the main thread by the scanner, so they are correct for both files and directories
@@ -84,24 +86,6 @@ struct SystemJunkView: View {
         return selectedURLs.intersection(visibleSet).count
     }
 
-    /// The URLs the destructive confirmation should act on — always scoped to the current
-    /// filter so "Clean 4 Selected" on the App Data tab only trashes App Data items.
-    private var confirmingURLs: [URL] {
-        let visibleSet = Set(filteredRecords.map(\.url))
-        return selectedURLs.filter { visibleSet.contains($0) }
-    }
-
-    /// Byte total for the confirmation. When every visible item is selected, use the scanner's
-    /// pre-measured finding total (accurate for directories). Otherwise approximate.
-    private var confirmingByteTotal: Int64 {
-        guard !confirmingURLs.isEmpty else { return 0 }
-        if allVisibleSelected {
-            return bytes(for: typeFilter)
-        }
-        let sizesByURL = Dictionary(uniqueKeysWithValues: allRecords.map { ($0.url, $0.bytes) })
-        return confirmingURLs.reduce(Int64(0)) { $0 + (sizesByURL[$1] ?? 0) }
-    }
-
     /// Label for the inline destructive button. When nothing visible is selected it reads
     /// "Clean All" (one-click bulk action). Once the user has hand-picked items in the current
     /// category, it shows "Clean N Selected" — only counting selections in the current view.
@@ -139,28 +123,30 @@ struct SystemJunkView: View {
                 .help("Re-scan orphaned app data and crash reports")
             }
         }
-        .sheet(isPresented: $showDeleteConfirmation) {
+        .sheet(item: $cleanupRequest) { request in
             ConfirmationModal(
                 variant: .destructive,
-                title: "Move \(confirmingURLs.count) item\(confirmingURLs.count == 1 ? "" : "s") to Trash?",
-                message: "This will move \(confirmingURLs.count) item\(confirmingURLs.count == 1 ? "" : "s") "
-                    + "(\(StorageFormatting.bytes(confirmingByteTotal))) to Trash.",
+                title: "Move \(request.urls.count) item\(request.urls.count == 1 ? "" : "s") to Trash?",
+                message: cleanupConfirmationMessage(for: request),
                 iconSystemName: "trash.fill",
-                showsCloseButton: true,
+                showsCloseButton: !isDeleting,
+                preferredHeight: 520,
                 confirm: AppModalActionBar.Action(
-                    title: "Move to Trash",
+                    title: isDeleting ? "Moving..." : "Move to Trash",
                     systemImage: "trash.fill",
                     isProminent: true,
                     isDestructive: true,
+                    isDisabled: isDeleting,
                     isDefault: true,
                     action: {
-                        let urls = confirmingURLs
-                        for url in urls { selectedURLs.remove(url) }
-                        onDelete(urls)
+                        performCleanup(request)
                     }
                 ),
-                cancel: AppModalActionBar.CancelAction(title: "Cancel")
-            )
+                cancel: AppModalActionBar.CancelAction(title: "Cancel"),
+                isProcessing: isDeleting
+            ) {
+                SystemJunkCleanupPreview(urls: request.urls)
+            }
         }
     }
 
@@ -181,20 +167,14 @@ struct SystemJunkView: View {
         }
     }
 
-    /// Pre-selects every URL in the current view, then opens the confirmation. Used by the
-    /// "Clean All" button so the most common bulk action is a single click. No-ops when the
-    /// visible list is empty (nothing to select).
+    /// Opens a confirmation for every URL in the current view. Used by the "Clean All" button so
+    /// the most common bulk action is a single click. No-ops when the visible list is empty.
     private func requestCleanAll() {
         guard canUseProActions else {
             onRequirePro()
             return
         }
-        let visibleURLs = filteredRecords.map(\.url)
-        guard !visibleURLs.isEmpty else { return }
-        for url in visibleURLs {
-            selectedURLs.insert(url)
-        }
-        showDeleteConfirmation = true
+        cleanupRequest = makeCleanupRequest(from: filteredRecords, useAggregateBytes: true)
     }
 
     private var emptyState: some View {
@@ -328,7 +308,7 @@ struct SystemJunkView: View {
                     return
                 }
                 if visibleSelectedCount > 0 {
-                    showDeleteConfirmation = true
+                    requestCleanupForSelection()
                 } else {
                     requestCleanAll()
                 }
@@ -341,12 +321,7 @@ struct SystemJunkView: View {
             .controlSize(.regular)
             .disabled(visibleSelectedCount == 0 && filteredRecords.isEmpty)
             .accessibilityIdentifier("system-junk-clean-button")
-            .help(
-                visibleSelectedCount > 0
-                    ? "Move \(visibleSelectedCount) selected "
-                        + "\(visibleSelectedCount == 1 ? "item" : "items") to Trash"
-                    : "Move every file in this category to Trash"
-            )
+            .help(cleanButtonHelp)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -371,6 +346,37 @@ struct SystemJunkView: View {
         return "\(selectedInView) of \(total) selected"
     }
 
+    private var cleanButtonHelp: String {
+        if visibleSelectedCount > 0 {
+            return "Move \(visibleSelectedCount) selected "
+                + "\(visibleSelectedCount == 1 ? "item" : "items") to Trash"
+        }
+        return "Move every file in this category to Trash"
+    }
+
+    private func requestCleanupForSelection() {
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
+        let selectedRecords = filteredRecords.filter { selectedURLs.contains($0.url) }
+        cleanupRequest = makeCleanupRequest(from: selectedRecords, useAggregateBytes: allVisibleSelected)
+    }
+
+    private func makeCleanupRequest(
+        from records: [SystemJunkRecord],
+        useAggregateBytes: Bool
+    ) -> SystemJunkCleanupRequest? {
+        guard !records.isEmpty else { return nil }
+        let byteTotal = useAggregateBytes ? bytes(for: typeFilter) : records.reduce(Int64(0)) { $0 + $1.bytes }
+        return SystemJunkCleanupRequest(
+            records: records,
+            bytes: byteTotal
+        )
+    }
+}
+
+private extension SystemJunkView {
     private var noMatchesSection: some View {
         Section {
             VStack(spacing: 10) {
@@ -396,6 +402,7 @@ struct SystemJunkView: View {
         case .caches: "No orphaned app caches found"
         case .containers: "No orphaned app containers found"
         case .preferences: "No orphaned app preferences found"
+        case .savedState: "No orphaned saved state found"
         case .crashReports: "No old crash reports found"
         }
     }
@@ -407,6 +414,54 @@ struct SystemJunkView: View {
             selectedURLs.insert(url)
         }
     }
+
+    private func cleanupConfirmationMessage(for request: SystemJunkCleanupRequest) -> String {
+        if let cleanupFailureMessage {
+            return cleanupFailureMessage
+        }
+        return "This will move \(request.urls.count) "
+            + "item\(request.urls.count == 1 ? "" : "s") to your Trash "
+            + "(\(StorageFormatting.bytes(request.bytes))). You can recover them from Trash if needed."
+    }
+
+    private func performCleanup(_ request: SystemJunkCleanupRequest) {
+        guard !isDeleting else { return }
+        isDeleting = true
+        cleanupFailureMessage = nil
+
+        Task { @MainActor in
+            let result = await onDelete(request.urls)
+            finishCleanup(result, for: request)
+        }
+    }
+
+    private func finishCleanup(_ result: CleanupResult, for request: SystemJunkCleanupRequest) {
+        let deletedURLs = Set(result.deletedItems.map { $0.originalURL.standardizedFileURL })
+        for url in deletedURLs {
+            selectedURLs.remove(url)
+        }
+
+        isDeleting = false
+        guard !result.failedURLs.isEmpty else {
+            cleanupRequest = nil
+            return
+        }
+
+        let failedURLs = result.failedURLs.map { $0.0.standardizedFileURL }
+        for url in failedURLs {
+            selectedURLs.insert(url)
+        }
+        cleanupFailureMessage = cleanupFailureMessage(for: result)
+        cleanupRequest = request.retaining(urls: failedURLs)
+    }
+
+    private func cleanupFailureMessage(for result: CleanupResult) -> String {
+        let count = result.failedCount
+        let itemLabel = count == 1 ? "item" : "items"
+        let recovery = result.failedURLs.first?.1.localizedDescription
+            ?? "Check file permissions, then try again."
+        return "\(count) \(itemLabel) could not be deleted. \(recovery)"
+    }
 }
 
 private struct SystemJunkRecord: Identifiable, Equatable {
@@ -417,12 +472,32 @@ private struct SystemJunkRecord: Identifiable, Equatable {
     var id: URL { url }
 }
 
+private struct SystemJunkCleanupRequest: Identifiable, Equatable {
+    let id = UUID()
+    let records: [SystemJunkRecord]
+    let bytes: Int64
+
+    var urls: [URL] {
+        records.map(\.url)
+    }
+
+    func retaining(urls failedURLs: [URL]) -> SystemJunkCleanupRequest {
+        let failedSet = Set(failedURLs.map { $0.standardizedFileURL })
+        let retainedRecords = records.filter { failedSet.contains($0.url.standardizedFileURL) }
+        return SystemJunkCleanupRequest(
+            records: retainedRecords,
+            bytes: retainedRecords.reduce(Int64(0)) { $0 + $1.bytes }
+        )
+    }
+}
+
 enum SystemJunkTypeFilter: String, CaseIterable, Identifiable {
     case all
     case appSupport
     case caches
     case containers
     case preferences
+    case savedState
     case crashReports
 
     var id: Self { self }
@@ -434,6 +509,7 @@ enum SystemJunkTypeFilter: String, CaseIterable, Identifiable {
         case .caches: "Caches"
         case .containers: "Containers"
         case .preferences: "Preferences"
+        case .savedState: "Saved State"
         case .crashReports: "Crash Reports"
         }
     }
@@ -445,6 +521,7 @@ enum SystemJunkTypeFilter: String, CaseIterable, Identifiable {
         case .caches: "Orphaned app caches"
         case .containers: "Orphaned app containers"
         case .preferences: "Orphaned app preferences"
+        case .savedState: "Orphaned saved state"
         case .crashReports: "Old crash reports"
         }
     }
@@ -456,6 +533,7 @@ enum SystemJunkTypeFilter: String, CaseIterable, Identifiable {
         case .caches: "internaldrive.fill"
         case .containers: "shippingbox.fill"
         case .preferences: "slider.horizontal.3"
+        case .savedState: "macwindow.and.cursorarrow"
         case .crashReports: "exclamationmark.triangle.fill"
         }
     }
@@ -467,6 +545,7 @@ enum SystemJunkTypeFilter: String, CaseIterable, Identifiable {
         case .caches: AppTheme.orange
         case .containers: AppTheme.violet
         case .preferences: AppTheme.indigo
+        case .savedState: AppTheme.teal
         case .crashReports: AppTheme.amber
         }
     }
@@ -486,6 +565,7 @@ enum SystemJunkTypeFilter: String, CaseIterable, Identifiable {
         case .orphanedAppCaches: .caches
         case .orphanedAppContainers: .containers
         case .orphanedAppPreferences: .preferences
+        case .orphanedSavedApplicationState: .savedState
         case .oldCrashReports: .crashReports
         default: .all
         }

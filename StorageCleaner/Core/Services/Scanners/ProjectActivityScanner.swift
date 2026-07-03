@@ -4,30 +4,53 @@ import Foundation
 /// project via `ProjectDetector`, and measures its size and last activity in a
 /// single read-only filesystem pass. Cancellable throughout.
 actor ProjectActivityScanner {
-    private let fileManager = FileManager.default
     private let searchPaths: [URL]
     private let maxDepth: Int
+    private let permissionHandler: (any StoragePermissionHandling)?
 
     init(
         searchPaths: [URL] = DependencyPaths.Projects.searchRoots,
-        maxDepth: Int = DependencyPaths.Projects.maxDepth
+        maxDepth: Int = DependencyPaths.Projects.maxDepth,
+        permissionHandler: (any StoragePermissionHandling)? = nil
     ) {
         self.searchPaths = searchPaths
         self.maxDepth = maxDepth
+        self.permissionHandler = permissionHandler
     }
 
+    /// Runs the scan under the home folder security scope when a permission
+    /// handler is wired. On sandboxed builds the scan returns an empty
+    /// `accessDenied` snapshot when the user hasn't granted home folder access.
     func scan() async -> ProjectActivitySnapshot {
-        let startTime = Date()
+        let paths = searchPaths
+        let depth = maxDepth
+        guard let handler = permissionHandler else {
+            return Self.run(paths: paths, maxDepth: depth)
+        }
+        return await handler.withHomeFolderAccess { access in
+            guard access != nil else {
+                return ProjectActivitySnapshot(
+                    projects: [], scannedAt: .now, scanDuration: 0, accessDenied: true
+                )
+            }
+            return Self.run(paths: paths, maxDepth: depth)
+        }
+    }
+
+    // MARK: - Static non-isolated scan (callable from withHomeFolderAccess)
+
+    private static func run(paths: [URL], maxDepth: Int) -> ProjectActivitySnapshot {
+        let fileMgr = FileManager.default
+        let start = Date()
         var projects: [ProjectInfo] = []
-        var seenPaths = Set<String>()
+        var seen = Set<String>()
 
-        for searchPath in searchPaths {
+        for root in paths {
             guard !Task.isCancelled else { break }
-            guard fileManager.fileExists(atPath: searchPath.path) else { continue }
-
-            for project in scanDirectory(searchPath) {
+            guard fileMgr.fileExists(atPath: root.path) else { continue }
+            for project in walk(root, maxDepth: maxDepth, fileMgr: fileMgr) {
                 let key = project.path.standardizedFileURL.path
-                if seenPaths.insert(key).inserted {
+                if seen.insert(key).inserted {
                     projects.append(project)
                 }
             }
@@ -36,66 +59,62 @@ actor ProjectActivityScanner {
         return ProjectActivitySnapshot(
             projects: projects.sorted { $0.totalSize > $1.totalSize },
             scannedAt: .now,
-            scanDuration: Date().timeIntervalSince(startTime)
+            scanDuration: Date().timeIntervalSince(start)
         )
     }
 
     // MARK: - Traversal
 
-    private func scanDirectory(_ directory: URL) -> [ProjectInfo] {
-        var projects: [ProjectInfo] = []
-        let rootDepth = directory.pathComponents.count
-        let enumerator = fileManager.enumerator(
-            at: directory,
+    private static func walk(_ dir: URL, maxDepth: Int, fileMgr: FileManager) -> [ProjectInfo] {
+        var found: [ProjectInfo] = []
+        let rootDepth = dir.pathComponents.count
+        let enumerator = fileMgr.enumerator(
+            at: dir,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
 
         while let item = enumerator?.nextObject() as? URL {
             guard !Task.isCancelled else { break }
-
             if item.pathComponents.count - rootDepth > maxDepth {
                 enumerator?.skipDescendants()
                 continue
             }
-
             guard (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
-
-            if let technology = ProjectDetector.detect(at: item, fileManager: fileManager),
-               let project = buildProjectInfo(at: item, technology: technology) {
-                projects.append(project)
+            if let tech = ProjectDetector.detect(at: item, fileManager: fileMgr),
+               let info = build(at: item, technology: tech, fileMgr: fileMgr) {
+                found.append(info)
                 enumerator?.skipDescendants()
             }
         }
-
-        return projects
+        return found
     }
 
-    private func buildProjectInfo(at directory: URL, technology: ProjectTechnology) -> ProjectInfo? {
-        let metrics = measure(at: directory, technology: technology)
+    private static func build(at dir: URL, technology: ProjectTechnology, fileMgr: FileManager) -> ProjectInfo? {
+        let metrics = measure(at: dir, technology: technology, fileMgr: fileMgr)
         guard metrics.totalSize > 0 else { return nil }
-
+        let modDate = metrics.lastModified
+            ?? (try? fileMgr.attributesOfItem(atPath: dir.path))?[.modificationDate] as? Date
+            ?? .distantPast
+        let nested = countSubs(at: dir, fileMgr: fileMgr)
         return ProjectInfo(
-            name: directory.lastPathComponent,
-            path: directory,
+            name: dir.lastPathComponent,
+            path: dir,
             technology: technology,
-            lastModifiedDate: metrics.lastModified ?? directoryModificationDate(directory),
+            lastModifiedDate: modDate,
             totalSize: metrics.totalSize,
-            childProjectCount: countSubProjects(at: directory),
+            childProjectCount: nested,
             dependencySize: metrics.dependencySize,
             iconURL: metrics.iconURL
         )
     }
 
-    // MARK: - Metrics (single pass)
+    // MARK: - Metrics
 
-    private struct ProjectMetrics {
+    private struct Metrics {
         var totalSize: Int64 = 0
         var dependencySize: Int64 = 0
-        /// Newest modification among non-dependency files, or `nil` if none seen.
         var lastModified: Date?
-        /// Best icon/logo candidate found, with the score/depth/size used to
-        /// break ties (higher score, then shallower, then larger wins).
         var iconURL: URL?
         var iconScore = 0
         var iconDepth = Int.max
@@ -107,70 +126,45 @@ actor ProjectActivityScanner {
                 || (score == iconScore && depth < iconDepth)
                 || (score == iconScore && depth == iconDepth && size > iconSize)
             guard better else { return }
-            iconURL = url
-            iconScore = score
-            iconDepth = depth
-            iconSize = size
+            iconURL = url; iconScore = score; iconDepth = depth; iconSize = size
         }
     }
 
-    /// Walk the project tree once to gather total size, dependency size, and the
-    /// most recent source-file modification (dependency files are excluded so an
-    /// install/build does not make the project look freshly worked on).
-    private func measure(at directory: URL, technology: ProjectTechnology) -> ProjectMetrics {
-        var metrics = ProjectMetrics()
+    private static func measure(at dir: URL, technology: ProjectTechnology, fileMgr: FileManager) -> Metrics {
+        var metrics = Metrics()
         let keys: [URLResourceKey] = [.fileSizeKey, .isDirectoryKey, .contentModificationDateKey]
-        // Hidden files are *not* skipped: many dependency folders are hidden
-        // (`.build`, `.gradle`, `.dart_tool`, …) and must be measured so the
-        // reclaimable estimate is accurate. Hidden non-dependency files (`.git`)
-        // are ignored below so neither size nor activity is skewed by them.
-        guard let enumerator = fileManager.enumerator(
-            at: directory,
-            includingPropertiesForKeys: keys
-        ) else { return metrics }
+        guard let enumerator = fileMgr.enumerator(at: dir, includingPropertiesForKeys: keys) else { return metrics }
 
-        let rootDepth = directory.pathComponents.count
+        let root = dir.pathComponents.count
         while let item = enumerator.nextObject() as? URL {
             guard !Task.isCancelled else { break }
             guard let values = try? item.resourceValues(forKeys: Set(keys)),
                   values.isDirectory != true else { continue }
 
             let size = Int64(values.fileSize ?? 0)
-            let components = item.pathComponents
-            let relativeComponents = components.dropFirst(rootDepth)
+            let comps = item.pathComponents
+            let rel = comps.dropFirst(root)
 
-            if ProjectDependencyRules.isDependencyFile(
-                item,
-                for: technology,
-                projectRoot: directory,
-                fileManager: fileManager
-            ) {
+            if ProjectDependencyRules.isDependencyFile(item, for: technology, projectRoot: dir, fileManager: fileMgr) {
                 metrics.totalSize += size
                 metrics.dependencySize += size
-            } else if !relativeComponents.contains(where: { $0.hasPrefix(".") }) {
+            } else if !rel.contains(where: { $0.hasPrefix(".") }) {
                 metrics.totalSize += size
-                if let modified = values.contentModificationDate,
-                   modified > (metrics.lastModified ?? .distantPast) {
-                    metrics.lastModified = modified
+                if let mod = values.contentModificationDate, mod > (metrics.lastModified ?? .distantPast) {
+                    metrics.lastModified = mod
                 }
-                let parentName = components.count >= 2 ? components[components.count - 2] : ""
-                let score = ProjectIconLocator.score(fileName: item.lastPathComponent, parentDirectory: parentName)
-                metrics.considerIcon(at: item, score: score, depth: relativeComponents.count, size: size)
+                let parent = comps.count >= 2 ? comps[comps.count - 2] : ""
+                let iconScore = ProjectIconLocator.score(fileName: item.lastPathComponent, parentDirectory: parent)
+                metrics.considerIcon(at: item, score: iconScore, depth: rel.count, size: size)
             }
         }
-
         return metrics
     }
 
-    private func countSubProjects(at directory: URL) -> Int {
-        let entries = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
-        return entries.filter { name in
-            guard !name.hasPrefix(".") else { return false }
-            return ProjectDetector.detect(at: directory.appendingPathComponent(name), fileManager: fileManager) != nil
-        }.count
-    }
-
-    private func directoryModificationDate(_ directory: URL) -> Date {
-        (try? fileManager.attributesOfItem(atPath: directory.path))?[.modificationDate] as? Date ?? .distantPast
+    private static func countSubs(at dir: URL, fileMgr: FileManager) -> Int {
+        (try? fileMgr.contentsOfDirectory(atPath: dir.path))?
+            .filter { !$0.hasPrefix(".") }
+            .compactMap { ProjectDetector.detect(at: dir.appendingPathComponent($0), fileManager: fileMgr) }
+            .count ?? 0
     }
 }

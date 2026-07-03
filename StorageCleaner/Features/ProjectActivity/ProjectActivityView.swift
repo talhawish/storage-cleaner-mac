@@ -3,12 +3,26 @@ import SwiftUI
 struct ProjectActivityView: View {
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
+    var permissionHandler: (any StoragePermissionHandling)?
 
-    @State var viewModel = ProjectActivityViewModel()
+    @State var viewModel: ProjectActivityViewModel
     @State private var selectedProject: ProjectInfo?
     @State var showHibernateSheet = false
     @AppStorage("inactivityThreshold")
     private var inactivityThreshold: InactivityThreshold = .oneMonth
+
+    init(
+        canUseProActions: Bool = true,
+        onRequirePro: @escaping () -> Void = {},
+        permissionHandler: (any StoragePermissionHandling)? = nil
+    ) {
+        self.canUseProActions = canUseProActions
+        self.onRequirePro = onRequirePro
+        self.permissionHandler = permissionHandler
+        _viewModel = State(initialValue: ProjectActivityViewModel(
+            scanner: ProjectActivityScanner(permissionHandler: permissionHandler)
+        ))
+    }
 
     var body: some View {
         ScrollView {
@@ -17,6 +31,16 @@ struct ProjectActivityView: View {
 
                 if viewModel.isScanning {
                     scanningView
+                } else if viewModel.accessDenied {
+                    PermissionRequiredView(
+                        blockedPermissions: [StoragePermissionStatus(
+                            scope: .home,
+                            url: FileManager.default.homeDirectoryForCurrentUser,
+                            state: .denied
+                        )],
+                        onOpenSettings: {},
+                        onGrantAccess: {}
+                    )
                 } else if let snapshot = viewModel.snapshot, !snapshot.projects.isEmpty {
                     dashboard(snapshot: snapshot)
                 } else if viewModel.hasScanned {

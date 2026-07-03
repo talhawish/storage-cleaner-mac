@@ -141,6 +141,11 @@ struct ProjectActivitySnapshot: Sendable {
     let projects: [ProjectInfo]
     let scannedAt: Date
     let scanDuration: TimeInterval
+    /// `true` when the scan could not access the home directory because the
+    /// security-scoped bookmark is missing or TCC denied access. The scanner
+    /// returns an empty project list in this case so the view can show a
+    /// permission prompt rather than a misleading "no projects" empty state.
+    var accessDenied = false
 
     var totalSize: Int64 {
         projects.reduce(0) { $0 + $1.totalSize }

@@ -52,20 +52,25 @@ struct FileSystemPermissionService: StoragePermissionHandling {
         ]
 
         for (scope, relativePath) in scopeByRelativePath {
-            let childFolder = HomeChildFolder(relativePath: relativePath, directoryHint: .isDirectory)
-            let resolved = resolveChildBookmark(childFolder, homeDirectory: homeDirectory)
             let state: StoragePermissionState
-            if resolved != nil {
-                state = .accessible
-            } else if bookmarkStore.data(forKey: childFolder.bookmarkKey) != nil {
-                state = .denied
+            let childURL = homeDirectory.appending(path: relativePath, directoryHint: .isDirectory)
+            if homeAccessible {
+                state = FileManager.default.fileExists(atPath: childURL.path) ? .accessible : .missing
             } else {
-                state = .missing
+                let childFolder = HomeChildFolder(relativePath: relativePath, directoryHint: .isDirectory)
+                let resolved = resolveChildBookmark(childFolder, homeDirectory: homeDirectory)
+                if resolved != nil {
+                    state = .accessible
+                } else if bookmarkStore.data(forKey: childFolder.bookmarkKey) != nil {
+                    state = .denied
+                } else {
+                    state = .missing
+                }
             }
             statuses.append(
                 StoragePermissionStatus(
                     scope: scope,
-                    url: homeDirectory.appending(path: relativePath, directoryHint: .isDirectory),
+                    url: childURL,
                     state: state
                 )
             )

@@ -247,6 +247,32 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
     }
 }
 
+/// Walks `~/Library/Saved Application State` for window-restoration data left behind by
+/// uninstalled apps. Each subfolder is named by bundle ID; entries owned by an installed app
+/// (per `OrphanCatalog`) are skipped.
+struct OrphanedSavedAppStateScanner: StorageCategoryScanning {
+    let kind: StorageFindingKind = .orphanedSavedApplicationState
+    let title = StorageFindingKind.orphanedSavedApplicationState.title
+    private let scanner: OrphanedDirectoriesScanner
+
+    init(collector: FileSystemCollector, catalog: any OrphanCatalog) {
+        scanner = OrphanedDirectoriesScanner(
+            kind: .orphanedSavedApplicationState,
+            resolvers: [OrphanDirectoryResolver(
+                root: DependencyPaths.SystemJunk.savedApplicationState,
+                catalog: catalog,
+                limit: 200
+            )],
+            collector: collector,
+            safety: .safe
+        )
+    }
+
+    func scan() async -> CategoryScanResult {
+        await scanner.scan()
+    }
+}
+
 // MARK: - Concrete scanners
 
 struct OrphanedAppSupportScanner: StorageCategoryScanning {

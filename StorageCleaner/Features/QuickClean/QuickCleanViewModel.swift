@@ -43,6 +43,10 @@ final class QuickCleanViewModel {
     private(set) var scan: QuickCleanScan = QuickCleanScan(categories: [])
     private(set) var selection: Set<URL> = []
     private(set) var lastResult: CleanupResult?
+    /// Human-readable summary of why items could not be deleted. Set after a
+    /// cleanup that produced failures; `nil` when the last cleanup succeeded
+    /// or when there were no failed items.
+    private(set) var failureMessage: String?
     /// Free-bytes snapshot captured the moment the user opens the modal. Drives
     /// the "free before / after" pill in the success view when a cleanup ran.
     private(set) var freeBytesAtStart: Int64?
@@ -120,6 +124,7 @@ final class QuickCleanViewModel {
         scan = QuickCleanScan(categories: [])
         selection = []
         lastResult = nil
+        failureMessage = nil
         freeBytesAtStart = nil
         freeBytesAtEnd = nil
         Task { @MainActor [weak self] in
@@ -150,12 +155,21 @@ final class QuickCleanViewModel {
         let urls = selection.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         guard !urls.isEmpty else { return }
         phase = .cleaning
+        failureMessage = nil
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             let result = await onClean(urls)
             lastResult = result
             freeBytesAtEnd = await self.volumeProvider()
+
+            if result.deletedCount == 0 && !result.failedURLs.isEmpty {
+                failureMessage = Self.failureSummary(from: result)
+            } else if result.deletedCount == 0 && result.failedURLs.isEmpty {
+                failureMessage = "No items were deleted. You may need to upgrade "
+                    + "to Pro to perform cleanup actions."
+            }
+
             phase = .success
         }
     }
@@ -198,6 +212,14 @@ final class QuickCleanViewModel {
     func isCategoryPartiallySelected(_ category: QuickCleanCategory) -> Bool {
         let hits = category.items.filter { selection.contains($0.url) }.count
         return hits > 0 && hits < category.items.count
+    }
+
+    private static func failureSummary(from result: CleanupResult) -> String {
+        let count = result.failedURLs.count
+        let itemLabel = count == 1 ? "item" : "items"
+        let sampleError = result.failedURLs.first?.1.localizedDescription
+            ?? "Check file permissions and try again."
+        return "\(count) \(itemLabel) could not be deleted. \(sampleError)"
     }
 
     // MARK: - Internals

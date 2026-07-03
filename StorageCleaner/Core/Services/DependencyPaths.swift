@@ -346,7 +346,7 @@ enum DependencyPaths {
 
         /// How deep to descend into each search root before giving up on finding
         /// a project marker. Descent stops as soon as a project is detected.
-        static let maxDepth = 4
+        static let maxDepth = 6
     }
 
     // MARK: - System Junk

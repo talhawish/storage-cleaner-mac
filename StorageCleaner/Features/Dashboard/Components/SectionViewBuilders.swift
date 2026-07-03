@@ -232,7 +232,7 @@ extension AppShellView {
                 findings: sectionFindings,
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
+                    await viewModel.deleteFiles(urls)
                 },
                 canUseProActions: viewModel.canCleanup,
                 onRequirePro: { _ = viewModel.gateFileAction() }
@@ -477,7 +477,7 @@ extension AppShellView {
         SystemJunkView(
             findings: filteredFindings(for: AppSection.systemJunk.filterKinds),
             onScan: { viewModel.startScan(for: AppSection.systemJunk.filterKinds) },
-            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            onDelete: { urls in await viewModel.deleteFilesPermanently(urls) },
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
         )

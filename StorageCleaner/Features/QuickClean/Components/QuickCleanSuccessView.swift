@@ -9,6 +9,7 @@ struct QuickCleanSuccessView: View {
     let cleanedCategories: [QuickCleanCleanedCategory]
     let freeBytesBefore: Int64?
     let freeBytesAfter: Int64?
+    let failureMessage: String?
     let onScanAgain: () -> Void
     let onClose: () -> Void
 
@@ -17,6 +18,7 @@ struct QuickCleanSuccessView: View {
         cleanedCategories: [QuickCleanCleanedCategory],
         freeBytesBefore: Int64? = nil,
         freeBytesAfter: Int64? = nil,
+        failureMessage: String? = nil,
         onScanAgain: @escaping () -> Void,
         onClose: @escaping () -> Void
     ) {
@@ -24,6 +26,7 @@ struct QuickCleanSuccessView: View {
         self.cleanedCategories = cleanedCategories
         self.freeBytesBefore = freeBytesBefore
         self.freeBytesAfter = freeBytesAfter
+        self.failureMessage = failureMessage
         self.onScanAgain = onScanAgain
         self.onClose = onClose
     }
@@ -45,6 +48,14 @@ struct QuickCleanSuccessView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                if let failureMessage {
+                    Text(failureMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.orange)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 20)
                 }
             }
 

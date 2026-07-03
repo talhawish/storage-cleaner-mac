@@ -100,4 +100,82 @@ final class DuplicateMediaScannerTests: XCTestCase {
         XCTAssertNil(result.finding)
         XCTAssertEqual(result.inspectedItemCount, 2)
     }
+
+    func testExcludesDuplicateImagesInsideDetectedProjectRoots() async throws {
+        let downloads = temporaryDirectory.appending(path: "Downloads", directoryHint: .isDirectory)
+        let project = downloads.appending(path: "MacApp", directoryHint: .isDirectory)
+        let appIconSet = project.appending(path: "Assets.xcassets/AppIcon.appiconset", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: appIconSet, withIntermediateDirectories: true)
+        try "let package = Package(...)".write(
+            to: project.appending(path: "Package.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let payload = Data(repeating: 4, count: 40_000)
+        try payload.write(to: appIconSet.appending(path: "Icon-1024.png"))
+        try payload.write(to: appIconSet.appending(path: "Icon-Marketing.png"))
+
+        let scanner = DuplicateMediaScanner(
+            kind: .duplicatePhotos,
+            domain: .photos,
+            roots: [downloads],
+            extensions: ["png"],
+            minimumBytes: 128,
+            collector: FileSystemCollector()
+        )
+
+        let result = await scanner.scan()
+
+        XCTAssertNil(result.finding)
+        XCTAssertEqual(result.inspectedItemCount, 3)
+    }
+
+    func testExcludesKnownDependencyFoldersEvenWithoutProjectMarkers() async throws {
+        let desktop = temporaryDirectory.appending(path: "Desktop", directoryHint: .isDirectory)
+        let dependencyAssets = desktop.appending(path: "node_modules/package/assets", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dependencyAssets, withIntermediateDirectories: true)
+
+        let payload = Data(repeating: 5, count: 40_000)
+        try payload.write(to: dependencyAssets.appending(path: "logo.png"))
+        try payload.write(to: dependencyAssets.appending(path: "logo-copy.png"))
+
+        let scanner = DuplicateMediaScanner(
+            kind: .duplicatePhotos,
+            domain: .photos,
+            roots: [desktop],
+            extensions: ["png"],
+            minimumBytes: 128,
+            collector: FileSystemCollector()
+        )
+
+        let result = await scanner.scan()
+
+        XCTAssertNil(result.finding)
+        XCTAssertEqual(result.inspectedItemCount, 2)
+    }
+
+    func testStillReportsLooseDuplicateImagesOutsideProtectedFolders() async throws {
+        let desktop = temporaryDirectory.appending(path: "Desktop", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+
+        let payload = Data(repeating: 6, count: 40_000)
+        try payload.write(to: desktop.appending(path: "invoice-scan.png"))
+        try payload.write(to: desktop.appending(path: "invoice-scan copy.png"))
+
+        let scanner = DuplicateMediaScanner(
+            kind: .duplicatePhotos,
+            domain: .photos,
+            roots: [desktop],
+            extensions: ["png"],
+            minimumBytes: 128,
+            collector: FileSystemCollector()
+        )
+
+        let result = await scanner.scan()
+
+        XCTAssertEqual(result.finding?.kind, .duplicatePhotos)
+        XCTAssertEqual(result.finding?.duplicateGroups.count, 1)
+        XCTAssertEqual(result.finding?.itemCount, 1)
+    }
 }

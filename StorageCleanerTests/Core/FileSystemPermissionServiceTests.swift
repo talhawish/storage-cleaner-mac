@@ -103,6 +103,37 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         XCTAssertEqual(statuses.first(where: { $0.scope == .downloads })?.state, .accessible)
     }
 
+    func testCurrentStatusesTreatsHomeBookmarkAsAuthorityWhenChildBookmarkIsStale() throws {
+        let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
+        try createStandardHomeFolders(at: home)
+        let staleDesktop = temporaryDirectory.appending(path: "old-desktop", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: staleDesktop, withIntermediateDirectories: true)
+        let store = InMemoryBookmarkDataStore()
+        let homeBookmark = try home.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let staleChildBookmark = try staleDesktop.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        store.set(homeBookmark, forKey: "HomeFolderSecurityScopedBookmark")
+        store.set(staleChildBookmark, forKey: "HomeFolderSecurityScopedBookmark.Desktop")
+        let service = FileSystemPermissionService(
+            bookmarkStore: store,
+            picker: FixedHomeFolderPicker(selectedURL: home),
+            homeDirectory: home
+        )
+
+        let statuses = service.currentStatuses()
+
+        XCTAssertEqual(statuses.first(where: { $0.scope == .home })?.state, .accessible)
+        XCTAssertEqual(statuses.first(where: { $0.scope == .desktop })?.state, .accessible)
+        XCTAssertFalse(statuses.contains { $0.state == .denied })
+    }
+
     func testStaleBookmarkIsDetectedViaDirectoryProbe() throws {
         let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)

@@ -7,6 +7,7 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
     private let roots: [URL]
     private let extensions: Set<String>
     private let minimumBytes: Int64
+    private let exclusionPolicy: DuplicateScanExclusionPolicy?
     private let collector: FileSystemCollector
     private let builder: CandidateFindingBuilder
 
@@ -16,6 +17,7 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
         roots: [URL],
         extensions: Set<String>,
         minimumBytes: Int64,
+        exclusionPolicy: DuplicateScanExclusionPolicy? = nil,
         collector: FileSystemCollector,
         builder: CandidateFindingBuilder = CandidateFindingBuilder()
     ) {
@@ -25,15 +27,18 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
         self.roots = roots
         self.extensions = extensions
         self.minimumBytes = minimumBytes
+        self.exclusionPolicy = exclusionPolicy
         self.collector = collector
         self.builder = builder
     }
 
     func scan() async -> CategoryScanResult {
+        let exclusionPolicy = exclusionPolicy ?? DuplicateScanExclusionPolicy.detectingProjects(under: roots)
         let result = collector.collectDuplicateGroups(
             at: roots,
             extensions: extensions,
-            minimumBytes: minimumBytes
+            minimumBytes: minimumBytes,
+            excluding: exclusionPolicy.shouldExclude
         )
         let finding = builder.makeDuplicateFinding(
             kind: kind,

@@ -23,6 +23,13 @@ final class ProjectActivityViewModel {
     /// hibernation. Driven by the user's Settings choice.
     var inactivityThreshold: InactivityThreshold = .oneMonth
 
+    /// `true` when a scan ran but could not access the home directory (sandbox
+    /// missing the security-scoped bookmark). The view can show a permission
+    /// prompt instead of a generic empty state.
+    var accessDenied: Bool {
+        snapshot?.accessDenied ?? false
+    }
+
     init(
         scanner: ProjectActivityScanner = ProjectActivityScanner(),
         hibernationService: ProjectHibernationService = ProjectHibernationService(),

@@ -10,6 +10,7 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertTrue(SystemJunkTypeFilter.all.contains(.orphanedAppCaches))
         XCTAssertTrue(SystemJunkTypeFilter.all.contains(.orphanedAppContainers))
         XCTAssertTrue(SystemJunkTypeFilter.all.contains(.orphanedAppPreferences))
+        XCTAssertTrue(SystemJunkTypeFilter.all.contains(.orphanedSavedApplicationState))
         XCTAssertTrue(SystemJunkTypeFilter.all.contains(.oldCrashReports))
     }
 
@@ -29,6 +30,9 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertTrue(SystemJunkTypeFilter.preferences.contains(.orphanedAppPreferences))
         XCTAssertFalse(SystemJunkTypeFilter.preferences.contains(.orphanedAppSupport))
 
+        XCTAssertTrue(SystemJunkTypeFilter.savedState.contains(.orphanedSavedApplicationState))
+        XCTAssertFalse(SystemJunkTypeFilter.savedState.contains(.orphanedAppSupport))
+
         XCTAssertTrue(SystemJunkTypeFilter.crashReports.contains(.oldCrashReports))
         XCTAssertFalse(SystemJunkTypeFilter.crashReports.contains(.orphanedAppSupport))
     }
@@ -38,6 +42,7 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .orphanedAppCaches), .caches)
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .orphanedAppContainers), .containers)
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .orphanedAppPreferences), .preferences)
+        XCTAssertEqual(SystemJunkTypeFilter.filter(for: .orphanedSavedApplicationState), .savedState)
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .oldCrashReports), .crashReports)
     }
 

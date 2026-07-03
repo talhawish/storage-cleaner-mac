@@ -70,10 +70,41 @@ final class CleanupServiceTests: XCTestCase {
 
         XCTAssertTrue(result.succeeded)
         XCTAssertEqual(result.failedCount, 0)
-        XCTAssertEqual(result.deletedCount, 0)
+        XCTAssertEqual(result.deletedCount, 1)
         XCTAssertEqual(result.deletedItems.count, 1)
         XCTAssertEqual(result.deletedItems.first?.originalURL, trashed)
         XCTAssertFalse(FileManager.default.fileExists(atPath: trashed.path))
+        XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 4_096)
+    }
+
+    func testDeletePermanentlyRemovesItemWithoutMovingToTrash() async throws {
+        let file = temporaryDirectory.appending(path: "system-junk.log")
+        try Data(repeating: 4, count: 4_096).write(to: file)
+
+        let result = await FileManagerCleanupService().deletePermanently(urls: [file])
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.deletedCount, 1)
+        XCTAssertEqual(result.deletedURLs, [])
+        XCTAssertEqual(result.deletedItems.first?.originalURL, file.standardizedFileURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 4_096)
+    }
+
+    func testDeleteNormalizesNestedSelectionsBeforeConcurrentRemoval() async throws {
+        let directory = temporaryDirectory.appending(path: "cache-root", directoryHint: .isDirectory)
+        let nested = directory.appending(path: "child", directoryHint: .isDirectory)
+        let file = nested.appending(path: "artifact.bin")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data(repeating: 5, count: 4_096).write(to: file)
+
+        let result = await FileManagerCleanupService().delete(urls: [file, nested, directory, directory])
+        trashedURLs.append(contentsOf: result.deletedURLs)
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.deletedItems.map(\.originalURL), [directory.standardizedFileURL])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
         XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 4_096)
     }
 }

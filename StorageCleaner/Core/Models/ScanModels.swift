@@ -89,6 +89,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case orphanedAppCaches
     case orphanedAppContainers
     case orphanedAppPreferences
+    case orphanedSavedApplicationState
     case oldCrashReports
     case trash
 
@@ -127,6 +128,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .orphanedAppCaches: "Orphaned app caches"
         case .orphanedAppContainers: "Orphaned app containers"
         case .orphanedAppPreferences: "Orphaned app preferences"
+        case .orphanedSavedApplicationState: "Orphaned saved state"
         case .oldCrashReports: "Old crash reports"
         case .trash: "Trash"
         }
@@ -167,6 +169,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .orphanedAppCaches: "Cache folders left behind by uninstalled apps"
         case .orphanedAppContainers: "Sandbox containers left behind by uninstalled apps"
         case .orphanedAppPreferences: "Preference files left behind by uninstalled apps"
+        case .orphanedSavedApplicationState: "Saved window restoration data left behind by uninstalled apps"
         case .oldCrashReports: "Stale crash reports and diagnostic logs in your user Library"
         case .trash: "Files already moved to Trash but still occupying disk space"
         }

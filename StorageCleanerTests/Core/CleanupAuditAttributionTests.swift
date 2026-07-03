@@ -112,7 +112,6 @@ final class CleanupAuditAttributionTests: XCTestCase {
             "pip-cache",
             "ruby-cache",
             "swiftpm-checkouts",
-            "system-logs",
             "tmp-files",
             "xcode-derived",
             "xcode-archives"
@@ -137,6 +136,7 @@ final class CleanupAuditAttributionTests: XCTestCase {
             "nuget-cache",
             "screen-recordings",
             "screenshots",
+            "system-logs",
             "trash"
         ]
 

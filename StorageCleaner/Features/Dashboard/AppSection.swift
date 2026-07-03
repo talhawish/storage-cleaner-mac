@@ -84,6 +84,7 @@ enum AppSection: String, CaseIterable, Identifiable {
             .orphanedAppCaches,
             .orphanedAppContainers,
             .orphanedAppPreferences,
+            .orphanedSavedApplicationState,
             .oldCrashReports
         ]
         default: []
