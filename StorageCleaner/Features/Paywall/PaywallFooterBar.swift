@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// The bottom strip of the paywall. Two slots:
-///
-/// - Leading: tiny links to Terms of Service and Privacy Policy
-///   (required by App Review guideline 3.1.2).
-/// - Trailing: nothing currently.
+/// The bottom strip of the paywall. Shows the mandatory auto-renewal
+/// disclosure followed by links to the Terms of Use and Privacy Policy.
 ///
 /// Restore Purchases used to live here but was promoted to a
 /// dedicated, visible row between the plan cards and the trust
@@ -12,21 +9,23 @@ import SwiftUI
 /// miss for users who bought on another device and needed to
 /// re-claim their entitlement.
 ///
-/// The whole strip stays on one line and the links inherit the
-/// app's tint so they read as native controls, not as marketing
-/// footer text.
 struct PaywallFooterBar: View {
     let onTermsTapped: () -> Void
     let onPrivacyTapped: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
-            Spacer(minLength: 0)
+        VStack(spacing: 8) {
+            Text(SubscriptionDisclosure.autoRenewal)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("paywall-auto-renewal-disclosure")
             linkGroup
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         .background(
             Rectangle()
                 .fill(AppTheme.appBackground)
@@ -40,13 +39,13 @@ struct PaywallFooterBar: View {
 
     private var linkGroup: some View {
         HStack(spacing: 14) {
-            Button("Terms", action: onTermsTapped)
+            Button("Terms of Use", action: onTermsTapped)
                 .buttonStyle(.borderless)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("paywall-terms")
             Text("·").foregroundStyle(.tertiary)
-            Button("Privacy", action: onPrivacyTapped)
+            Button("Privacy Policy", action: onPrivacyTapped)
                 .buttonStyle(.borderless)
                 .font(.caption)
                 .foregroundStyle(.secondary)

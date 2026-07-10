@@ -57,6 +57,19 @@ final class InstalledAppCatalogTests: XCTestCase {
         )
     }
 
+    func testCatalogDiscoversBundleDisplayNameFromAppBundles() throws {
+        try writeApp(
+            named: "InternalName",
+            bundleID: "com.example.InternalName",
+            displayName: "User Facing Name",
+            in: temporaryDirectory
+        )
+
+        let catalog = InstalledAppCatalog(searchRoots: [temporaryDirectory])
+
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "User Facing Name"))
+    }
+
     func testCatalogDiscoversAppsNestedUnderInstallRoot() throws {
         let nested = temporaryDirectory.appending(path: "Productivity", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
@@ -72,6 +85,18 @@ final class InstalledAppCatalogTests: XCTestCase {
         let catalog = InstalledAppCatalog(searchRoots: [])
 
         XCTAssertTrue(catalog.ownsLibraryEntry(named: "com.microsoft.VSCode.ShipIt"))
+    }
+
+    func testCatalogTreatsTeamPrefixedAppGroupContainersAsOwned() {
+        let catalog = InstalledAppCatalog(searchRoots: [])
+
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "UBF8T346G9.com.microsoft.VSCode"))
+    }
+
+    func testCatalogTreatsAnyAppleBundleIDAsOwned() {
+        let catalog = InstalledAppCatalog(searchRoots: [])
+
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "com.apple.someprivateagent"))
     }
 
     func testCatalogHandlesMalformedAppBundlesGracefully() throws {
@@ -105,6 +130,14 @@ final class InstalledAppCatalogTests: XCTestCase {
         XCTAssertFalse(catalog.bundleIDs.isEmpty, "Apple baseline should still be present")
     }
 
+    func testLazyCatalogDefersFilesystemWalkUntilFirstLookup() throws {
+        let lazyCatalog = LazyInstalledAppCatalog(searchRoots: [temporaryDirectory])
+
+        try writeApp(named: "DeferredApp", bundleID: "com.example.DeferredApp", in: temporaryDirectory)
+
+        XCTAssertTrue(lazyCatalog.ownsLibraryEntry(named: "com.example.DeferredApp"))
+    }
+
     func testOwnsLibraryEntryMatchesBundleID() {
         let catalog = InstalledAppCatalog(searchRoots: [])
 
@@ -118,6 +151,7 @@ final class InstalledAppCatalogTests: XCTestCase {
         // The Apple baseline includes "Xcode" via reservedSupportDirectoryNames.
         XCTAssertTrue(catalog.ownsLibraryEntry(named: "Xcode"))
         XCTAssertTrue(catalog.ownsLibraryEntry(named: "CloudDocs"))
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "DifferentialPrivacy"))
     }
 
     func testOwnsLibraryEntryIsCaseInsensitive() {
@@ -148,15 +182,23 @@ final class InstalledAppCatalogTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func writeApp(named name: String, bundleID: String, in parent: URL) throws {
+    private func writeApp(
+        named name: String,
+        bundleID: String,
+        displayName: String? = nil,
+        in parent: URL
+    ) throws {
         let appURL = parent.appending(path: "\(name).app")
         let contents = appURL.appending(path: "Contents")
         try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
 
-        let plist: [String: Any] = [
+        var plist: [String: Any] = [
             "CFBundleIdentifier": bundleID,
             "CFBundleName": name
         ]
+        if let displayName {
+            plist["CFBundleDisplayName"] = displayName
+        }
         let data = try PropertyListSerialization.data(
             fromPropertyList: plist,
             format: .xml,

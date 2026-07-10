@@ -30,6 +30,29 @@ final class AppInventoryServiceTests: XCTestCase {
                 return XCTFail("Expected permissionDenied error, got \(error).")
             }
             XCTAssertEqual(url, app.url.standardizedFileURL)
+            XCTAssertTrue(error.localizedDescription.contains("move Cleaner.app to Trash"))
+            XCTAssertTrue(error.localizedDescription.contains("Applications access"))
+        }
+    }
+
+    func testUninstallReportsAdministratorAuthorizationRequired() async throws {
+        let app = appItem(path: "/Applications/Cleaner.app")
+        let recorder = AppUninstallRecorder(
+            existingPaths: [app.url.standardizedFileURL.path],
+            removeError: AppBundleUninstallerError.authorizationRequired(app.url.standardizedFileURL)
+        )
+        let service = makeService(recorder: recorder)
+
+        do {
+            try await service.uninstallApp(app)
+            XCTFail("Expected uninstall to fail when macOS requires administrator authorization.")
+        } catch let error as AppUninstallError {
+            guard case let .authorizationRequired(url) = error else {
+                return XCTFail("Expected authorizationRequired error, got \(error).")
+            }
+            XCTAssertEqual(url, app.url.standardizedFileURL)
+            XCTAssertTrue(error.localizedDescription.contains("administrator authorization"))
+            XCTAssertTrue(error.localizedDescription.contains("Finder"))
         }
     }
 
@@ -52,26 +75,48 @@ final class AppInventoryServiceTests: XCTestCase {
         }
     }
 
-    func testAdministratorApprovalFailureKeepsUnderlyingMessage() async throws {
+    func testMoveToTrashFailureKeepsUnderlyingMessage() async throws {
         let app = appItem(path: "/Applications/Cleaner.app")
         let recorder = AppUninstallRecorder(
             existingPaths: [app.url.standardizedFileURL.path],
-            removeError: AppBundleUninstallerError.administratorApprovalFailed(
-                app.url.standardizedFileURL,
-                "User canceled."
+            removeError: NSError(
+                domain: "StorageCleanerTests",
+                code: 42,
+                userInfo: [NSLocalizedDescriptionKey: "Trash service failed."]
             )
         )
         let service = makeService(recorder: recorder)
 
         do {
             try await service.uninstallApp(app)
-            XCTFail("Expected administrator approval failure to surface.")
+            XCTFail("Expected Trash move failure to surface.")
         } catch let error as AppUninstallError {
             guard case let .failed(url, message) = error else {
                 return XCTFail("Expected failed error, got \(error).")
             }
             XCTAssertEqual(url, app.url.standardizedFileURL)
-            XCTAssertEqual(message, "User canceled.")
+            XCTAssertEqual(message, "Trash service failed.")
+            XCTAssertTrue(error.localizedDescription.contains("Couldn't move Cleaner.app to Trash"))
+        }
+    }
+
+    func testApplicationsAccessFailureKeepsUnderlyingMessage() async throws {
+        let app = appItem(path: "/Applications/Cleaner.app")
+        let recorder = AppUninstallRecorder(
+            existingPaths: [app.url.standardizedFileURL.path],
+            removeError: AppBundleUninstallerError.applicationsAccessNotGranted(app.url.standardizedFileURL)
+        )
+        let service = makeService(recorder: recorder)
+
+        do {
+            try await service.uninstallApp(app)
+            XCTFail("Expected Applications access failure to surface.")
+        } catch let error as AppUninstallError {
+            guard case let .failed(url, message) = error else {
+                return XCTFail("Expected failed error, got \(error).")
+            }
+            XCTAssertEqual(url, app.url.standardizedFileURL)
+            XCTAssertTrue(message.contains("needs access to /Applications"))
         }
     }
 

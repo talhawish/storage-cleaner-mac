@@ -347,6 +347,11 @@ enum DependencyPaths {
         /// How deep to descend into each search root before giving up on finding
         /// a project marker. Descent stops as soon as a project is detected.
         static let maxDepth = 6
+
+        /// Tiny marker-only folders are common inside SDKs, templates, package
+        /// fixtures, and framework repos. Project Activity is storage-focused,
+        /// so only surface projects large enough to be meaningful in the UI.
+        static let minimumProjectSize: Int64 = 1_048_576
     }
 
     // MARK: - System Junk

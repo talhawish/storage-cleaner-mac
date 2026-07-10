@@ -2,42 +2,44 @@ import Foundation
 import XCTest
 @testable import StorageCleaner
 
+/// Two runtimes in the real `simctl runtime list -j` shape: a deletable iOS 26.5 and a
+/// non-deletable iOS 18.0 (e.g. bundled / in use).
+private let emulatorSimctlRuntimesJSON = """
+{
+  "51B20344-C70D-4CBF-96FE-AD72DE64D881" : {
+    "build" : "23F77",
+    "deletable" : true,
+    "identifier" : "51B20344-C70D-4CBF-96FE-AD72DE64D881",
+    "lastUsedAt" : "2026-06-19T01:45:20Z",
+    "platformIdentifier" : "com.apple.platform.iphonesimulator",
+    "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+    "sizeBytes" : 8494282293,
+    "state" : "Ready",
+    "version" : "26.5"
+  },
+  "A1111111-0000-0000-0000-000000000000" : {
+    "build" : "22A000",
+    "deletable" : false,
+    "identifier" : "A1111111-0000-0000-0000-000000000000",
+    "platformIdentifier" : "com.apple.platform.iphonesimulator",
+    "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.iOS-18-0",
+    "sizeBytes" : 7000000000,
+    "state" : "Ready",
+    "version" : "18.0"
+  }
+}
+"""
+
+private let emptyEmulatorDevicesJSON = #"{"devices":{}}"#
+
+/// Records the side effects the service performs so tests can assert on them.
+private final class Recorder: @unchecked Sendable {
+    var commands: [[String]] = []
+    var trashed: [URL] = []
+}
+
 final class EmulatorManagementServiceTests: XCTestCase {
-    /// Records the side effects the service performs so tests can assert on them.
-    private final class Recorder: @unchecked Sendable {
-        var commands: [[String]] = []
-        var trashed: [URL] = []
-    }
-
     private var root: URL!
-
-    /// Two runtimes in the real `simctl runtime list -j` shape: a deletable iOS 26.5 and a
-    /// non-deletable iOS 18.0 (e.g. bundled / in use).
-    private let simctlJSON = """
-    {
-      "51B20344-C70D-4CBF-96FE-AD72DE64D881" : {
-        "build" : "23F77",
-        "deletable" : true,
-        "identifier" : "51B20344-C70D-4CBF-96FE-AD72DE64D881",
-        "lastUsedAt" : "2026-06-19T01:45:20Z",
-        "platformIdentifier" : "com.apple.platform.iphonesimulator",
-        "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
-        "sizeBytes" : 8494282293,
-        "state" : "Ready",
-        "version" : "26.5"
-      },
-      "A1111111-0000-0000-0000-000000000000" : {
-        "build" : "22A000",
-        "deletable" : false,
-        "identifier" : "A1111111-0000-0000-0000-000000000000",
-        "platformIdentifier" : "com.apple.platform.iphonesimulator",
-        "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.iOS-18-0",
-        "sizeBytes" : 7000000000,
-        "state" : "Ready",
-        "version" : "18.0"
-      }
-    }
-    """
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -100,37 +102,6 @@ final class EmulatorManagementServiceTests: XCTestCase {
             try xml.write(to: plistURL, atomically: true, encoding: .utf8)
         }
         return device
-    }
-
-    private func makeService(
-        recorder: Recorder,
-        androidRoot: URL?,
-        appleDeviceSupportRoots: [URL]? = nil,
-        simulatorDevicesRoot: URL? = nil
-    ) -> EmulatorManagementService {
-        let json = simctlJSON
-        return EmulatorManagementService(
-            runCommand: { _, arguments in
-                recorder.commands.append(arguments)
-                if arguments.contains("list") {
-                    return .init(exitCode: 0, output: json)
-                }
-                return .init(exitCode: 0, output: "")
-            },
-            locateXcrun: { URL(fileURLWithPath: "/usr/bin/xcrun") },
-            androidSystemImagesRoot: { androidRoot },
-            appleDeviceSupportRoots: { appleDeviceSupportRoots ?? [] },
-            readDeviceSupportVersion: { folder in
-                let plist = folder.appendingPathComponent("Info.plist")
-                guard let data = try? Data(contentsOf: plist),
-                      let raw = try? PropertyListSerialization.propertyList(from: data, format: nil),
-                      let dict = raw as? [String: Any] else { return nil }
-                return dict["Version"] as? String
-            },
-            simulatorDevicesRoot: { simulatorDevicesRoot },
-            measure: { _ in 4096 },
-            trashItem: { recorder.trashed.append($0) }
-        )
     }
 
     // MARK: - Discovery
@@ -267,25 +238,29 @@ final class EmulatorManagementServiceTests: XCTestCase {
     // MARK: - Simulator devices
 
     func testDiscoversSimulatorDeviceInstancesWithReadableNames() async throws {
-        let device = try makeSimulatorDevice(name: "A01F28DA-DDAC-446E-B66B-8F7D47A7FDF0")
+        let udid = "A01F28DA-DDAC-446E-B66B-8F7D47A7FDF0"
+        let device = try makeSimulatorDevice(name: udid)
         let devicesRoot = device.deletingLastPathComponent()
         let service = makeService(
             recorder: Recorder(),
             androidRoot: nil,
-            simulatorDevicesRoot: devicesRoot
+            simulatorDevicesRoot: devicesRoot,
+            simulatorDevicesJSON: simulatorDevicesJSON(udid: udid, deviceDirectory: device)
         )
 
         let images = await service.discover()
         let simulators = images.filter { $0.platform == .simulatorDevices }
         XCTAssertEqual(simulators.count, 1)
         let sim = try XCTUnwrap(simulators.first)
+        XCTAssertEqual(sim.id, udid)
         XCTAssertEqual(sim.title, "iPhone 17 Pro")
         XCTAssertEqual(sim.versionLabel, "iOS 26.5")
         XCTAssertTrue(sim.detail.contains("iOS-26-5"))
-        guard case let .trashDirectory(url) = sim.removal else {
-            return XCTFail("Simulator devices should remove via Trash by default")
+        XCTAssertEqual(sim.bytes, 9_500_000_000)
+        guard case let .simctlDevice(deviceUDID) = sim.removal else {
+            return XCTFail("Known simulator devices should remove through simctl")
         }
-        XCTAssertEqual(url.resolvingSymlinksInPath(), device.resolvingSymlinksInPath())
+        XCTAssertEqual(deviceUDID, udid)
     }
 
     func testOrphanedSimulatorDeviceFallsBackToShortTitle() async throws {
@@ -300,10 +275,35 @@ final class EmulatorManagementServiceTests: XCTestCase {
         let sim = try XCTUnwrap(images.first { $0.platform == .simulatorDevices })
         XCTAssertEqual(sim.title, "B1111111")
         XCTAssertTrue(sim.detail.contains("Orphaned"))
+        guard case let .trashDirectory(url) = sim.removal else {
+            return XCTFail("Orphaned simulator device folders should remain Trash-managed")
+        }
+        XCTAssertEqual(url.resolvingSymlinksInPath(), device.resolvingSymlinksInPath())
     }
 
-    func testSimulatorDeviceRemovalTrashesTheDeviceFolder() async throws {
-        let device = try makeSimulatorDevice(name: "A01F28DA-DDAC-446E-B66B-8F7D47A7FDF0")
+    func testKnownSimulatorDeviceRemovalUsesSimctlDelete() async throws {
+        let udid = "A01F28DA-DDAC-446E-B66B-8F7D47A7FDF0"
+        let device = try makeSimulatorDevice(name: udid)
+        let recorder = Recorder()
+        let service = makeService(
+            recorder: recorder,
+            androidRoot: nil,
+            simulatorDevicesRoot: device.deletingLastPathComponent(),
+            simulatorDevicesJSON: simulatorDevicesJSON(udid: udid, deviceDirectory: device)
+        )
+
+        let images = await service.discover()
+        let sim = try XCTUnwrap(images.first { $0.platform == .simulatorDevices })
+        let result = await service.remove([sim])
+
+        XCTAssertEqual(result.removedCount, 1)
+        XCTAssertTrue(recorder.trashed.isEmpty)
+        XCTAssertTrue(recorder.commands.contains(["simctl", "delete", udid]))
+        XCTAssertEqual(result.totalBytesReclaimed, 9_500_000_000)
+    }
+
+    func testOrphanedSimulatorDeviceRemovalTrashesTheDeviceFolder() async throws {
+        let device = try makeSimulatorDevice(name: "B1111111-2222-3333-4444-555555555555", runtime: nil)
         let recorder = Recorder()
         let service = makeService(
             recorder: recorder,
@@ -320,8 +320,10 @@ final class EmulatorManagementServiceTests: XCTestCase {
             recorder.trashed.map { $0.resolvingSymlinksInPath() },
             [device.resolvingSymlinksInPath()]
         )
-        XCTAssertFalse(recorder.commands.contains { $0.contains("delete") },
-                       "Simulator device entries should remove via Trash, not simctl")
+        XCTAssertFalse(
+            recorder.commands.contains(["simctl", "delete", sim.id]),
+            "Only known CoreSimulator devices should remove through simctl."
+        )
     }
 
     // MARK: - Removal
@@ -361,11 +363,15 @@ final class EmulatorManagementServiceTests: XCTestCase {
 
     func testFailedSimctlDeleteIsReportedWithoutReclaim() async throws {
         let recorder = Recorder()
-        let json = simctlJSON
         let service = EmulatorManagementService(
             runCommand: { _, arguments in
                 recorder.commands.append(arguments)
-                if arguments.contains("list") { return .init(exitCode: 0, output: json) }
+                if arguments == ["simctl", "runtime", "list", "-j"] {
+                    return .init(exitCode: 0, output: emulatorSimctlRuntimesJSON)
+                }
+                if arguments == ["simctl", "list", "devices", "-j"] {
+                    return .init(exitCode: 0, output: emptyEmulatorDevicesJSON)
+                }
                 return .init(exitCode: 1, output: "Unable to delete: runtime is in use")
             },
             locateXcrun: { URL(fileURLWithPath: "/usr/bin/xcrun") },
@@ -415,4 +421,60 @@ final class EmulatorManagementServiceTests: XCTestCase {
             "tvOS 18.4"
         )
     }
+}
+
+private func simulatorDevicesJSON(udid: String, deviceDirectory: URL) -> String {
+    let dataPath = deviceDirectory.appendingPathComponent("data", isDirectory: true).path
+    return """
+    {
+      "devices": {
+        "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+          {
+            "name": "iPhone 17 Pro",
+            "udid": "\(udid)",
+            "state": "Shutdown",
+            "isAvailable": true,
+            "dataPath": "\(dataPath)",
+            "dataPathSize": 9500000000,
+            "lastBootedAt": "2026-06-20T10:00:00Z"
+          }
+        ]
+      }
+    }
+    """
+}
+
+private func makeService(
+    recorder: Recorder,
+    androidRoot: URL?,
+    appleDeviceSupportRoots: [URL]? = nil,
+    simulatorDevicesRoot: URL? = nil,
+    simulatorDevicesJSON: String? = nil
+) -> EmulatorManagementService {
+    let devicesJSON = simulatorDevicesJSON ?? emptyEmulatorDevicesJSON
+    return EmulatorManagementService(
+        runCommand: { _, arguments in
+            recorder.commands.append(arguments)
+            if arguments == ["simctl", "runtime", "list", "-j"] {
+                return .init(exitCode: 0, output: emulatorSimctlRuntimesJSON)
+            }
+            if arguments == ["simctl", "list", "devices", "-j"] {
+                return .init(exitCode: 0, output: devicesJSON)
+            }
+            return .init(exitCode: 0, output: "")
+        },
+        locateXcrun: { URL(fileURLWithPath: "/usr/bin/xcrun") },
+        androidSystemImagesRoot: { androidRoot },
+        appleDeviceSupportRoots: { appleDeviceSupportRoots ?? [] },
+        readDeviceSupportVersion: { folder in
+            let plist = folder.appendingPathComponent("Info.plist")
+            guard let data = try? Data(contentsOf: plist),
+                  let raw = try? PropertyListSerialization.propertyList(from: data, format: nil),
+                  let dict = raw as? [String: Any] else { return nil }
+            return dict["Version"] as? String
+        },
+        simulatorDevicesRoot: { simulatorDevicesRoot },
+        measure: { _ in 4096 },
+        trashItem: { recorder.trashed.append($0) }
+    )
 }

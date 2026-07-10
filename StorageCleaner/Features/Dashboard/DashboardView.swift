@@ -22,7 +22,7 @@ struct DashboardView: View {
                         title: statusTitle
                     )
 
-                    switch viewModel.phase {
+                    switch viewModel.overviewPhase {
                     case .idle:
                         WelcomeHeroView(startScan: viewModel.startScan)
                         QuickCleanEntry(action: { showQuickClean = true })

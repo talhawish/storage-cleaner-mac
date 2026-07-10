@@ -11,14 +11,14 @@ struct DeleteAppConfirmationSheet: View {
     var body: some View {
         ConfirmationModal(
             variant: .destructive,
-            title: "Uninstall App",
-            subtitle: "This removes the application bundle",
+            title: "Move App to Trash",
+            subtitle: "This removes the application bundle from Applications",
             iconSystemName: "xmark.bin.fill",
             trailing: .sizeBadge(value: StorageFormatting.bytes(app.sizeBytes), tint: AppTheme.rose),
             showsCloseButton: false,
             preferredHeight: 520,
             confirm: AppModalActionBar.Action(
-                title: "Uninstall",
+                title: isDeleting ? "Moving..." : "Move to Trash",
                 systemImage: "xmark.bin.fill",
                 isProminent: true,
                 isDestructive: true,
@@ -79,7 +79,7 @@ struct DeleteAppConfirmationSheet: View {
             AppModalBanner(
                 systemImage: "info.circle.fill",
                 tint: AppTheme.cyan,
-                text: "You can reinstall this app from the App Store or its original source. "
+                text: "The app bundle is recoverable from Trash until you empty it. "
                     + "Related support files can be reviewed separately in System Junk."
             )
 
@@ -96,7 +96,7 @@ struct DeleteAppConfirmationSheet: View {
     private static func message(for error: Error) -> String {
         let description = (error as NSError).localizedDescription
         guard !description.isEmpty else {
-            return "The app could not be uninstalled. Check permissions and try again."
+            return "The app could not be moved to Trash. Check permissions and try again."
         }
         return description
     }

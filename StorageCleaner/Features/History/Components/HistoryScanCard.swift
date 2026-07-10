@@ -61,7 +61,7 @@ struct HistoryScanCard: View {
                 Spacer(minLength: 0)
                 scanMeta
             }
-            if summary.hasDiskSnapshot {
+            if summary.hasPostCleanupDiskSnapshot {
                 FreeSpacePill(summary: summary)
             }
             categoryChips
@@ -159,7 +159,11 @@ struct HistoryScanCard: View {
             parts.append("No items removed")
         }
         if let freed = summary.freedBytesByCleanup {
-            parts.append("Free space grew by \(StorageFormatting.bytes(freed))")
+            if freed > 0 {
+                parts.append("Free space grew by \(StorageFormatting.bytes(freed))")
+            } else {
+                parts.append("Free space unchanged until Trash is emptied")
+            }
         }
         parts.append(
             "\(summary.categoriesFound) categories detected, "
@@ -181,9 +185,12 @@ private struct FreeSpacePill: View {
         return freed > 0 ? AppTheme.mint : .secondary
     }
 
-    private var freedLabel: String? {
-        guard let freed = summary.freedBytesByCleanup, freed > 0 else { return nil }
-        return "+\(StorageFormatting.bytes(freed))"
+    private var impactText: String {
+        guard let freed = summary.freedBytesByCleanup else { return "Free space not captured" }
+        if freed > 0 {
+            return "+\(StorageFormatting.bytes(freed)) available now"
+        }
+        return "Free space unchanged until Trash is emptied"
     }
 
     var body: some View {
@@ -215,14 +222,11 @@ private struct FreeSpacePill: View {
                 .font(.caption.weight(.semibold).monospacedDigit())
                 .foregroundStyle(tint)
                 .lineLimit(1)
-            if let freedLabel {
-                Text(freedLabel)
-                    .font(.caption2.weight(.bold).monospacedDigit())
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(tint.opacity(0.12), in: Capsule())
-            }
+            Text(impactText)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
@@ -246,7 +250,7 @@ private struct FreeSpacePill: View {
             return "Free space \(before) before, \(after) after, grew by "
                 + "\(StorageFormatting.bytes(freed))"
         }
-        return "Free space \(before) before, \(after) after"
+        return "Free space \(before) before, \(after) after, unchanged until Trash is emptied"
     }
 }
 
@@ -281,7 +285,7 @@ private struct CategoryChip: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(category.kind.title), \(StorageFormatting.bytes(category.bytesReclaimed)) reclaimed"
+            "\(category.kind.title), \(StorageFormatting.bytes(category.bytesReclaimed)) cleaned"
         )
     }
 }

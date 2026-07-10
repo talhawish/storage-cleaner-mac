@@ -70,6 +70,25 @@ struct SubscriptionPlan: Sendable, Identifiable, Equatable {
             }
         }
     }
+
+    /// Storefront-neutral billing copy shown below the localized StoreKit
+    /// price. Currency conversions must remain under App Store control.
+    var billingDescription: String {
+        switch period {
+        case .monthly: "Billed monthly"
+        case .yearly: "Billed annually"
+        case .lifetime: "One-time purchase"
+        case .none: ""
+        }
+    }
+}
+
+/// Mandatory purchase terms displayed before a customer starts an
+/// auto-renewable subscription.
+enum SubscriptionDisclosure {
+    static let autoRenewal = "Payment is charged to your Apple ID at confirmation. Monthly and yearly "
+        + "subscriptions automatically renew unless canceled at least 24 hours before the end of the "
+        + "current period. Manage or cancel in App Store account settings."
 }
 
 // MARK: - Service protocol

@@ -55,7 +55,7 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         access?.stop()
     }
 
-    func testHomeOnlyBookmarkBackfillsExistingChildBookmarks() throws {
+    func testHomeOnlyBookmarkDoesNotCreateChildBookmarks() throws {
         let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
         try createStandardHomeFolders(at: home)
         let store = InMemoryBookmarkDataStore()
@@ -75,12 +75,12 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         access?.stop()
 
         XCTAssertNotNil(access)
-        XCTAssertNotNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Desktop"))
-        XCTAssertNotNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Downloads"))
-        XCTAssertNotNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Library"))
+        XCTAssertNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Desktop"))
+        XCTAssertNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Downloads"))
+        XCTAssertNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Library"))
     }
 
-    func testCurrentStatusesBackfillsAndReportsExistingChildrenAccessibleForHomeOnlyBookmark() throws {
+    func testCurrentStatusesReportsExistingChildrenAccessibleThroughHomeBookmark() throws {
         let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
         try createStandardHomeFolders(at: home)
         let store = InMemoryBookmarkDataStore()
@@ -101,6 +101,8 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         XCTAssertEqual(statuses.first(where: { $0.scope == .home })?.state, .accessible)
         XCTAssertEqual(statuses.first(where: { $0.scope == .desktop })?.state, .accessible)
         XCTAssertEqual(statuses.first(where: { $0.scope == .downloads })?.state, .accessible)
+        XCTAssertNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Desktop"))
+        XCTAssertNil(store.data(forKey: "HomeFolderSecurityScopedBookmark.Downloads"))
     }
 
     func testCurrentStatusesTreatsHomeBookmarkAsAuthorityWhenChildBookmarkIsStale() throws {

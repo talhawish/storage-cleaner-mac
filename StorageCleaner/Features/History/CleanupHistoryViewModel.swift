@@ -46,10 +46,17 @@ struct CleanupScanSummary: Identifiable, Equatable, Sendable {
     /// render the "free before / after" pill. Older scans (and scans run
     /// without FDA) leave this `false` so the UI gracefully omits the pill.
     var hasDiskSnapshot: Bool { volumeTotalBytes > 0 }
+    /// `true` when a cleanup ran and the app captured a post-cleanup
+    /// free-space sample. Scan-only records intentionally leave
+    /// `freeBytesAfter` at `0`, so views must not render that as real disk
+    /// state.
+    var hasPostCleanupDiskSnapshot: Bool {
+        hasCleanup && hasDiskSnapshot && freeBytesBefore > 0 && freeBytesAfter > 0
+    }
     /// Bytes the cleanup made available on the volume. `nil` until a cleanup
     /// has actually run *and* the post-cleanup free bytes were captured.
     var freedBytesByCleanup: Int64? {
-        guard hasCleanup, hasDiskSnapshot, freeBytesAfter > 0, freeBytesBefore > 0 else { return nil }
+        guard hasPostCleanupDiskSnapshot else { return nil }
         return max(0, freeBytesAfter - freeBytesBefore)
     }
 }

@@ -298,9 +298,37 @@ final class CleanupHistoryViewModelTests: XCTestCase {
 
         let summary = try XCTUnwrap(viewModel.summaries.first)
         XCTAssertTrue(summary.hasDiskSnapshot)
+        XCTAssertTrue(summary.hasPostCleanupDiskSnapshot)
         XCTAssertEqual(summary.freeBytesBefore, 500_000_000_000)
         XCTAssertEqual(summary.freeBytesAfter, 600_000_000_000)
         XCTAssertEqual(summary.freedBytesByCleanup, 100_000_000_000)
+    }
+
+    func testSummaryReportsZeroFreedBytesWhenTrashMoveDoesNotIncreaseFreeSpace() throws {
+        let fixture = makeFixture()
+        let scan = makeScan(
+            in: fixture.context,
+            volumeTotalBytes: 1_000_000_000_000,
+            freeBytesBefore: 500_000_000_000,
+            freeBytesAfter: 500_000_000_000
+        )
+        makeCleanup(
+            in: fixture.context,
+            scan: scan,
+            kind: .xcodeArtifacts,
+            bytes: 100_000_000_000,
+            items: 1
+        )
+        try fixture.context.save()
+
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
+        let viewModel = CleanupHistoryViewModel()
+        viewModel.update(with: scans)
+
+        let summary = try XCTUnwrap(viewModel.summaries.first)
+        XCTAssertTrue(summary.hasPostCleanupDiskSnapshot)
+        XCTAssertEqual(summary.totalBytesCleaned, 100_000_000_000)
+        XCTAssertEqual(summary.freedBytesByCleanup, 0)
     }
 
     func testSummaryHidesDiskInfoWhenTotalCapacityMissing() throws {
@@ -334,6 +362,7 @@ final class CleanupHistoryViewModelTests: XCTestCase {
 
         let summary = try XCTUnwrap(viewModel.summaries.first)
         XCTAssertTrue(summary.hasDiskSnapshot)
+        XCTAssertFalse(summary.hasPostCleanupDiskSnapshot)
         XCTAssertNil(summary.freedBytesByCleanup)
     }
 }

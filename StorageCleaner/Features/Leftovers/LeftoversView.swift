@@ -154,6 +154,7 @@ struct LeftoversView: View {
                     url: record.url,
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
+                    findingKind: record.kind,
                     metadata: record.detailMetadata,
                     canRevealInFinder: canUseProActions,
                     onToggle: { toggle(record.url) }

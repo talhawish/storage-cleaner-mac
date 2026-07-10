@@ -99,8 +99,8 @@ struct AppRowView: View {
                         .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
-                .help("Uninstall")
-                .accessibilityLabel("Uninstall")
+                .help("Move to Trash")
+                .accessibilityLabel("Move to Trash")
             }
         }
     }
@@ -122,7 +122,7 @@ struct AppRowView: View {
         }
         if !app.isSystemApp {
             Divider()
-            Button("Uninstall", role: .destructive) { onUninstall() }
+            Button("Move to Trash", role: .destructive) { onUninstall() }
         }
     }
 }

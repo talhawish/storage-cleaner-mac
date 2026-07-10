@@ -24,7 +24,7 @@ final class ProjectActivityScannerIconTests: XCTestCase {
         try Data(repeating: 1, count: 100).write(to: root.appending(path: "favicon.png"))
         try Data(repeating: 2, count: 4_000).write(to: appIconSet.appending(path: "icon-1024.png"))
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 4)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 4, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first { $0.name == "MyApp" })
 
@@ -40,12 +40,31 @@ final class ProjectActivityScannerIconTests: XCTestCase {
         try "".write(to: root.appending(path: "app/build.gradle"), atomically: true, encoding: .utf8)
         try Data(repeating: 3, count: 2_000).write(to: mipmap.appending(path: "ic_launcher.png"))
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 6)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 6, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first { $0.name == "droid" })
 
         XCTAssertEqual(project.technology, .android)
         XCTAssertEqual(project.iconURL?.lastPathComponent, "ic_launcher.png")
+    }
+
+    func testScannerFindsFlutterWebFaviconSVG() async throws {
+        let root = temporaryDirectory.appending(path: "flutter_app", directoryHint: .isDirectory)
+        let web = root.appending(path: "web", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: web, withIntermediateDirectories: true)
+        try "name: flutter_app".write(to: root.appending(path: "pubspec.yaml"), atomically: true, encoding: .utf8)
+        try """
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+          <rect width="64" height="64" fill="#02569B"/>
+        </svg>
+        """.write(to: web.appending(path: "favicon.svg"), atomically: true, encoding: .utf8)
+
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 3, minimumProjectSize: 1)
+        let snapshot = await scanner.scan()
+        let project = try XCTUnwrap(snapshot.projects.first { $0.name == "flutter_app" })
+
+        XCTAssertEqual(project.technology, .flutter)
+        XCTAssertEqual(project.iconURL?.lastPathComponent, "favicon.svg")
     }
 
     func testProjectWithoutIconsHasNilIconURL() async throws {
@@ -54,7 +73,7 @@ final class ProjectActivityScannerIconTests: XCTestCase {
         try "[package]".write(to: root.appending(path: "Cargo.toml"), atomically: true, encoding: .utf8)
         try Data(repeating: 9, count: 500).write(to: root.appending(path: "main.rs"))
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 3)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 3, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first { $0.name == "plain" })
 
@@ -69,7 +88,7 @@ final class ProjectActivityScannerIconTests: XCTestCase {
         // Only icon lives inside node_modules — must not be picked.
         try Data(repeating: 4, count: 3_000).write(to: depIcons.appending(path: "logo.png"))
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 4)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 4, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first { $0.name == "web" })
 

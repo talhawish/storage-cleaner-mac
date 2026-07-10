@@ -26,6 +26,7 @@ struct OrphanDirectoryResolver: Sendable {
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
                 return nil
             }
+            guard DirectoryAccessProbe.state(of: url) == .accessible else { return nil }
             let name = url.lastPathComponent
             guard !name.isEmpty, !name.hasPrefix(".") else { return nil }
             return catalog.ownsLibraryEntry(named: name) ? nil : url
@@ -263,6 +264,17 @@ struct OrphanedSavedAppStateScanner: StorageCategoryScanning {
                 catalog: catalog,
                 limit: 200
             )],
+            collector: collector,
+            safety: .safe
+        )
+    }
+
+    /// Test-only initializer that accepts a custom root so unit tests can run against a temporary
+    /// `Library` without touching the host's `~/Library/Saved Application State`.
+    internal init(collector: FileSystemCollector, catalog: any OrphanCatalog, root: URL) {
+        scanner = OrphanedDirectoriesScanner(
+            kind: .orphanedSavedApplicationState,
+            resolvers: [OrphanDirectoryResolver(root: root, catalog: catalog, limit: 200)],
             collector: collector,
             safety: .safe
         )

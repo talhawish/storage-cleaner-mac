@@ -20,7 +20,8 @@ struct ProjectActivityView: View {
         self.onRequirePro = onRequirePro
         self.permissionHandler = permissionHandler
         _viewModel = State(initialValue: ProjectActivityViewModel(
-            scanner: ProjectActivityScanner(permissionHandler: permissionHandler)
+            scanner: ProjectActivityScanner(permissionHandler: permissionHandler),
+            permissionHandler: permissionHandler
         ))
     }
 
@@ -38,8 +39,8 @@ struct ProjectActivityView: View {
                             url: FileManager.default.homeDirectoryForCurrentUser,
                             state: .denied
                         )],
-                        onOpenSettings: {},
-                        onGrantAccess: {}
+                        onOpenSettings: viewModel.openSystemSettings,
+                        onGrantAccess: { _ = viewModel.grantHomeFolderAccess() }
                     )
                 } else if let snapshot = viewModel.snapshot, !snapshot.projects.isEmpty {
                     dashboard(snapshot: snapshot)
@@ -68,13 +69,15 @@ struct ProjectActivityView: View {
                     await viewModel.compress(project)
                 },
                 canUseProActions: canUseProActions,
-                onRequirePro: onRequirePro
+                onRequirePro: presentProPaywallFromDetail,
+                permissionHandler: permissionHandler
             )
         }
         .sheet(isPresented: $showHibernateSheet) {
             HibernateSheet(
                 projects: viewModel.inactiveProjects,
-                threshold: inactivityThreshold
+                threshold: inactivityThreshold,
+                permissionHandler: permissionHandler
             ) { projects in
                 await viewModel.hibernate(projects)
             }
@@ -221,6 +224,13 @@ struct ProjectActivityView: View {
             return
         }
         showHibernateSheet = true
+    }
+
+    private func presentProPaywallFromDetail() {
+        selectedProject = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            onRequirePro()
+        }
     }
 }
 

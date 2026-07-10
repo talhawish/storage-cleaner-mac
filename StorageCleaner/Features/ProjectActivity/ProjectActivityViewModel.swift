@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -9,6 +10,7 @@ final class ProjectActivityViewModel {
     private let scanner: ProjectActivityScanner
     private let hibernationService: ProjectHibernationService
     private let compressionService: any ProjectCompressionServicing
+    private let permissionHandler: (any StoragePermissionHandling)?
     private var scanTask: Task<Void, Never>?
 
     private(set) var snapshot: ProjectActivitySnapshot?
@@ -33,11 +35,13 @@ final class ProjectActivityViewModel {
     init(
         scanner: ProjectActivityScanner = ProjectActivityScanner(),
         hibernationService: ProjectHibernationService = ProjectHibernationService(),
-        compressionService: any ProjectCompressionServicing = ProjectCompressionService()
+        compressionService: any ProjectCompressionServicing = ProjectCompressionService(),
+        permissionHandler: (any StoragePermissionHandling)? = nil
     ) {
         self.scanner = scanner
         self.hibernationService = hibernationService
         self.compressionService = compressionService
+        self.permissionHandler = permissionHandler
     }
 
     // MARK: - Derived state
@@ -96,6 +100,18 @@ final class ProjectActivityViewModel {
         scanTask?.cancel()
         scanTask = nil
         isScanning = false
+    }
+
+    @discardableResult
+    func grantHomeFolderAccess() -> Bool {
+        guard permissionHandler?.requestHomeFolderAccess() == true else { return false }
+        scan()
+        return true
+    }
+
+    func openSystemSettings() {
+        guard let url = SystemSettingsPane.fullDiskAccess.url else { return }
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Filtering

@@ -3,6 +3,7 @@ import SwiftUI
 struct HibernateSheet: View {
     let projects: [ProjectInfo]
     let threshold: InactivityThreshold
+    let permissionHandler: (any StoragePermissionHandling)?
     let onHibernate: ([ProjectInfo]) async -> HibernationSummary
 
     @Environment(\.dismiss)
@@ -65,6 +66,7 @@ struct HibernateSheet: View {
                     ProjectSelectionRow(
                         project: project,
                         isSelected: selectedProjects.contains(project.id),
+                        permissionHandler: permissionHandler,
                         onToggle: { toggleSelection(project) }
                     )
                 }
@@ -181,6 +183,7 @@ struct HibernateSheet: View {
 struct ProjectSelectionRow: View {
     let project: ProjectInfo
     let isSelected: Bool
+    let permissionHandler: (any StoragePermissionHandling)?
     let onToggle: () -> Void
 
     var body: some View {
@@ -190,7 +193,14 @@ struct ProjectSelectionRow: View {
                     .font(.system(size: 18))
                     .foregroundStyle(isSelected ? AppTheme.orange : Color(white: 0.55))
 
-                ProjectIconView(iconURL: project.iconURL, technology: project.technology, size: 32, cornerRadius: 8)
+                ProjectIconView(
+                    iconURL: project.iconURL,
+                    technology: project.technology,
+                    fallback: project.iconFallback,
+                    permissionHandler: permissionHandler,
+                    size: 32,
+                    cornerRadius: 8
+                )
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {

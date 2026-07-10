@@ -23,7 +23,67 @@ final class DashboardViewModelOverviewTests: XCTestCase {
         )
     }
 
-    func testOverviewAccessorsAggregateSnapshot() async {
+    func testOverviewPhaseIsIdleAfterTargetedScan() async {
+        let snapshot = ScanSnapshot(
+            findings: [
+                finding(.xcodeArtifacts, .appleDevelopment, bytes: 80, items: 3, safety: .safe)
+            ],
+            scannedItemCount: 3,
+            duration: .seconds(1)
+        )
+        let viewModel = DashboardViewModel(
+            scanner: OverviewFixedScanner(snapshot: snapshot),
+            permissionHandler: OverviewStubPermissionHandler()
+        )
+
+        viewModel.startScan(for: [.xcodeArtifacts])
+        for _ in 0..<20 where viewModel.phase != .results {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.phase, .results)
+        XCTAssertEqual(viewModel.overviewPhase, .idle)
+    }
+
+    func testOverviewPhaseIsResultsAfterFullScan() async {
+        let snapshot = ScanSnapshot(
+            findings: [
+                finding(.xcodeArtifacts, .appleDevelopment, bytes: 80, items: 3, safety: .safe)
+            ],
+            scannedItemCount: 3,
+            duration: .seconds(1)
+        )
+        let viewModel = DashboardViewModel(
+            scanner: OverviewFixedScanner(snapshot: snapshot),
+            permissionHandler: OverviewStubPermissionHandler()
+        )
+
+        viewModel.startScan()
+        for _ in 0..<20 where viewModel.phase != .results {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.phase, .results)
+        XCTAssertEqual(viewModel.overviewPhase, .results)
+    }
+
+    func testOverviewPhaseIsEmptyAfterFullScanWithNoFindings() async {
+        let snapshot = ScanSnapshot(findings: [], scannedItemCount: 0, duration: .seconds(1))
+        let viewModel = DashboardViewModel(
+            scanner: OverviewFixedScanner(snapshot: snapshot),
+            permissionHandler: OverviewStubPermissionHandler()
+        )
+
+        viewModel.startScan()
+        for _ in 0..<20 where viewModel.phase != .empty {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.phase, .empty)
+        XCTAssertEqual(viewModel.overviewPhase, .empty)
+    }
+
+    func testOverviewAggregateSnapshot() async {
         let snapshot = ScanSnapshot(
             findings: [
                 finding(.xcodeArtifacts, .appleDevelopment, bytes: 80, items: 3, safety: .safe),

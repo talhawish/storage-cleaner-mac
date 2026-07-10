@@ -158,7 +158,9 @@ struct QuickCleanSuccessView: View {
 
 /// Pill rendered inside the Quick Clean success view when the caller passed
 /// free-bytes snapshots. Shows the volume's free space before the cleanup
-/// and the freshly-captured free space after, plus a green "grew by X" call-out.
+/// and the freshly-captured free space after. Trash moves can leave free
+/// space unchanged until the user empties the Trash, so the pill calls that
+/// out explicitly instead of implying the bytes are immediately available.
 private struct FreeSpaceImpactPill: View {
     let freeBytesBefore: Int64
     let freeBytesAfter: Int64
@@ -168,6 +170,15 @@ private struct FreeSpaceImpactPill: View {
     }
 
     private var tint: Color { delta > 0 ? AppTheme.mint : .secondary }
+    private var impactText: String {
+        if delta > 0 {
+            return "+\(StorageFormatting.bytes(delta)) available now"
+        }
+        if delta == 0 {
+            return "Free space unchanged until Trash is emptied"
+        }
+        return "Free space changed during cleanup"
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -175,32 +186,35 @@ private struct FreeSpaceImpactPill: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
-            Text("Free before")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.4)
-            Text(StorageFormatting.bytes(freeBytesBefore))
-                .font(.caption.weight(.semibold).monospacedDigit())
-            Image(systemName: "arrow.right")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text("Free after")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.4)
-            Text(StorageFormatting.bytes(freeBytesAfter))
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(tint)
-            if delta > 0 {
-                Text("+\(StorageFormatting.bytes(delta))")
-                    .font(.caption2.weight(.bold).monospacedDigit())
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("Free before")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                    Text(StorageFormatting.bytes(freeBytesBefore))
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                    Image(systemName: "arrow.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text("Free after")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                    Text(StorageFormatting.bytes(freeBytesAfter))
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(tint)
+                }
+
+                Text(impactText)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(tint)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(tint.opacity(0.12), in: Capsule())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             Spacer(minLength: 0)
         }
@@ -219,7 +233,7 @@ private struct FreeSpaceImpactPill: View {
         .accessibilityLabel(
             "Free space \(StorageFormatting.bytes(freeBytesBefore)) before, "
                 + "\(StorageFormatting.bytes(freeBytesAfter)) after"
-                + (delta > 0 ? ", grew by \(StorageFormatting.bytes(delta))" : "")
+                + ", \(impactText)"
         )
     }
 }

@@ -64,9 +64,9 @@ Per locale you support, also fill in:
 - **Display name** — e.g. "Storage Cleaner Pro · Monthly"
 - **Description** — short marketing line (≤85 chars)
 - **App Store promotion image** (optional) — 1024×1024 PNG, no text
-- **Review information** — one screenshot showing the paywall + a demo
-  sandbox account in TestFlight that the reviewer can use. **Without
-  this, review is delayed or rejected.**
+- **Review information** — one screenshot showing the paywall and clear
+  instructions for reaching it. State that no login is required. Do not
+  provide a personal or sandbox Apple ID to App Review.
 
 ### 1.4 Create the Lifetime non-consumable
 
@@ -105,16 +105,19 @@ Recommended first wave of locales: **en-US, en-GB, de-DE, fr-FR, es-ES,
 ja, zh-Hans**. App Store Connect will suggest prices for each tier per
 storefront.
 
-### 1.7 Submit for review (just the IAPs)
+### 1.7 Prepare the first IAP submission
 
-You don't need a full app submission — IAPs are reviewed **independently**
-and you can submit them ahead of the app binary so they're "ready" when
-the app goes up.
+Apple requires an app's **first** in-app purchase or subscription to be
+submitted with a new app version. Do not submit the first products as an
+independent review submission.
 
-1. Select the IAP → **Submit for Review**
-2. Repeat for all 3 products
-3. Wait for status: **Ready to Submit** (this is the state you need
-   before you can buy it in sandbox — see §3)
+1. Complete metadata, pricing, localization, tax category, availability,
+   and the review screenshot for all 3 products.
+2. Confirm each product is in **Ready to Submit** state.
+3. On the macOS app version page, add the monthly, yearly, and lifetime
+   products under **In-App Purchases and Subscriptions**.
+4. Submit that app version and its first products together. After Apple
+   approves the first product, later products can be submitted separately.
 
 ---
 
@@ -127,8 +130,8 @@ App Review. Open `StorageCleaner/Core/Models/AppLinks.swift` and replace
 the placeholder URLs with your real ones:
 
 ```swift
-static let terms = URL(string: "https://your-domain.com/terms")!
-static let privacy = URL(string: "https://your-domain.com/privacy")!
+static let terms = makeURL("https://your-domain.com/terms")
+static let privacy = makeURL("https://your-domain.com/privacy")
 ```
 
 These URLs must:
@@ -275,10 +278,9 @@ addition to the normal app review. Make sure all of these are in place
 
 - [ ] **Paywall has clear pricing.** Each plan card shows the localized
       price (e.g. "$4.99", "€4,99") and the billing period ("/ month").
-- [ ] **Auto-renew disclosure is visible.** We render this in
-      `PaywallView.autoRenewDisclosure`:
-      "Subscriptions renew automatically until cancelled in App Store
-      Settings." (App Review guideline 3.1.2)
+- [ ] **Auto-renew disclosure is visible.** `PaywallFooterBar` displays
+      payment timing, automatic renewal, the 24-hour cancellation window,
+      and where the customer can manage or cancel.
 - [ ] **Link to Terms of Service and Privacy Policy in the paywall.**
       We have this in `PaywallFooterBar` and both URLs are reachable.
 - [ ] **Link to Manage Subscriptions for active subscribers.** We have
@@ -293,9 +295,14 @@ addition to the normal app review. Make sure all of these are in place
       not the subscription group — that's expected.
 - [ ] **Review screenshots show the paywall** with the prices in the
       correct storefront currency.
-- [ ] **Sandbox demo account credentials** in the **Review Notes**
-      field of the App Store version. Even if the sandbox tester is
-      obvious, fill this in.
+- [ ] **Review Notes state that no login is required** and give exact steps
+      for reaching the paywall. Never provide Apple ID credentials.
+- [ ] **The first monthly, yearly, and lifetime products are attached to
+      the app version submission.** A first IAP cannot be reviewed as an
+      independent submission.
+- [ ] **Terms and Privacy URLs return HTTP 200.** For this release they are
+      `https://storage-cleaner-a0c0f.web.app/terms` and
+      `https://storage-cleaner-a0c0f.web.app/privacy`.
 
 ---
 
@@ -310,6 +317,32 @@ Once everything is green:
 3. After approval, the IAPs move from **Ready to Submit** to **Approved**
    automatically — no separate step
 4. Users can now buy Pro
+
+### Review notes for this resubmission
+
+Replace the macOS version placeholder after recording, attach the video in
+the App Review conversation, and paste this into **Review Notes**:
+
+```text
+Storage Cleaner requires no account or login. All file analysis runs locally
+on the Mac.
+
+We attached a screen recording captured on a physical Mac running macOS
+[VERSION]. It begins with a fresh app launch and demonstrates folder access,
+a complete scan, result review, cleanup preview, moving selected files to
+Trash, the Pro purchase screen, Restore Purchases, and subscription settings.
+
+Review path:
+1. Launch the app and grant the requested folder access.
+2. Start a scan from Overview and wait for results.
+3. Open a result category and select a cleanup action.
+4. The Pro screen shows each product's localized title, price, and billing
+   period, plus renewal/cancellation terms and working Terms of Use and
+   Privacy Policy links.
+
+The first monthly, yearly, and lifetime in-app purchases are included with
+this app version submission. No external payment method is used.
+```
 
 After launch, monitor:
 
@@ -330,7 +363,6 @@ After launch, monitor:
 | Purchase succeeds but entitlement doesn't update | `Transaction.updates` not being observed | Verify the app isn't terminating; the actor starts the listener on first use. Cold-launch the app and try again |
 | "Missing Info" badge in ASC | Paid Applications Agreement not signed or banking missing | §1.1 |
 | `AppStore.showManageSubscriptions` doesn't compile | That API is iOS-only (takes `UIWindowScene`) | Our macOS fallback opens the URL — already handled in `StoreKitSubscriptionService.showManageSubscriptions()` |
-| `force_unwrapping` SwiftLint error in `AppLinks` | `URL(string:)!` | The URLs are placeholders — replace with your own; the force-unwrap is intentional to crash early in dev if the URL is malformed |
 | Sandbox "Cannot connect to iTunes Store" | Signed-in Apple ID is not a sandbox account, or you forgot to sign out of your real account first | Sign out of System Settings → Media & App Store, then sign in with the sandbox tester when prompted by the StoreKit sheet |
 | Restore Purchases returns nothing on a device that has a subscription | The StoreKit transaction history on the device is empty (sandbox reset, restored from backup, etc.) | Sign in to the App Store with the same Apple ID that bought the subscription; the transaction lives in iCloud |
 

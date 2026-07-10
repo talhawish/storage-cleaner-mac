@@ -20,7 +20,7 @@ struct InstalledAppCatalog: Sendable {
     /// when an app has no usable `CFBundleIdentifier` (older or unsigned bundles).
     let directoryNames: Set<String>
 
-    private static let searchRoots: [URL] = {
+    static let defaultSearchRoots: [URL] = {
         var roots: [URL] = []
         roots.append(URL(fileURLWithPath: "/Applications", isDirectory: true))
         roots.append(URL(fileURLWithPath: "/Applications/Utilities", isDirectory: true))
@@ -29,7 +29,7 @@ struct InstalledAppCatalog: Sendable {
         return roots
     }()
 
-    init(searchRoots: [URL] = InstalledAppCatalog.searchRoots) {
+    init(searchRoots: [URL] = InstalledAppCatalog.defaultSearchRoots) {
         var bundleIDs = SystemJunkPaths.appleBundleIDs
         bundleIDs.formUnion(SystemJunkPaths.alwaysInstalledBundleIDs)
 
@@ -73,6 +73,7 @@ struct InstalledAppCatalog: Sendable {
         return bundleIDs.contains { bundleID in
             lower.hasPrefix(bundleID + ".")
                 || lower.hasPrefix("group." + bundleID)
+                || lower.hasSuffix("." + bundleID)
         }
     }
 
@@ -101,7 +102,7 @@ struct InstalledAppCatalog: Sendable {
                 bundleIDs.insert(identifier)
                 directoryNames.insert(directoryName(for: identifier))
             }
-            if let name = displayName(in: candidate), !name.isEmpty {
+            for name in displayNames(in: candidate) where !name.isEmpty {
                 directoryNames.insert(name)
             }
         }
@@ -112,9 +113,12 @@ struct InstalledAppCatalog: Sendable {
         return stringValue(in: plistURL, key: "CFBundleIdentifier")
     }
 
-    private static func displayName(in appBundle: URL) -> String? {
+    private static func displayNames(in appBundle: URL) -> [String] {
         let plistURL = appBundle.appending(path: "Contents/Info.plist")
-        return stringValue(in: plistURL, key: "CFBundleName")
+        return [
+            stringValue(in: plistURL, key: "CFBundleName"),
+            stringValue(in: plistURL, key: "CFBundleDisplayName")
+        ].compactMap { $0 }
     }
 
     private static func stringValue(in plistURL: URL, key: String) -> String? {
@@ -134,5 +138,30 @@ struct InstalledAppCatalog: Sendable {
             return String(last)
         }
         return bundleID
+    }
+}
+
+final class LazyInstalledAppCatalog: @unchecked Sendable, OrphanCatalog {
+    private let searchRoots: [URL]
+    private let lock = NSLock()
+    private var cachedCatalog: InstalledAppCatalog?
+
+    init(searchRoots: [URL]? = nil) {
+        self.searchRoots = searchRoots ?? InstalledAppCatalog.defaultSearchRoots
+    }
+
+    func ownsLibraryEntry(named entryName: String) -> Bool {
+        catalog().ownsLibraryEntry(named: entryName)
+    }
+
+    private func catalog() -> InstalledAppCatalog {
+        lock.withLock {
+            if let cachedCatalog {
+                return cachedCatalog
+            }
+            let catalog = InstalledAppCatalog(searchRoots: searchRoots)
+            cachedCatalog = catalog
+            return catalog
+        }
     }
 }

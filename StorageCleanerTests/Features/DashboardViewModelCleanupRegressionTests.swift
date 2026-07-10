@@ -120,6 +120,38 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot?.findings.first?.pathBytes, [kept: 60])
     }
 
+    func testPartialSystemJunkCleanupPrunesDeletedPathsAndLeavesPermissionFailures() async {
+        let removed = URL(fileURLWithPath: "/Users/test/Library/Caches/StaleApp", isDirectory: true)
+        let denied = URL(fileURLWithPath: "/Users/test/Library/Caches/LockedApp", isDirectory: true)
+        let finding = StorageFinding(
+            kind: .orphanedAppCaches,
+            domain: .systemJunk,
+            bytes: 100,
+            itemCount: 2,
+            safety: .safe,
+            examples: [],
+            filePaths: [removed, denied],
+            pathBytes: [removed: 40, denied: 60]
+        )
+        let viewModel = makeViewModel(
+            finding: finding,
+            cleanupService: PartialFailureCleanupService(
+                deletedBytesByURL: [removed: 40],
+                failedURLs: [denied]
+            )
+        )
+        await loadSnapshot(in: viewModel)
+
+        let result = await viewModel.deleteFiles([removed, denied])
+
+        XCTAssertEqual(result.deletedItems.map(\.originalURL), [removed])
+        XCTAssertEqual(result.failedURLs.map(\.0), [denied])
+        XCTAssertEqual(viewModel.snapshot?.findings.first?.filePaths, [denied])
+        XCTAssertEqual(viewModel.snapshot?.findings.first?.itemCount, 1)
+        XCTAssertEqual(viewModel.snapshot?.findings.first?.bytes, 60)
+        XCTAssertEqual(viewModel.snapshot?.findings.first?.pathBytes, [denied: 60])
+    }
+
     func testDeleteRunsCleanupInsideHomeFolderAccessScope() async {
         let removed = URL(fileURLWithPath: "/Users/test/Library/Caches/SafeCache", isDirectory: true)
         let permissionHandler = RecordingPermissionHandler()
@@ -194,6 +226,45 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         XCTAssertEqual(store.recordedCleanups.first?.first?.samplePaths, [pack])
     }
 
+    func testSimctlDeviceCleanupRecordsHistoryWithoutTrashPath() async {
+        let store = SpyHistoryStore()
+        let viewModel = makeViewModel(
+            finding: StorageFinding(
+                kind: .xcodeArtifacts,
+                domain: .appleDevelopment,
+                bytes: 9_500,
+                itemCount: 1,
+                safety: .review,
+                examples: [],
+                filePaths: []
+            ),
+            historyStore: store
+        )
+        await loadSnapshot(in: viewModel)
+        let image = EmulatorImage(
+            id: "A01F28DA-DDAC-446E-B66B-8F7D47A7FDF0",
+            platform: .simulatorDevices,
+            title: "iPhone 17 Pro",
+            versionLabel: "iOS 26.5",
+            key: VersionKey.parse("26.5"),
+            bytes: 9_500,
+            detail: "Runtime: iOS 26.5",
+            removal: .simctlDevice(udid: "A01F28DA-DDAC-446E-B66B-8F7D47A7FDF0"),
+            isRemovable: true,
+            lastUsed: nil
+        )
+
+        await viewModel.reconcileEmulatorCleanup(
+            EmulatorCleanupResult(removedIDs: [image.id], totalBytesReclaimed: 9_500, failures: []),
+            removedImages: [image]
+        )
+
+        XCTAssertEqual(store.recordedCleanups.first?.first?.kind, .xcodeArtifacts)
+        XCTAssertEqual(store.recordedCleanups.first?.first?.bytesReclaimed, 9_500)
+        XCTAssertEqual(store.recordedCleanups.first?.first?.itemCount, 1)
+        XCTAssertEqual(store.recordedCleanups.first?.first?.samplePaths, [])
+    }
+
     private func makeViewModel(
         finding: StorageFinding,
         cliSizes: [URL: Int64] = [:],
@@ -256,6 +327,27 @@ private struct PermanentOnlyCleanupService: CleanupService {
             deletedURLs: [],
             deletedItems: deletedItems,
             failedURLs: [],
+            totalBytesReclaimed: deletedItems.reduce(Int64(0)) { $0 + $1.bytesReclaimed }
+        )
+    }
+}
+
+private struct PartialFailureCleanupService: CleanupService {
+    let deletedBytesByURL: [URL: Int64]
+    let failedURLs: [URL]
+
+    func delete(urls: [URL]) async -> CleanupResult {
+        let failedSet = Set(failedURLs)
+        let deletedItems = urls.compactMap { url -> DeletedItem? in
+            guard !failedSet.contains(url) else { return nil }
+            return DeletedItem(originalURL: url, bytesReclaimed: deletedBytesByURL[url] ?? 0)
+        }
+        return CleanupResult(
+            deletedURLs: deletedItems.map(\.originalURL),
+            deletedItems: deletedItems,
+            failedURLs: failedURLs.map {
+                ($0, CleanupError.deletionFailed($0, CocoaError(.fileWriteNoPermission)))
+            },
             totalBytesReclaimed: deletedItems.reduce(Int64(0)) { $0 + $1.bytesReclaimed }
         )
     }

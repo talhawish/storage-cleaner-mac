@@ -177,7 +177,7 @@ extension LiveStorageScanner {
 
     static func live(permissionHandler: (any StoragePermissionHandling)?) -> LiveStorageScanner {
         let collector = FileSystemCollector()
-        let appCatalog = InstalledAppCatalog()
+        let appCatalog = LazyInstalledAppCatalog()
         let scanners: [any StorageCategoryScanning] = [
             XcodeStorageScanner(collector: collector),
             IosDeviceSupportScanner(),

@@ -124,10 +124,11 @@ struct PlanCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 6) {
-            Text(plan.entitlement.displayName.uppercased())
-                .font(.caption2.weight(.bold))
+            Text(plan.displayName)
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .tracking(0.6)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             sideBadge
         }
@@ -176,12 +177,7 @@ struct PlanCard: View {
     }
 
     private var priceQualifier: String {
-        switch plan.entitlement {
-        case .monthly: return "Billed monthly"
-        case .yearly: return "$2.50 / mo · billed yearly"
-        case .lifetime: return "One-time, yours forever"
-        case .free: return ""
-        }
+        plan.billingDescription
     }
 
     private func periodSuffix(for period: SubscriptionPlan.BillingPeriod) -> String {

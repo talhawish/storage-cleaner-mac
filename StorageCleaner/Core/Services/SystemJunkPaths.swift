@@ -115,6 +115,7 @@ enum SystemJunkPaths {
         "CloudDocs",
         "CoreSimulator",
         "CrashReporter",
+        "DifferentialPrivacy",
         "DiskImages",
         "Dock",
         "FaceTime",

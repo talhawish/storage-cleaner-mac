@@ -80,6 +80,7 @@ final class SystemJunkScannersTests: XCTestCase {
 
     func testOrphanedAppSupportSkipsReservedProtectedLibraryEntries() async throws {
         try makeDirectory(relativeTo: "Application Support/CallHistoryDB")
+        try makeDirectory(relativeTo: "Application Support/DifferentialPrivacy")
         try makeDirectory(relativeTo: "Application Support/Google")
         try makeDirectory(relativeTo: "Application Support/OrphanedTool")
         try writeBytes(1024, to: "Application Support/OrphanedTool/data.bin")
@@ -113,6 +114,22 @@ final class SystemJunkScannersTests: XCTestCase {
         XCTAssertEqual(finding.kind, .orphanedAppCaches)
         XCTAssertEqual(finding.safety, .safe)
         XCTAssertEqual(finding.itemCount, 1)
+        XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["OrphanedCaches"])
+    }
+
+    func testOrphanedAppCachesSkipsAppleSystemEntries() async throws {
+        try makeDirectory(relativeTo: "Caches/com.apple.someprivateagent")
+        try makeDirectory(relativeTo: "Caches/OrphanedCaches")
+        try writeBytes(2048, to: "Caches/OrphanedCaches/cache.bin")
+
+        let scanner = OrphanedAppCachesScanner(
+            collector: collector,
+            catalog: InstalledAppCatalog(searchRoots: []),
+            root: temporaryLibrary.appending(path: "Caches")
+        )
+        let result = await scanner.scan()
+
+        let finding = try XCTUnwrap(result.finding)
         XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["OrphanedCaches"])
     }
 
@@ -154,6 +171,24 @@ final class SystemJunkScannersTests: XCTestCase {
         let result = await scanner.scan()
 
         XCTAssertNil(result.finding)
+    }
+
+    func testOrphanedAppContainersSkipsAppleAndTeamPrefixedEntries() async throws {
+        try makeDirectory(relativeTo: "Containers/com.apple.someprivateagent")
+        try makeDirectory(relativeTo: "Group Containers/UBF8T346G9.com.microsoft.VSCode")
+        try makeDirectory(relativeTo: "Group Containers/group.com.orphan")
+        try writeBytes(512, to: "Group Containers/group.com.orphan/data.bin")
+
+        let scanner = OrphanedAppContainersScanner(
+            collector: collector,
+            catalog: InstalledAppCatalog(searchRoots: []),
+            root: temporaryLibrary.appending(path: "Containers"),
+            groupContainersRoot: temporaryLibrary.appending(path: "Group Containers")
+        )
+        let result = await scanner.scan()
+
+        let finding = try XCTUnwrap(result.finding)
+        XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["group.com.orphan"])
     }
 
     // MARK: - Orphaned Preferences
@@ -203,6 +238,58 @@ final class SystemJunkScannersTests: XCTestCase {
         let result = await scanner.scan()
 
         XCTAssertNil(result.finding)
+    }
+
+    func testOrphanedPreferencesSkipsAppleSystemPlists() async throws {
+        try writePlist(named: "com.apple.someprivateagent.plist", in: "Preferences")
+        try writePlist(named: "com.orphan.gone.plist", in: "Preferences")
+
+        let scanner = OrphanedPreferencesScanner(
+            catalog: InstalledAppCatalog(searchRoots: []),
+            collector: collector,
+            root: temporaryLibrary.appending(path: "Preferences")
+        )
+        let result = await scanner.scan()
+
+        let finding = try XCTUnwrap(result.finding)
+        XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["com.orphan.gone.plist"])
+    }
+
+    // MARK: - Saved Application State
+
+    func testOrphanedSavedApplicationStateFindsUnownedState() async throws {
+        try makeDirectory(relativeTo: "Saved Application State/com.orphan.gone.savedState")
+        try makeDirectory(relativeTo: "Saved Application State/com.example.InstalledApp.savedState")
+        try writeBytes(512, to: "Saved Application State/com.orphan.gone.savedState/window.plist")
+
+        let scanner = OrphanedSavedAppStateScanner(
+            collector: collector,
+            catalog: catalog,
+            root: temporaryLibrary.appending(path: "Saved Application State")
+        )
+        let result = await scanner.scan()
+
+        let finding = try XCTUnwrap(result.finding)
+        XCTAssertEqual(finding.kind, .orphanedSavedApplicationState)
+        XCTAssertEqual(finding.safety, .safe)
+        XCTAssertEqual(finding.itemCount, 1)
+        XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["com.orphan.gone.savedState"])
+    }
+
+    func testOrphanedSavedApplicationStateSkipsAppleSystemState() async throws {
+        try makeDirectory(relativeTo: "Saved Application State/com.apple.someprivateagent.savedState")
+        try makeDirectory(relativeTo: "Saved Application State/com.orphan.gone.savedState")
+        try writeBytes(512, to: "Saved Application State/com.orphan.gone.savedState/window.plist")
+
+        let scanner = OrphanedSavedAppStateScanner(
+            collector: collector,
+            catalog: InstalledAppCatalog(searchRoots: []),
+            root: temporaryLibrary.appending(path: "Saved Application State")
+        )
+        let result = await scanner.scan()
+
+        let finding = try XCTUnwrap(result.finding)
+        XCTAssertEqual(finding.filePaths.map(\.lastPathComponent), ["com.orphan.gone.savedState"])
     }
 
     // MARK: - Old crash reports
@@ -329,7 +416,10 @@ private struct StubOrphanCatalog: OrphanCatalog {
     func ownsLibraryEntry(named entryName: String) -> Bool {
         let lower = entryName.lowercased()
         for (bundleID, names) in installed {
-            if bundleID.lowercased() == lower { return true }
+            let lowerBundleID = bundleID.lowercased()
+            if lowerBundleID == lower || lower.hasPrefix(lowerBundleID + ".") {
+                return true
+            }
             for name in names ?? [] where name.lowercased() == lower { return true }
         }
         return false

@@ -3,28 +3,44 @@ import XCTest
 @testable import StorageCleaner
 
 final class AppBundleUninstallerTests: XCTestCase {
-    func testDirectRemovalDoesNotRequestAdministratorApproval() async throws {
+    func testDirectMoveToTrashUsesExactAppBundle() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
         let recorder = AppBundleUninstallerRecorder()
         let uninstaller = makeUninstaller(recorder: recorder)
 
         try await uninstaller.uninstall(app)
 
-        XCTAssertEqual(recorder.directRemovals, [app.standardizedFileURL])
-        XCTAssertTrue(recorder.administratorScripts.isEmpty)
+        XCTAssertEqual(recorder.trashRequests, [app.standardizedFileURL])
+        XCTAssertTrue(recorder.userAccessTrashRequests.isEmpty)
     }
 
-    func testPermissionDeniedFallsBackToAdministratorApproval() async throws {
+    func testPermissionDeniedFallsBackToUserSelectedApplicationsAccess() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
-        let recorder = AppBundleUninstallerRecorder(directError: CocoaError(.fileWriteNoPermission))
+        let permissionError = CocoaError(.fileWriteNoPermission)
+        let recorder = AppBundleUninstallerRecorder(trashError: permissionError)
         let uninstaller = makeUninstaller(recorder: recorder)
 
         try await uninstaller.uninstall(app)
 
-        XCTAssertEqual(recorder.directRemovals, [app.standardizedFileURL])
-        XCTAssertEqual(recorder.administratorScripts, [
-            AppBundleUninstaller.administratorRemovalScript(for: app)
-        ])
+        XCTAssertEqual(recorder.trashRequests, [app.standardizedFileURL])
+        XCTAssertEqual(recorder.userAccessTrashRequests, [app.standardizedFileURL])
+        XCTAssertTrue(recorder.adminTrashRequests.isEmpty)
+    }
+
+    func testPermissionDeniedAfterApplicationsAccessFallsBackToAdministratorAuthorization() async throws {
+        let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
+        let permissionError = CocoaError(.fileWriteNoPermission)
+        let recorder = AppBundleUninstallerRecorder(
+            trashError: permissionError,
+            userAccessTrashError: permissionError
+        )
+        let uninstaller = makeUninstaller(recorder: recorder)
+
+        try await uninstaller.uninstall(app)
+
+        XCTAssertEqual(recorder.trashRequests, [app.standardizedFileURL])
+        XCTAssertEqual(recorder.userAccessTrashRequests, [app.standardizedFileURL])
+        XCTAssertEqual(recorder.adminTrashRequests, [app.standardizedFileURL])
     }
 
     func testUnsupportedLocationIsRejectedBeforeRemoval() async throws {
@@ -42,88 +58,106 @@ final class AppBundleUninstallerTests: XCTestCase {
             XCTAssertEqual(url, app.standardizedFileURL)
         }
 
-        XCTAssertTrue(recorder.directRemovals.isEmpty)
-        XCTAssertTrue(recorder.administratorScripts.isEmpty)
+        XCTAssertTrue(recorder.trashRequests.isEmpty)
+        XCTAssertTrue(recorder.userAccessTrashRequests.isEmpty)
     }
 
-    func testNonPermissionFailureDoesNotRequestAdministratorApproval() async throws {
+    func testNonPermissionFailureIsPreserved() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
-        let recorder = AppBundleUninstallerRecorder(directError: CocoaError(.fileNoSuchFile))
+        let recorder = AppBundleUninstallerRecorder(trashError: CocoaError(.fileNoSuchFile))
         let uninstaller = makeUninstaller(recorder: recorder)
 
         do {
             try await uninstaller.uninstall(app)
-            XCTFail("Expected direct removal failure to be preserved.")
+            XCTFail("Expected Trash move failure to be preserved.")
         } catch {
             XCTAssertEqual((error as NSError).code, CocoaError.fileNoSuchFile.rawValue)
         }
 
-        XCTAssertEqual(recorder.directRemovals, [app.standardizedFileURL])
-        XCTAssertTrue(recorder.administratorScripts.isEmpty)
+        XCTAssertEqual(recorder.trashRequests, [app.standardizedFileURL])
+        XCTAssertTrue(recorder.userAccessTrashRequests.isEmpty)
     }
 
-    func testFailedAdministratorApprovalReportsMeaningfulOutput() async throws {
+    func testUserSelectedAccessFailureIsReported() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
+        let accessError = AppBundleUninstallerError.applicationsAccessNotGranted(app.standardizedFileURL)
         let recorder = AppBundleUninstallerRecorder(
-            directError: CocoaError(.fileWriteNoPermission),
-            administratorOutput: .init(exitCode: 1, output: "User canceled.\n")
+            trashError: CocoaError(.fileWriteNoPermission),
+            userAccessTrashError: accessError
         )
         let uninstaller = makeUninstaller(recorder: recorder)
 
         do {
             try await uninstaller.uninstall(app)
-            XCTFail("Expected administrator failure to be reported.")
+            XCTFail("Expected user-selected access failure to be reported.")
         } catch let error as AppBundleUninstallerError {
-            guard case let .administratorApprovalFailed(url, message) = error else {
-                return XCTFail("Expected administratorApprovalFailed error, got \(error).")
+            guard case let .applicationsAccessNotGranted(url) = error else {
+                return XCTFail("Expected applicationsAccessNotGranted error, got \(error).")
             }
             XCTAssertEqual(url, app.standardizedFileURL)
-            XCTAssertEqual(message, "User canceled.")
         }
+
+        XCTAssertEqual(recorder.userAccessTrashRequests, [app.standardizedFileURL])
     }
 
     private func makeUninstaller(recorder: AppBundleUninstallerRecorder) -> AppBundleUninstaller {
         AppBundleUninstaller(
-            removeDirectly: { url in try recorder.removeDirectly(url) },
-            runAdministratorScript: { script in recorder.runAdministratorScript(script) }
+            moveToTrashDirectly: { url in try recorder.moveToTrash(url) },
+            moveToTrashWithUserSelectedAccess: { url in try recorder.moveToTrashWithUserAccess(url) },
+            moveToTrashWithAdminAuthorization: { url in try recorder.moveToTrashWithAdmin(url) }
         )
     }
 }
 
 private final class AppBundleUninstallerRecorder: @unchecked Sendable {
     private let lock = NSLock()
-    private let directError: Error?
-    private let administratorOutput: AppBundleUninstaller.CommandOutput
-    private var _directRemovals: [URL] = []
-    private var _administratorScripts: [String] = []
+    private let trashError: Error?
+    private let userAccessTrashError: Error?
+    private let adminTrashError: Error?
+    private var _trashRequests: [URL] = []
+    private var _userAccessTrashRequests: [URL] = []
+    private var _adminTrashRequests: [URL] = []
 
     init(
-        directError: Error? = nil,
-        administratorOutput: AppBundleUninstaller.CommandOutput = .init(exitCode: 0, output: "")
+        trashError: Error? = nil,
+        userAccessTrashError: Error? = nil,
+        adminTrashError: Error? = nil
     ) {
-        self.directError = directError
-        self.administratorOutput = administratorOutput
+        self.trashError = trashError
+        self.userAccessTrashError = userAccessTrashError
+        self.adminTrashError = adminTrashError
     }
 
-    var directRemovals: [URL] {
-        lock.withLock { _directRemovals }
+    var trashRequests: [URL] {
+        lock.withLock { _trashRequests }
     }
 
-    var administratorScripts: [String] {
-        lock.withLock { _administratorScripts }
+    var userAccessTrashRequests: [URL] {
+        lock.withLock { _userAccessTrashRequests }
     }
 
-    func removeDirectly(_ url: URL) throws {
+    var adminTrashRequests: [URL] {
+        lock.withLock { _adminTrashRequests }
+    }
+
+    func moveToTrash(_ url: URL) throws {
         try lock.withLock {
-            _directRemovals.append(url)
-            if let directError { throw directError }
+            _trashRequests.append(url)
+            if let trashError { throw trashError }
         }
     }
 
-    func runAdministratorScript(_ script: String) -> AppBundleUninstaller.CommandOutput {
-        lock.withLock {
-            _administratorScripts.append(script)
-            return administratorOutput
+    func moveToTrashWithUserAccess(_ url: URL) throws {
+        try lock.withLock {
+            _userAccessTrashRequests.append(url)
+            if let userAccessTrashError { throw userAccessTrashError }
+        }
+    }
+
+    func moveToTrashWithAdmin(_ url: URL) throws {
+        try lock.withLock {
+            _adminTrashRequests.append(url)
+            if let adminTrashError { throw adminTrashError }
         }
     }
 }

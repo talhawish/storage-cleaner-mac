@@ -87,6 +87,123 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// The most specific icon identity to show for a project when no real logo file
+/// was discovered. It deliberately stays separate from `ProjectTechnology` so
+/// hibernation, dependency sizing, and filtering keep using broad platforms.
+enum ProjectIconFallback: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case flutter = "Flutter"
+    case reactNative = "React Native"
+    case xcode = "Xcode"
+    case androidStudio = "Android Studio"
+    case laravel = "Laravel"
+    case php = "PHP"
+    case nextJS = "Next.js"
+    case nuxt = "Nuxt"
+    case nodeJS = "Node.js"
+    case django = "Django"
+    case python = "Python"
+    case golang = "Go"
+    case rust = "Rust"
+    case dotNet = ".NET"
+    case ruby = "Ruby"
+    case kotlin = "Kotlin"
+    case java = "Java"
+
+    var id: String { rawValue }
+
+    init(technology: ProjectTechnology) {
+        self = Self.byTechnology[technology, default: .nodeJS]
+    }
+
+    var symbolName: String {
+        switch self {
+        case .flutter: "f.square.fill"
+        case .reactNative: "atom"
+        case .xcode: "hammer.fill"
+        case .androidStudio: "a.square.fill"
+        case .laravel: "l.square.fill"
+        case .php: "p.circle.fill"
+        case .nextJS: "n.circle"
+        case .nuxt: "n.square"
+        case .nodeJS: "n.square.fill"
+        case .django: "d.square.fill"
+        case .python: "p.square.fill"
+        case .golang: "g.square.fill"
+        case .rust: "r.square.fill"
+        case .dotNet: "number.square.fill"
+        case .ruby: "diamond.fill"
+        case .kotlin: "k.square.fill"
+        case .java: "j.square.fill"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .flutter: "02569B"
+        case .reactNative: "61DAFB"
+        case .xcode: "147EFB"
+        case .androidStudio: "3DDC84"
+        case .laravel: "FF2D20"
+        case .php: "777BB4"
+        case .nextJS: "111111"
+        case .nuxt: "00DC82"
+        case .nodeJS: "68A063"
+        case .django: "092E20"
+        case .python: "3776AB"
+        case .golang: "00ADD8"
+        case .rust: "CE412B"
+        case .dotNet: "512BD4"
+        case .ruby: "CC342D"
+        case .kotlin: "7F52FF"
+        case .java: "ED8B00"
+        }
+    }
+
+    static func detect(
+        at directory: URL,
+        technology: ProjectTechnology,
+        fileManager: FileManager = .default
+    ) -> ProjectIconFallback {
+        switch technology {
+        case .nodeJS:
+            if ProjectDependencyRules.packageJSONContains("next", at: directory, fileManager: fileManager) {
+                return .nextJS
+            }
+            if ProjectDependencyRules.packageJSONContains("nuxt", at: directory, fileManager: fileManager) {
+                return .nuxt
+            }
+        case .php:
+            if ProjectDependencyRules.composerJSONContains("laravel/framework", at: directory, fileManager: fileManager)
+                || fileManager.fileExists(atPath: directory.appending(path: "artisan").path) {
+                return .laravel
+            }
+        case .python:
+            if ProjectDependencyRules.pythonProjectContains("django", at: directory, fileManager: fileManager) {
+                return .django
+            }
+        default:
+            break
+        }
+        return ProjectIconFallback(technology: technology)
+    }
+
+    private static let byTechnology: [ProjectTechnology: ProjectIconFallback] = [
+        .flutter: .flutter,
+        .reactNative: .reactNative,
+        .android: .androidStudio,
+        .swift: .xcode,
+        .dotNet: .dotNet,
+        .rust: .rust,
+        .golang: .golang,
+        .php: .php,
+        .python: .python,
+        .ruby: .ruby,
+        .nodeJS: .nodeJS,
+        .kotlin: .kotlin,
+        .java: .java
+    ]
+}
+
 /// A single signal that a directory belongs to a technology.
 enum ProjectMarker: Hashable, Sendable {
     /// An exact file name present in the directory (e.g. `Package.swift`).

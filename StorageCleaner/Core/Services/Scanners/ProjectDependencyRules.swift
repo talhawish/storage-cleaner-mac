@@ -24,6 +24,31 @@ enum ProjectDependencyRules {
             || isComposerVendorDirectory(directory.appending(path: "vendor", directoryHint: .isDirectory))
     }
 
+    static func composerJSONContains(
+        _ needle: String,
+        at directory: URL,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        textFileContains(needle, at: directory.appending(path: "composer.json"), fileManager: fileManager)
+    }
+
+    static func pythonProjectContains(
+        _ needle: String,
+        at directory: URL,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        [
+            "pyproject.toml",
+            "requirements.txt",
+            "Pipfile",
+            "setup.py",
+            "setup.cfg",
+            "environment.yml"
+        ].contains { name in
+            textFileContains(needle, at: directory.appending(path: name), fileManager: fileManager)
+        }
+    }
+
     static func isComposerVendorDirectory(_ directory: URL, fileManager: FileManager = .default) -> Bool {
         guard directory.lastPathComponent == "vendor" else { return false }
 
@@ -70,5 +95,18 @@ enum ProjectDependencyRules {
         }
 
         return relativeComponents.contains(where: technology.dependencyDirectoryNames.contains)
+    }
+
+    private static func textFileContains(
+        _ needle: String,
+        at url: URL,
+        fileManager: FileManager
+    ) -> Bool {
+        guard fileManager.fileExists(atPath: url.path),
+              let data = fileManager.contents(atPath: url.path),
+              let text = String(data: data, encoding: .utf8) else {
+            return false
+        }
+        return text.range(of: needle, options: [.caseInsensitive]) != nil
     }
 }

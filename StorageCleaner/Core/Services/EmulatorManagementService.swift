@@ -58,7 +58,7 @@ struct EmulatorManagementService: Sendable {
         // enough to do sequentially without blocking the main thread.
         let runtimes = await discoverAppleRuntimes()
         let deviceSupport = discoverAppleDeviceSupport()
-        let simulatorDevices = discoverSimulatorDevices()
+        let simulatorDevices = await discoverSimulatorDevices()
         let android = discoverAndroidImages()
         return (runtimes + deviceSupport + simulatorDevices + android).sorted { lhs, rhs in
             if lhs.platform.sortIndex != rhs.platform.sortIndex {
@@ -129,9 +129,70 @@ struct EmulatorManagementService: Sendable {
         }
     }
 
-    private func discoverSimulatorDevices() -> [EmulatorImage] {
+    private func discoverSimulatorDevices() async -> [EmulatorImage] {
+        let simctlDevices = await discoverSimulatorDevicesFromSimctl()
+        guard simctlDevices.didInspect else { return [] }
+
+        let orphanedFolders = discoverOrphanedSimulatorDeviceFolders(
+            excluding: simctlDevices.deviceDirectories
+        )
+        return simctlDevices.images + orphanedFolders
+    }
+
+    private func discoverSimulatorDevicesFromSimctl() async -> SimulatorDeviceDiscovery {
+        guard let xcrun = locateXcrun() else {
+            return SimulatorDeviceDiscovery(images: [], deviceDirectories: [], didInspect: false)
+        }
+        let output = await runCommand(xcrun, ["simctl", "list", "devices", "-j"])
+        guard output.succeeded, let data = output.output.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(SimulatorDevicesJSON.self, from: data) else {
+            return SimulatorDeviceDiscovery(images: [], deviceDirectories: [], didInspect: false)
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        let root = simulatorDevicesRoot()
+        var directories = Set<String>()
+        var images: [EmulatorImage] = []
+
+        for (runtimeIdentifier, devices) in decoded.devices {
+            for device in devices {
+                let directory = Self.simulatorDeviceDirectory(for: device, root: root)
+                if let directory {
+                    directories.insert(directory.standardizedFileURL.path)
+                }
+                let version = Self.runtimeVersionLabel(from: runtimeIdentifier)
+                let lastUsed = device.lastBootedAt.flatMap(isoFormatter.date(from:))
+                let state = device.state.map { " · \($0)" } ?? ""
+                images.append(
+                    EmulatorImage(
+                        id: device.udid,
+                        platform: .simulatorDevices,
+                        title: device.name,
+                        versionLabel: version,
+                        key: VersionKey.parse(version),
+                        bytes: device.dataPathSize ?? directory.map(measure) ?? 0,
+                        detail: "Runtime: \(runtimeIdentifier)\(state)",
+                        removal: .simctlDevice(udid: device.udid),
+                        isRemovable: true,
+                        lastUsed: lastUsed
+                    )
+                )
+            }
+        }
+
+        return SimulatorDeviceDiscovery(
+            images: images,
+            deviceDirectories: directories,
+            didInspect: true
+        )
+    }
+
+    private func discoverOrphanedSimulatorDeviceFolders(excluding knownDirectories: Set<String>) -> [EmulatorImage] {
         guard let root = simulatorDevicesRoot() else { return [] }
         return Self.subdirectories(of: root).compactMap { deviceDir -> EmulatorImage? in
+            guard !knownDirectories.contains(deviceDir.standardizedFileURL.path) else {
+                return nil
+            }
             // The data path may live inside the device directory; simctl's dataPathSize is the
             // canonical size. We measure directly so orphaned devices (no simctl entry) still
             // surface with an accurate byte count.
@@ -357,6 +418,14 @@ extension EmulatorManagementService {
         )
     }
 
+    private static func simulatorDeviceDirectory(for device: SimulatorDeviceJSON, root: URL?) -> URL? {
+        if let dataPath = device.dataPath {
+            let dataURL = URL(fileURLWithPath: dataPath)
+            return dataURL.lastPathComponent == "data" ? dataURL.deletingLastPathComponent() : dataURL
+        }
+        return root?.appendingPathComponent(device.udid, isDirectory: true)
+    }
+
     /// "com.apple.CoreSimulator.SimRuntime.iOS-26-4" → "iOS 26.4"
     static func runtimeVersionLabel(from runtimeIdentifier: String) -> String {
         let lastSegment = runtimeIdentifier.split(separator: ".").last.map(String.init) ?? runtimeIdentifier
@@ -492,5 +561,28 @@ private struct RuntimeJSON: Decodable {
         platformIdentifier = try container.decodeIfPresent(String.self, forKey: .platformIdentifier)
         runtimeIdentifier = try container.decodeIfPresent(String.self, forKey: .runtimeIdentifier)
         lastUsedAt = try container.decodeIfPresent(String.self, forKey: .lastUsedAt)
+    }
+}
+
+private struct SimulatorDeviceDiscovery: Sendable {
+    let images: [EmulatorImage]
+    let deviceDirectories: Set<String>
+    let didInspect: Bool
+}
+
+private struct SimulatorDevicesJSON: Decodable {
+    let devices: [String: [SimulatorDeviceJSON]]
+}
+
+private struct SimulatorDeviceJSON: Decodable, Sendable {
+    let name: String
+    let udid: String
+    let state: String?
+    let dataPath: String?
+    let dataPathSize: Int64?
+    let lastBootedAt: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case name, udid, state, dataPath, dataPathSize, lastBootedAt
     }
 }

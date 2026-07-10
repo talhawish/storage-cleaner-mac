@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProjectCardView: View {
     let project: ProjectInfo
+    let permissionHandler: (any StoragePermissionHandling)?
     let onSelect: () -> Void
 
     @State private var isHovering = false
@@ -13,6 +14,8 @@ struct ProjectCardView: View {
                     ProjectIconView(
                         iconURL: project.iconURL,
                         technology: project.technology,
+                        fallback: project.iconFallback,
+                        permissionHandler: permissionHandler,
                         size: 40,
                         cornerRadius: 10
                     )

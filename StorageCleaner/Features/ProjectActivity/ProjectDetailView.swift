@@ -13,6 +13,7 @@ struct ProjectDetailView: View {
     let onCompress: (ProjectInfo) async -> CompressionOutcome
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
+    var permissionHandler: (any StoragePermissionHandling)?
 
     @State private var pendingAction: Action?
     @State private var isHibernating = false
@@ -30,10 +31,10 @@ struct ProjectDetailView: View {
         ) {
             VStack(spacing: 0) {
                 AppModalHeader(
-                    iconSystemName: "folder.badge.gearshape",
-                    iconTint: Color(hex: project.technology.color),
+                    iconSystemName: project.iconFallback.symbolName,
+                    iconTint: Color(hex: project.iconFallback.color),
                     title: project.name,
-                    subtitle: "\(project.technology.rawValue) · \(project.activityStatus.label)",
+                    subtitle: "\(project.iconFallback.rawValue) · \(project.activityStatus.label)",
                     trailing: .sizeBadge(
                         value: StorageFormatting.bytes(project.totalSize),
                         tint: AppTheme.accent
@@ -61,33 +62,35 @@ struct ProjectDetailView: View {
                     actions: [
                         AppModalActionBar.Action(
                             title: "Show in Finder",
-                            systemImage: "folder",
+                            systemImage: canUseProActions ? "folder" : "lock.fill",
                             tint: AppTheme.accent,
-                            isDisabled: !canUseProActions,
                             isIconOnly: true,
-                            help: "Show the project in Finder",
+                            help: canUseProActions
+                                ? "Show the project in Finder"
+                                : "Requires Pro to show in Finder",
                             action: { revealInFinder() }
                         ),
                         AppModalActionBar.Action(
-                            title: "Hibernate",
-                            systemImage: "archivebox.fill",
+                            title: canUseProActions ? "Hibernate" : "Hibernate (Pro)",
+                            systemImage: canUseProActions ? "archivebox.fill" : "lock.fill",
                             tint: AppTheme.orange,
                             isDisabled: project.dependencySize == 0 || isHibernating || isCompressing,
-                            help: project.dependencySize == 0
-                                ? "No regenerable dependencies to reclaim."
-                                : "Move regenerable dependencies to the Trash, keeping your source.",
+                            help: actionHelp(
+                                unlocked: "Move regenerable dependencies to the Trash, keeping your source."
+                            ),
                             action: { requestAction(.hibernate) }
                         ),
                         AppModalActionBar.Action(
-                            title: "Hibernate & Compress",
-                            systemImage: "doc.zipper",
+                            title: canUseProActions ? "Hibernate & Compress" : "Hibernate & Compress (Pro)",
+                            systemImage: canUseProActions ? "doc.zipper" : "lock.fill",
                             tint: project.activityStatus == .abandoned ? .red : AppTheme.accent,
                             isProminent: true,
                             isDisabled: project.dependencySize == 0 || isHibernating || isCompressing,
                             isDefault: true,
-                            help: project.dependencySize == 0
-                                ? "No regenerable dependencies to reclaim."
-                                : "Move dependencies to Trash, compress the project, then move the folder to Trash.",
+                            help: actionHelp(
+                                unlocked: "Move dependencies to Trash, compress the project, "
+                                    + "then move the folder to Trash."
+                            ),
                             action: { requestAction(.compress) }
                         )
                     ],
@@ -247,7 +250,7 @@ struct ProjectDetailView: View {
     }
 
     private var technologyInfo: some View {
-        ProjectTechnologyInfo(project: project)
+        ProjectTechnologyInfo(project: project, permissionHandler: permissionHandler)
     }
 
     private var locationInfo: some View {
@@ -275,8 +278,21 @@ struct ProjectDetailView: View {
     // MARK: - Actions
 
     private func revealInFinder() {
-        guard canUseProActions else { return }
+        guard canUseProActions else {
+            onRequirePro()
+            return
+        }
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.path.path)
+    }
+
+    private func actionHelp(unlocked: String) -> String {
+        if project.dependencySize == 0 {
+            return "No regenerable dependencies to reclaim."
+        }
+        if !canUseProActions {
+            return "Requires Pro to reclaim project dependencies."
+        }
+        return unlocked
     }
 
     private func requestAction(_ action: Action) {
@@ -375,30 +391,36 @@ private struct ProjectActivityBanner: View {
 /// and any nested projects.
 private struct ProjectTechnologyInfo: View {
     let project: ProjectInfo
+    let permissionHandler: (any StoragePermissionHandling)?
 
     var body: some View {
         AppModalSection(
             title: "Technology",
             subtitle: "Detection rules used to identify this project",
-            systemImage: project.technology.symbolName,
-            tint: Color(hex: project.technology.color)
+            systemImage: project.iconFallback.symbolName,
+            tint: Color(hex: project.iconFallback.color)
         ) {
             AppModalCard {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(hex: project.technology.color).opacity(0.14))
-                            Image(systemName: project.technology.symbolName)
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(Color(hex: project.technology.color))
-                        }
-                        .frame(width: 36, height: 36)
+                        ProjectIconView(
+                            iconURL: project.iconURL,
+                            technology: project.technology,
+                            fallback: project.iconFallback,
+                            permissionHandler: permissionHandler,
+                            size: 36,
+                            cornerRadius: 10
+                        )
                         .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(project.technology.rawValue)
+                            Text(project.iconFallback.rawValue)
                                 .font(.headline)
+                            if project.iconFallback.rawValue != project.technology.rawValue {
+                                Text(project.technology.rawValue)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             if project.childProjectCount > 0 {
                                 Text("Contains ^[\(project.childProjectCount) nested project](inflect: true)")
                                     .font(.caption)

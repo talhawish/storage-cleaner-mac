@@ -2,7 +2,7 @@ import Foundation
 
 struct FileSystemPermissionService: StoragePermissionHandling {
     private static let bookmarkKey = "HomeFolderSecurityScopedBookmark"
-    private static let scopedChildFolders: [HomeChildFolder] = [
+    private static let legacyChildFolders: [HomeChildFolder] = [
         HomeChildFolder(relativePath: "Desktop", directoryHint: .isDirectory),
         HomeChildFolder(relativePath: "Documents", directoryHint: .isDirectory),
         HomeChildFolder(relativePath: "Downloads", directoryHint: .isDirectory),
@@ -30,9 +30,6 @@ struct FileSystemPermissionService: StoragePermissionHandling {
 
     func currentStatuses() -> [StoragePermissionStatus] {
         let resolvedHome = resolveBookmarkedHome()
-        if let resolvedHome {
-            refreshMissingChildBookmarks(for: resolvedHome)
-        }
         let homeAccessible = resolvedHome != nil
         var statuses: [StoragePermissionStatus] = [
             StoragePermissionStatus(
@@ -42,31 +39,18 @@ struct FileSystemPermissionService: StoragePermissionHandling {
             )
         ]
 
-        let scopeByRelativePath: [StoragePermissionScope: String] = [
-            .desktop: "Desktop",
-            .downloads: "Downloads",
-            .movies: "Movies",
-            .pictures: "Pictures",
-            .library: "Library",
-            .trash: ".Trash"
+        let scopedFolders: [(StoragePermissionScope, String)] = [
+            (.desktop, "Desktop"),
+            (.downloads, "Downloads"),
+            (.movies, "Movies"),
+            (.pictures, "Pictures"),
+            (.library, "Library"),
+            (.trash, ".Trash")
         ]
 
-        for (scope, relativePath) in scopeByRelativePath {
-            let state: StoragePermissionState
+        for (scope, relativePath) in scopedFolders {
             let childURL = homeDirectory.appending(path: relativePath, directoryHint: .isDirectory)
-            if homeAccessible {
-                state = FileManager.default.fileExists(atPath: childURL.path) ? .accessible : .missing
-            } else {
-                let childFolder = HomeChildFolder(relativePath: relativePath, directoryHint: .isDirectory)
-                let resolved = resolveChildBookmark(childFolder, homeDirectory: homeDirectory)
-                if resolved != nil {
-                    state = .accessible
-                } else if bookmarkStore.data(forKey: childFolder.bookmarkKey) != nil {
-                    state = .denied
-                } else {
-                    state = .missing
-                }
-            }
+            let state: StoragePermissionState = homeAccessible ? .accessible : .denied
             statuses.append(
                 StoragePermissionStatus(
                     scope: scope,
@@ -93,7 +77,6 @@ struct FileSystemPermissionService: StoragePermissionHandling {
                 relativeTo: nil
             )
             bookmarkStore.set(bookmark, forKey: Self.bookmarkKey)
-            refreshChildBookmarks(for: selectedURL)
             return true
         } catch {
             removeStoredBookmarks()
@@ -120,24 +103,12 @@ struct FileSystemPermissionService: StoragePermissionHandling {
 
         var accesses: [SecurityScopedResourceAccess] = []
         accesses.append(SecurityScopedResourceAccess(url: home, didStartAccessing: didStartHomeAccess))
-        refreshMissingChildBookmarksWhileHomeAccessIsActive(for: home)
-
-        for url in resolveChildBookmarks(homeDirectory: home) {
-            let didStartChildAccess = url.startAccessingSecurityScopedResource()
-            accesses.append(SecurityScopedResourceAccess(url: url, didStartAccessing: didStartChildAccess))
-        }
 
         return SecurityScopedResourceAccess(accesses: accesses)
     }
 
     static func isHomeFolder(_ url: URL, homeDirectory: URL) -> Bool {
         normalizedPath(for: url) == normalizedPath(for: homeDirectory)
-    }
-
-    private func resolveChildBookmarks(homeDirectory: URL) -> [URL] {
-        Self.scopedChildFolders.compactMap { folder in
-            resolveChildBookmark(folder, homeDirectory: homeDirectory)
-        }
     }
 
     private func resolveBookmarkedHome() -> URL? {
@@ -165,101 +136,18 @@ struct FileSystemPermissionService: StoragePermissionHandling {
         }
     }
 
-    private func resolveChildBookmark(_ folder: HomeChildFolder, homeDirectory: URL) -> URL? {
-        guard let bookmark = bookmarkStore.data(forKey: folder.bookmarkKey) else { return nil }
-
-        do {
-            var isStale = false
-            let resolvedURL = try URL(
-                resolvingBookmarkData: bookmark,
-                options: [.withSecurityScope, .withoutUI],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-            guard isExpectedChildFolder(resolvedURL, folder: folder, homeDirectory: homeDirectory) else {
-                bookmarkStore.removeObject(forKey: folder.bookmarkKey)
-                return nil
-            }
-            if isStale {
-                try refreshBookmark(for: resolvedURL, key: folder.bookmarkKey)
-            }
-            return resolvedURL
-        } catch {
-            bookmarkStore.removeObject(forKey: folder.bookmarkKey)
-            return nil
-        }
-    }
-
     private func refreshBookmark(for url: URL) throws {
-        try refreshBookmark(for: url, key: Self.bookmarkKey)
-    }
-
-    private func refreshBookmark(for url: URL, key: String) throws {
         let bookmark = try url.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
-        bookmarkStore.set(bookmark, forKey: key)
-    }
-
-    private func refreshChildBookmarks(for homeURL: URL) {
-        let didStart = homeURL.startAccessingSecurityScopedResource()
-        defer {
-            if didStart {
-                homeURL.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        for folder in Self.scopedChildFolders {
-            let childURL = homeURL.appending(path: folder.relativePath, directoryHint: folder.directoryHint)
-            guard FileManager.default.fileExists(atPath: childURL.path) else {
-                bookmarkStore.removeObject(forKey: folder.bookmarkKey)
-                continue
-            }
-            do {
-                try refreshBookmark(for: childURL, key: folder.bookmarkKey)
-            } catch {
-                bookmarkStore.removeObject(forKey: folder.bookmarkKey)
-            }
-        }
-    }
-
-    private func refreshMissingChildBookmarks(for homeURL: URL) {
-        let didStart = homeURL.startAccessingSecurityScopedResource()
-        defer {
-            if didStart {
-                homeURL.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        refreshMissingChildBookmarksWhileHomeAccessIsActive(for: homeURL)
-    }
-
-    private func refreshMissingChildBookmarksWhileHomeAccessIsActive(for homeURL: URL) {
-        for folder in Self.scopedChildFolders where bookmarkStore.data(forKey: folder.bookmarkKey) == nil {
-            let childURL = homeURL.appending(path: folder.relativePath, directoryHint: folder.directoryHint)
-            guard FileManager.default.fileExists(atPath: childURL.path) else {
-                bookmarkStore.removeObject(forKey: folder.bookmarkKey)
-                continue
-            }
-            do {
-                try refreshBookmark(for: childURL, key: folder.bookmarkKey)
-            } catch {
-                bookmarkStore.removeObject(forKey: folder.bookmarkKey)
-            }
-        }
-    }
-
-    private func isExpectedChildFolder(_ url: URL, folder: HomeChildFolder, homeDirectory: URL) -> Bool {
-        Self.normalizedPath(for: url) == Self.normalizedPath(
-            for: homeDirectory.appending(path: folder.relativePath, directoryHint: folder.directoryHint)
-        )
+        bookmarkStore.set(bookmark, forKey: Self.bookmarkKey)
     }
 
     private func removeStoredBookmarks() {
         bookmarkStore.removeObject(forKey: Self.bookmarkKey)
-        for folder in Self.scopedChildFolders {
+        for folder in Self.legacyChildFolders {
             bookmarkStore.removeObject(forKey: folder.bookmarkKey)
         }
     }

@@ -477,7 +477,7 @@ extension AppShellView {
         SystemJunkView(
             findings: filteredFindings(for: AppSection.systemJunk.filterKinds),
             onScan: { viewModel.startScan(for: AppSection.systemJunk.filterKinds) },
-            onDelete: { urls in await viewModel.deleteFilesPermanently(urls) },
+            onDelete: { urls in await viewModel.deleteFiles(urls) },
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
         )

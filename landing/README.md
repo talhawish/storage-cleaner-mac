@@ -158,7 +158,7 @@ export default defineSitemapEventHandler(() => {
 })
 ```
 
-`site.url` from `nuxt.config.ts` (`https://storagecleaner.horizm.com`) is
+`site.url` from `nuxt.config.ts` (`https://storage-cleaner-a0c0f.web.app`) is
 prepended to every relative path, so each entry resolves to its full
 absolute URL. **This file is the single source of truth for the deploy
 URL** — see the box below.
@@ -180,7 +180,7 @@ After `npm run build` you will find:
 User-agent: *
 Allow: /
 
-Sitemap: https://storagecleaner.horizm.com/sitemap.xml
+Sitemap: https://storage-cleaner-a0c0f.web.app/sitemap.xml
 ```
 
 ### Adding or changing a page

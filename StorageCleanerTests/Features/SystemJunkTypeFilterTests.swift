@@ -52,4 +52,26 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .xcodeArtifacts), .all)
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .trash), .all)
     }
+
+    func testCleanupFeedbackUsesRetryCopyAfterPartialPermissionFailure() {
+        let moved = URL(filePath: "/Users/test/Library/Containers/moved")
+        let blocked = URL(filePath: "/Users/test/Library/Containers/blocked")
+        let result = CleanupResult(
+            deletedURLs: [moved],
+            deletedItems: [DeletedItem(originalURL: moved, bytesReclaimed: 40)],
+            failedURLs: [
+                (blocked, CleanupError.deletionFailed(blocked, CocoaError(.fileWriteNoPermission)))
+            ],
+            totalBytesReclaimed: 40
+        )
+
+        let feedback = SystemJunkCleanupFeedback.failed(result: result)
+
+        XCTAssertEqual(feedback.title, "1 item needs permission")
+        XCTAssertEqual(feedback.confirmTitle, "Retry Move")
+        XCTAssertEqual(feedback.cancelTitle, "Done")
+        XCTAssertTrue(feedback.message.contains("1 item was moved to Trash."))
+        XCTAssertTrue(feedback.message.contains("1 item still needs permission."))
+        XCTAssertTrue(feedback.message.contains("Grant Full Disk Access in System Settings"))
+    }
 }

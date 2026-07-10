@@ -11,6 +11,16 @@ import Foundation
 /// already close to the limit, and the overview aggregation logic
 /// stands alone).
 extension DashboardViewModel {
+    var overviewPhase: ScanPhase {
+        switch phase {
+        case .scanning, .permissionRequired, .idle:
+            return phase
+        case .failed:
+            return phase
+        case .results, .empty:
+            return lastCompletedScan == .full ? phase : .idle
+        }
+    }
     /// Top domains for the Overview breakdown grid, with the long tail folded into "Other".
     var domainTiles: [StorageOverview.DomainUsage] {
         StorageOverview.tiles(in: snapshot?.findings ?? [], maxTiles: 6)

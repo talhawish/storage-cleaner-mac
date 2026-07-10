@@ -123,7 +123,11 @@ extension ProjectActivityView {
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 500), spacing: 16)], spacing: 16) {
                     ForEach(viewModel.filteredProjects) { project in
-                        ProjectCardView(project: project, onSelect: { selectProject(project) })
+                        ProjectCardView(
+                            project: project,
+                            permissionHandler: permissionHandler,
+                            onSelect: { selectProject(project) }
+                        )
                     }
                 }
             }

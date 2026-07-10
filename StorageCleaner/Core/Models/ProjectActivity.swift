@@ -68,6 +68,8 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
     let dependencySize: Int64
     /// File URL of the project's icon/logo, if one was found during the scan.
     let iconURL: URL?
+    /// Most specific stack identity available for fallback icon rendering.
+    let iconFallback: ProjectIconFallback
 
     init(
         id: UUID = UUID(),
@@ -78,7 +80,8 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         totalSize: Int64,
         childProjectCount: Int,
         dependencySize: Int64,
-        iconURL: URL? = nil
+        iconURL: URL? = nil,
+        iconFallback: ProjectIconFallback? = nil
     ) {
         self.id = id
         self.name = name
@@ -89,6 +92,7 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         self.childProjectCount = childProjectCount
         self.dependencySize = dependencySize
         self.iconURL = iconURL
+        self.iconFallback = iconFallback ?? ProjectIconFallback(technology: technology)
     }
 
     /// Whole days elapsed since the newest source file was modified.
@@ -131,7 +135,8 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
             totalSize: projectSize,
             childProjectCount: childProjectCount,
             dependencySize: 0,
-            iconURL: iconURL
+            iconURL: iconURL,
+            iconFallback: iconFallback
         )
     }
 }

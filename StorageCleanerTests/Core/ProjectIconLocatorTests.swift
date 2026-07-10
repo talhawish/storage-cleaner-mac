@@ -34,9 +34,13 @@ final class ProjectIconLocatorTests: XCTestCase {
     }
 
     func testNonImageAndUnrelatedFilesScoreZero() {
-        XCTAssertEqual(score("logo.svg", in: "assets"), 0, "SVG is not rasterisable")
         XCTAssertEqual(score("main.swift", in: "Sources"), 0)
         XCTAssertEqual(score("README.md", in: "docs"), 0)
         XCTAssertEqual(score("screenshot.png", in: "docs"), 0)
+    }
+
+    func testSVGFaviconsAndLogosAreIconCandidates() {
+        XCTAssertEqual(score("favicon.svg", in: "web"), 55)
+        XCTAssertEqual(score("logo.svg", in: "assets"), 70)
     }
 }

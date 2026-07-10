@@ -7,16 +7,32 @@ import UniformTypeIdentifiers
 /// main actor so a grid of projects never blocks the UI.
 struct ProjectIconView: View {
     let iconURL: URL?
-    let technology: ProjectTechnology
+    let fallback: ProjectIconFallback
+    let permissionHandler: (any StoragePermissionHandling)?
     var size: CGFloat = 40
     var cornerRadius: CGFloat = 10
 
     @State private var thumbnail: NSImage?
 
+    init(
+        iconURL: URL?,
+        technology: ProjectTechnology,
+        fallback: ProjectIconFallback? = nil,
+        permissionHandler: (any StoragePermissionHandling)? = nil,
+        size: CGFloat = 40,
+        cornerRadius: CGFloat = 10
+    ) {
+        self.iconURL = iconURL
+        self.fallback = fallback ?? ProjectIconFallback(technology: technology)
+        self.permissionHandler = permissionHandler
+        self.size = size
+        self.cornerRadius = cornerRadius
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Color(hex: technology.color).opacity(0.12))
+                .fill(Color(hex: fallback.color).opacity(0.12))
 
             if let thumbnail {
                 Image(nsImage: thumbnail)
@@ -25,9 +41,9 @@ struct ProjectIconView: View {
                     .scaledToFill()
                     .accessibilityHidden(true)
             } else {
-                Image(systemName: technology.symbolName)
+                Image(systemName: fallback.symbolName)
                     .font(.system(size: size * 0.45, weight: .semibold))
-                    .foregroundStyle(Color(hex: technology.color))
+                    .foregroundStyle(Color(hex: fallback.color))
                     .accessibilityHidden(true)
             }
         }
@@ -43,6 +59,14 @@ struct ProjectIconView: View {
             thumbnail = nil
             return
         }
+        let access = permissionHandler?.beginHomeFolderAccess()
+        defer { access?.stop() }
+
+        if iconURL.pathExtension.lowercased() == "svg" {
+            thumbnail = await SVGImageRenderer.shared.rasterize(url: iconURL, sideLength: size, scale: 2)
+            return
+        }
+
         let pixelSize = Int(size * 2)
         let data = await Task.detached(priority: .utility) {
             ProjectThumbnailLoader.pngThumbnail(for: iconURL, maxPixelSize: pixelSize)

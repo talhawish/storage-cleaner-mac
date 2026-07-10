@@ -19,22 +19,26 @@ enum AppUninstallError: LocalizedError, Sendable {
     case systemApp(String)
     case missing(URL)
     case permissionDenied(URL)
+    case authorizationRequired(URL)
     case failed(URL, String)
     case stillPresent(URL)
 
     var errorDescription: String? {
         switch self {
         case let .systemApp(name):
-            "\(name) is protected by macOS and can't be uninstalled from here."
+            "\(name) is protected by macOS and can't be moved to Trash from here."
         case let .missing(url):
             "The app was not found at \(url.path). Rescan Applications and try again."
         case let .permissionDenied(url):
-            "macOS denied permission to uninstall \(url.lastPathComponent). "
-                + "Apps installed for all users may require administrator approval."
+            "macOS denied permission to move \(url.lastPathComponent) to Trash. "
+                + "Applications access is separate from Home folder access; grant Applications access when prompted."
+        case let .authorizationRequired(url):
+            "\(url.lastPathComponent) is owned by macOS administrator permissions. "
+                + "Move it to Trash in Finder so macOS can show its native administrator authorization prompt."
         case let .failed(url, message):
-            "Couldn't uninstall \(url.lastPathComponent): \(message)"
+            "Couldn't move \(url.lastPathComponent) to Trash: \(message)"
         case let .stillPresent(url):
-            "The app is still present at \(url.path). macOS did not complete the uninstall."
+            "The app is still present at \(url.path). macOS did not move it to Trash."
         }
     }
 }
@@ -203,8 +207,9 @@ actor AppInventoryService {
     }
 
     private static func uninstallError(for error: Error, appURL: URL) -> AppUninstallError {
-        if case let AppBundleUninstallerError.administratorApprovalFailed(_, message) = error {
-            return .failed(appURL, message)
+        if let appError = error as? AppBundleUninstallerError,
+           case .authorizationRequired = appError {
+            return .authorizationRequired(appURL)
         }
 
         let nsError = error as NSError

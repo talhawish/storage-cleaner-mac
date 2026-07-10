@@ -16,7 +16,7 @@ struct TopCleanedCategoriesCard: View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
             SectionHeader(
                 title: "Top Cleaned Categories",
-                subtitle: "Where your reclaimed space has come from",
+                subtitle: "Where your cleaned space has come from",
                 systemImage: "chart.bar.xaxis"
             )
 
@@ -90,7 +90,7 @@ private struct TopCleanedCategoryRow: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(category.kind.title), \(StorageFormatting.bytes(category.bytesReclaimed)) reclaimed, "
+            "\(category.kind.title), \(StorageFormatting.bytes(category.bytesReclaimed)) cleaned, "
                 + "\(StorageFormatting.items(category.itemCount)) items, "
                 + "\(Int((category.share * 100).rounded())) percent of total"
         )

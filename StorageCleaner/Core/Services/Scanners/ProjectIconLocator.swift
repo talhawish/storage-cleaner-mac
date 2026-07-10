@@ -8,10 +8,11 @@ import Foundation
 /// (`*.appiconset`), Android/Flutter (`mipmap-*/ic_launcher`), and the generic
 /// web/repo patterns (`logo`, `icon`, `favicon`, `apple-touch-icon`, `Icon-192`).
 enum ProjectIconLocator {
-    /// Raster formats the thumbnail loader can decode. SVG is intentionally
-    /// excluded — it cannot be rasterised by ImageIO, so picking one would just
-    /// fall back to the placeholder symbol and crowd out a usable raster.
-    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "ico", "webp", "heic", "tiff", "gif", "icns"]
+    /// Formats the project thumbnail loader can decode. Raster formats are
+    /// handled by ImageIO; SVG favicons/logos are rasterized by `SVGImageRenderer`.
+    static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "ico", "webp", "heic", "tiff", "gif", "icns", "svg"
+    ]
 
     /// A score of 0 means "not an icon". Higher means a stronger match.
     static func score(fileName: String, parentDirectory: String) -> Int {
@@ -26,6 +27,16 @@ enum ProjectIconLocator {
             return base.hasPrefix("ic_launcher") ? 95 : 80
         }
         return nameScore(base: base)
+    }
+
+    /// A shallow pass over conventional app-icon directories. This avoids a
+    /// broad second walk while still covering Flutter/iOS/Android/web layouts
+    /// where the app icon lives under a well-known nested folder.
+    static func commonIconCandidates(in root: URL, fileManager: FileManager = .default) -> [URL] {
+        commonIconDirectorySubpaths
+            .map { root.appending(path: $0, directoryHint: .isDirectory) }
+            .flatMap { imageFiles(in: $0, fileManager: fileManager) }
+            + androidMipmapCandidates(in: root, fileManager: fileManager)
     }
 
     /// Score from the file's base name alone, used when the directory carries no
@@ -47,6 +58,62 @@ enum ProjectIconLocator {
     ]
 
     private static let strongPrefixes = ["icon-", "logo-", "logo@"]
+
+    private static let commonIconDirectorySubpaths = [
+        "",
+        "web",
+        "web/icons",
+        "public",
+        "public/icons",
+        "static",
+        "static/icons",
+        "app",
+        "assets",
+        "assets/images",
+        "src/app",
+        "src/assets",
+        "src/assets/images",
+        "resources",
+        "Resources",
+        "Assets.xcassets/AppIcon.appiconset",
+        "ios/Runner/Assets.xcassets/AppIcon.appiconset",
+        "macos/Runner/Assets.xcassets/AppIcon.appiconset"
+    ]
+
+    private static func androidMipmapCandidates(in root: URL, fileManager: FileManager) -> [URL] {
+        [
+            "android/app/src/main/res",
+            "android/app/src/debug/res",
+            "android/app/src/profile/res",
+            "app/src/main/res",
+            "src/main/res"
+        ]
+        .map { root.appending(path: $0, directoryHint: .isDirectory) }
+        .flatMap { resDirectory -> [URL] in
+            guard let contents = try? fileManager.contentsOfDirectory(
+                at: resDirectory,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { return [] }
+
+            return contents
+                .filter { $0.lastPathComponent.lowercased().hasPrefix("mipmap") }
+                .flatMap { imageFiles(in: $0, fileManager: fileManager) }
+        }
+    }
+
+    private static func imageFiles(in directory: URL, fileManager: FileManager) -> [URL] {
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        return contents.filter { url in
+            let parent = directory.lastPathComponent
+            return score(fileName: url.lastPathComponent, parentDirectory: parent) > 0
+        }
+    }
 
     private static func fileExtension(of fileName: String) -> String {
         guard let dot = fileName.lastIndex(of: "."), dot != fileName.startIndex else { return "" }

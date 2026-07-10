@@ -291,6 +291,7 @@ struct CategoryDetailView: View {
                     url: url,
                     isSelected: selectedURLs.contains(url),
                     pathDisplayMode: .fullPath,
+                    findingKind: finding.kind,
                     metadata: fileMetadata[url],
                     canOpen: childLevels[url] != nil,
                     canRevealInFinder: canUseProActions,

@@ -11,7 +11,7 @@ enum QuickCleanSummaryFormatter {
         }
         var parts: [String] = []
         parts.append(
-            "Reclaimed \(StorageFormatting.bytes(result.totalBytesReclaimed))"
+            "Moved \(StorageFormatting.bytes(result.totalBytesReclaimed)) to Trash"
         )
         if result.failedCount > 0 {
             let suffix = result.failedCount == 1 ? "" : "s"

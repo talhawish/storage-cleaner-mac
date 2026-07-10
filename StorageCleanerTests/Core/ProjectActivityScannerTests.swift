@@ -70,6 +70,50 @@ final class ProjectActivityScannerTests: XCTestCase {
         XCTAssertEqual(ProjectDetector.detect(at: root), .nodeJS)
     }
 
+    func testNodeIconFallbackDetectsNextAndNuxt() async throws {
+        let next = try makeProject(named: "next_app", marker: "package.json")
+        try #"{"dependencies":{"next":"14.0.0","react":"18.2.0"}}"#.write(
+            to: next.appending(path: "package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try Data(repeating: 1, count: 1_000).write(to: next.appending(path: "page.tsx"))
+
+        let nuxt = try makeProject(named: "nuxt_app", marker: "package.json")
+        try #"{"dependencies":{"nuxt":"3.0.0","vue":"3.4.0"}}"#.write(
+            to: nuxt.appending(path: "package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try Data(repeating: 2, count: 1_000).write(to: nuxt.appending(path: "app.vue"))
+
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2, minimumProjectSize: 1)
+        let snapshot = await scanner.scan()
+
+        XCTAssertEqual(snapshot.projects.first { $0.name == "next_app" }?.iconFallback, .nextJS)
+        XCTAssertEqual(snapshot.projects.first { $0.name == "nuxt_app" }?.iconFallback, .nuxt)
+    }
+
+    func testFrameworkIconFallbacksDetectLaravelAndDjango() async throws {
+        let laravel = try makeProject(named: "laravel_app", marker: "composer.json")
+        try #"{"require":{"laravel/framework":"^11.0"}}"#.write(
+            to: laravel.appending(path: "composer.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try Data(repeating: 3, count: 1_000).write(to: laravel.appending(path: "index.php"))
+
+        let django = try makeProject(named: "django_app", marker: "requirements.txt")
+        try "Django==5.0".write(to: django.appending(path: "requirements.txt"), atomically: true, encoding: .utf8)
+        try Data(repeating: 4, count: 1_000).write(to: django.appending(path: "views.py"))
+
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2, minimumProjectSize: 1)
+        let snapshot = await scanner.scan()
+
+        XCTAssertEqual(snapshot.projects.first { $0.name == "laravel_app" }?.iconFallback, .laravel)
+        XCTAssertEqual(snapshot.projects.first { $0.name == "django_app" }?.iconFallback, .django)
+    }
+
     func testEmptyPackageJSONIsNotReactNative() throws {
         let root = try makeProject(named: "empty_pkg", marker: "package.json")
         try "{}".write(to: root.appending(path: "package.json"), atomically: true, encoding: .utf8)
@@ -138,7 +182,7 @@ final class ProjectActivityScannerTests: XCTestCase {
         try FileManager.default.createDirectory(at: modules, withIntermediateDirectories: true)
         try Data(repeating: 2, count: 40_000).write(to: modules.appending(path: "dep.js"))
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 3)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 3, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
 
         let project = try XCTUnwrap(snapshot.projects.first { $0.name == "node_app" })
@@ -155,7 +199,7 @@ final class ProjectActivityScannerTests: XCTestCase {
         try Data(repeating: 1, count: 8_000).write(to: root.appending(path: "index.php"))
         try Data(repeating: 2, count: 20_000).write(to: vendor.appending(path: "autoload.php"))
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first)
 
@@ -180,7 +224,7 @@ final class ProjectActivityScannerTests: XCTestCase {
         try FileManager.default.createDirectory(at: git, withIntermediateDirectories: true)
         try Data(repeating: 3, count: 9_000).write(to: git.appending(path: "objects.pack"))
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 3)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 3, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first)
 
@@ -197,7 +241,7 @@ final class ProjectActivityScannerTests: XCTestCase {
         try "{}".write(to: outer.appending(path: "package.json"), atomically: true, encoding: .utf8)
         try "[package]".write(to: nested.appending(path: "Cargo.toml"), atomically: true, encoding: .utf8)
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 4)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 4, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
 
         XCTAssertEqual(snapshot.projects.count, 1)
@@ -216,7 +260,11 @@ final class ProjectActivityScannerTests: XCTestCase {
         try Data(repeating: 1, count: 1_000).write(to: small.appending(path: "app.js"))
 
         // The same root is listed twice; each project must appear only once.
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory, temporaryDirectory], maxDepth: 2)
+        let scanner = ProjectActivityScanner(
+            searchPaths: [temporaryDirectory, temporaryDirectory],
+            maxDepth: 2,
+            minimumProjectSize: 1
+        )
         let snapshot = await scanner.scan()
 
         XCTAssertEqual(snapshot.projects.count, 2)
@@ -239,11 +287,55 @@ final class ProjectActivityScannerTests: XCTestCase {
         let oldDate = Date(timeIntervalSinceNow: -400 * 86_400)
         try FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: source.path)
 
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2)
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first)
 
         XCTAssertEqual(project.activityStatus, .abandoned, "activity follows source files, not dependencies")
+    }
+
+    func testDefaultScanFiltersTinyMarkerOnlyFolders() async throws {
+        let root = temporaryDirectory.appending(path: "tiny_fixture", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try "name: fixture".write(to: root.appending(path: "pubspec.yaml"), atomically: true, encoding: .utf8)
+        try "void main() {}".write(to: root.appending(path: "main.dart"), atomically: true, encoding: .utf8)
+
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2)
+        let snapshot = await scanner.scan()
+
+        XCTAssertTrue(snapshot.projects.isEmpty)
+    }
+
+    func testScanSkipsNestedPackagesInsideFlutterSDKCheckout() async throws {
+        let sdkRoot = temporaryDirectory.appending(path: "flutter", directoryHint: .isDirectory)
+        let internalPackage = sdkRoot.appending(path: "engine/src/flutter", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: sdkRoot.appending(path: "bin", directoryHint: .isDirectory),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: sdkRoot.appending(path: "packages/flutter/lib", directoryHint: .isDirectory),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: internalPackage, withIntermediateDirectories: true)
+
+        try "#!/bin/sh".write(to: sdkRoot.appending(path: "bin/flutter"), atomically: true, encoding: .utf8)
+        try "sdk internals".write(
+            to: sdkRoot.appending(path: "packages/flutter/lib/framework.dart"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "name: flutter".write(
+            to: internalPackage.appending(path: "pubspec.yaml"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try Data(repeating: 7, count: 1_200_000).write(to: internalPackage.appending(path: "framework.dart"))
+
+        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 6)
+        let snapshot = await scanner.scan()
+
+        XCTAssertTrue(snapshot.projects.isEmpty)
     }
 
     func testScanningEmptyRootsProducesNoProjects() async {
@@ -278,6 +370,13 @@ final class ProjectActivityScannerTests: XCTestCase {
         let colors = ProjectTechnology.allCases.map(\.color)
         XCTAssertEqual(Set(symbols).count, symbols.count, "each technology needs a distinct icon")
         XCTAssertEqual(Set(colors).count, colors.count, "each technology needs a distinct colour")
+    }
+
+    func testEveryIconFallbackHasDisplayMetadata() {
+        for fallback in ProjectIconFallback.allCases {
+            XCTAssertFalse(fallback.symbolName.isEmpty)
+            XCTAssertEqual(fallback.color.count, 6, "\(fallback) colour must be a 6-digit hex")
+        }
     }
 
     // MARK: - Helpers

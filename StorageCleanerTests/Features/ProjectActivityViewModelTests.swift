@@ -45,7 +45,7 @@ final class ProjectActivityViewModelTests: XCTestCase {
         )
 
         viewModel = ProjectActivityViewModel(
-            scanner: ProjectActivityScanner(searchPaths: [projectsRoot], maxDepth: 2),
+            scanner: ProjectActivityScanner(searchPaths: [projectsRoot], maxDepth: 2, minimumProjectSize: 1),
             hibernationService: ProjectHibernationService(removal: .delete),
             compressionService: StubCompressionService()
         )
@@ -190,6 +190,45 @@ final class ProjectActivityViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isScanning)
     }
 
+    func testGrantHomeFolderAccessRequestsPermissionAndStartsScan() async throws {
+        let permissionHandler = GrantingProjectActivityPermissionHandler()
+        viewModel = ProjectActivityViewModel(
+            scanner: ProjectActivityScanner(
+                searchPaths: [projectsRoot],
+                maxDepth: 2,
+                minimumProjectSize: 1,
+                permissionHandler: permissionHandler
+            ),
+            hibernationService: ProjectHibernationService(removal: .delete),
+            compressionService: StubCompressionService(),
+            permissionHandler: permissionHandler
+        )
+
+        XCTAssertTrue(viewModel.grantHomeFolderAccess())
+        XCTAssertEqual(permissionHandler.requestCount, 1)
+        try await waitForScanToFinish()
+        XCTAssertTrue(viewModel.hasScanned)
+    }
+
+    func testGrantHomeFolderAccessDoesNothingWhenPermissionIsDenied() {
+        let permissionHandler = DenyingProjectActivityPermissionHandler()
+        viewModel = ProjectActivityViewModel(
+            scanner: ProjectActivityScanner(
+                searchPaths: [projectsRoot],
+                maxDepth: 2,
+                minimumProjectSize: 1,
+                permissionHandler: permissionHandler
+            ),
+            hibernationService: ProjectHibernationService(removal: .delete),
+            compressionService: StubCompressionService(),
+            permissionHandler: permissionHandler
+        )
+
+        XCTAssertFalse(viewModel.grantHomeFolderAccess())
+        XCTAssertEqual(permissionHandler.requestCount, 1)
+        XCTAssertFalse(viewModel.hasScanned)
+    }
+
     // MARK: - Compression
 
     func testCompressRemovesProjectFromSnapshotOnSuccess() async throws {
@@ -207,7 +246,7 @@ final class ProjectActivityViewModelTests: XCTestCase {
 
     func testCompressKeepsProjectOnFailure() async throws {
         viewModel = ProjectActivityViewModel(
-            scanner: ProjectActivityScanner(searchPaths: [projectsRoot], maxDepth: 2),
+            scanner: ProjectActivityScanner(searchPaths: [projectsRoot], maxDepth: 2, minimumProjectSize: 1),
             hibernationService: ProjectHibernationService(removal: .delete),
             compressionService: FailingCompressionService()
         )
@@ -249,6 +288,16 @@ final class ProjectActivityViewModelTests: XCTestCase {
         // Activity follows the source marker, so age only that file.
         let age = Date(timeIntervalSinceNow: -Double(days) * 86_400)
         try FileManager.default.setAttributes([.modificationDate: age], ofItemAtPath: markerURL.path)
+    }
+
+    private func waitForScanToFinish(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        for _ in 0..<100 where viewModel.isScanning || !viewModel.hasScanned {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(viewModel.isScanning, file: file, line: line)
     }
 }
 
@@ -292,5 +341,45 @@ private actor FailingCompressionService: ProjectCompressionServicing {
             totalReclaimedBytes: 0,
             failureReason: "Stub failure for tests."
         )
+    }
+}
+
+private final class GrantingProjectActivityPermissionHandler: @unchecked Sendable, StoragePermissionHandling {
+    private(set) var requestCount = 0
+
+    func currentStatuses() -> [StoragePermissionStatus] {
+        allAccessibleStatuses
+    }
+
+    func requestHomeFolderAccess() -> Bool {
+        requestCount += 1
+        return true
+    }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        SecurityScopedResourceAccess(url: URL(filePath: "/tmp/stub"), didStartAccessing: false)
+    }
+}
+
+private final class DenyingProjectActivityPermissionHandler: @unchecked Sendable, StoragePermissionHandling {
+    private(set) var requestCount = 0
+
+    func currentStatuses() -> [StoragePermissionStatus] {
+        [
+            StoragePermissionStatus(
+                scope: .home,
+                url: URL(filePath: "/Users/test"),
+                state: .denied
+            )
+        ]
+    }
+
+    func requestHomeFolderAccess() -> Bool {
+        requestCount += 1
+        return false
+    }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        nil
     }
 }

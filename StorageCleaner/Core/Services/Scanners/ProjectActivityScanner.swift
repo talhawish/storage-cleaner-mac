@@ -6,15 +6,18 @@ import Foundation
 actor ProjectActivityScanner {
     private let searchPaths: [URL]
     private let maxDepth: Int
+    private let minimumProjectSize: Int64
     private let permissionHandler: (any StoragePermissionHandling)?
 
     init(
         searchPaths: [URL] = DependencyPaths.Projects.searchRoots,
         maxDepth: Int = DependencyPaths.Projects.maxDepth,
+        minimumProjectSize: Int64 = DependencyPaths.Projects.minimumProjectSize,
         permissionHandler: (any StoragePermissionHandling)? = nil
     ) {
         self.searchPaths = searchPaths
         self.maxDepth = maxDepth
+        self.minimumProjectSize = minimumProjectSize
         self.permissionHandler = permissionHandler
     }
 
@@ -24,8 +27,9 @@ actor ProjectActivityScanner {
     func scan() async -> ProjectActivitySnapshot {
         let paths = searchPaths
         let depth = maxDepth
+        let minimumSize = minimumProjectSize
         guard let handler = permissionHandler else {
-            return Self.run(paths: paths, maxDepth: depth)
+            return Self.run(paths: paths, maxDepth: depth, minimumProjectSize: minimumSize)
         }
         return await handler.withHomeFolderAccess { access in
             guard access != nil else {
@@ -33,13 +37,13 @@ actor ProjectActivityScanner {
                     projects: [], scannedAt: .now, scanDuration: 0, accessDenied: true
                 )
             }
-            return Self.run(paths: paths, maxDepth: depth)
+            return Self.run(paths: paths, maxDepth: depth, minimumProjectSize: minimumSize)
         }
     }
 
     // MARK: - Static non-isolated scan (callable from withHomeFolderAccess)
 
-    private static func run(paths: [URL], maxDepth: Int) -> ProjectActivitySnapshot {
+    private static func run(paths: [URL], maxDepth: Int, minimumProjectSize: Int64) -> ProjectActivitySnapshot {
         let fileMgr = FileManager.default
         let start = Date()
         var projects: [ProjectInfo] = []
@@ -48,7 +52,12 @@ actor ProjectActivityScanner {
         for root in paths {
             guard !Task.isCancelled else { break }
             guard fileMgr.fileExists(atPath: root.path) else { continue }
-            for project in walk(root, maxDepth: maxDepth, fileMgr: fileMgr) {
+            for project in walk(
+                root,
+                maxDepth: maxDepth,
+                minimumProjectSize: minimumProjectSize,
+                fileMgr: fileMgr
+            ) {
                 let key = project.path.standardizedFileURL.path
                 if seen.insert(key).inserted {
                     projects.append(project)
@@ -65,7 +74,12 @@ actor ProjectActivityScanner {
 
     // MARK: - Traversal
 
-    private static func walk(_ dir: URL, maxDepth: Int, fileMgr: FileManager) -> [ProjectInfo] {
+    private static func walk(
+        _ dir: URL,
+        maxDepth: Int,
+        minimumProjectSize: Int64,
+        fileMgr: FileManager
+    ) -> [ProjectInfo] {
         var found: [ProjectInfo] = []
         let rootDepth = dir.pathComponents.count
         let enumerator = fileMgr.enumerator(
@@ -81,8 +95,17 @@ actor ProjectActivityScanner {
                 continue
             }
             guard (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+            if ProjectActivityDiscoveryExclusions.shouldSkipProjectDiscovery(at: item, fileManager: fileMgr) {
+                enumerator?.skipDescendants()
+                continue
+            }
             if let tech = ProjectDetector.detect(at: item, fileManager: fileMgr),
-               let info = build(at: item, technology: tech, fileMgr: fileMgr) {
+               let info = build(
+                at: item,
+                technology: tech,
+                minimumProjectSize: minimumProjectSize,
+                fileMgr: fileMgr
+               ) {
                 found.append(info)
                 enumerator?.skipDescendants()
             }
@@ -90,9 +113,14 @@ actor ProjectActivityScanner {
         return found
     }
 
-    private static func build(at dir: URL, technology: ProjectTechnology, fileMgr: FileManager) -> ProjectInfo? {
+    private static func build(
+        at dir: URL,
+        technology: ProjectTechnology,
+        minimumProjectSize: Int64,
+        fileMgr: FileManager
+    ) -> ProjectInfo? {
         let metrics = measure(at: dir, technology: technology, fileMgr: fileMgr)
-        guard metrics.totalSize > 0 else { return nil }
+        guard metrics.totalSize >= minimumProjectSize else { return nil }
         let modDate = metrics.lastModified
             ?? (try? fileMgr.attributesOfItem(atPath: dir.path))?[.modificationDate] as? Date
             ?? .distantPast
@@ -105,7 +133,8 @@ actor ProjectActivityScanner {
             totalSize: metrics.totalSize,
             childProjectCount: nested,
             dependencySize: metrics.dependencySize,
-            iconURL: metrics.iconURL
+            iconURL: metrics.iconURL,
+            iconFallback: ProjectIconFallback.detect(at: dir, technology: technology, fileManager: fileMgr)
         )
     }
 
@@ -136,6 +165,10 @@ actor ProjectActivityScanner {
         guard let enumerator = fileMgr.enumerator(at: dir, includingPropertiesForKeys: keys) else { return metrics }
 
         let root = dir.pathComponents.count
+        for candidate in ProjectIconLocator.commonIconCandidates(in: dir, fileManager: fileMgr) {
+            considerIconCandidate(candidate, rootDepth: root, metrics: &metrics, fileMgr: fileMgr)
+        }
+
         while let item = enumerator.nextObject() as? URL {
             guard !Task.isCancelled else { break }
             guard let values = try? item.resourceValues(forKeys: Set(keys)),
@@ -153,12 +186,25 @@ actor ProjectActivityScanner {
                 if let mod = values.contentModificationDate, mod > (metrics.lastModified ?? .distantPast) {
                     metrics.lastModified = mod
                 }
-                let parent = comps.count >= 2 ? comps[comps.count - 2] : ""
-                let iconScore = ProjectIconLocator.score(fileName: item.lastPathComponent, parentDirectory: parent)
-                metrics.considerIcon(at: item, score: iconScore, depth: rel.count, size: size)
+                considerIconCandidate(item, rootDepth: root, metrics: &metrics, fileMgr: fileMgr)
             }
         }
         return metrics
+    }
+
+    private static func considerIconCandidate(
+        _ item: URL,
+        rootDepth: Int,
+        metrics: inout Metrics,
+        fileMgr: FileManager
+    ) {
+        let comps = item.pathComponents
+        let parent = comps.count >= 2 ? comps[comps.count - 2] : ""
+        let iconScore = ProjectIconLocator.score(fileName: item.lastPathComponent, parentDirectory: parent)
+        guard iconScore > 0 else { return }
+
+        let size = ((try? fileMgr.attributesOfItem(atPath: item.path))?[.size] as? NSNumber)?.int64Value ?? 0
+        metrics.considerIcon(at: item, score: iconScore, depth: max(0, comps.count - rootDepth), size: size)
     }
 
     private static func countSubs(at dir: URL, fileMgr: FileManager) -> Int {
@@ -166,5 +212,22 @@ actor ProjectActivityScanner {
             .filter { !$0.hasPrefix(".") }
             .compactMap { ProjectDetector.detect(at: dir.appendingPathComponent($0), fileManager: fileMgr) }
             .count ?? 0
+    }
+}
+
+private enum ProjectActivityDiscoveryExclusions {
+    static func shouldSkipProjectDiscovery(at directory: URL, fileManager: FileManager) -> Bool {
+        isFlutterSDKCheckout(directory, fileManager: fileManager)
+    }
+
+    private static func isFlutterSDKCheckout(_ directory: URL, fileManager: FileManager) -> Bool {
+        let binFlutter = directory.appending(path: "bin/flutter")
+        let frameworkLibrary = directory.appending(path: "packages/flutter/lib", directoryHint: .isDirectory)
+        let engine = directory.appending(path: "engine", directoryHint: .isDirectory)
+        let dev = directory.appending(path: "dev", directoryHint: .isDirectory)
+
+        return fileManager.fileExists(atPath: binFlutter.path)
+            && fileManager.fileExists(atPath: frameworkLibrary.path)
+            && (fileManager.fileExists(atPath: engine.path) || fileManager.fileExists(atPath: dev.path))
     }
 }

@@ -9,6 +9,7 @@ struct FileRowView: View {
     let url: URL
     let isSelected: Bool
     let pathDisplayMode: PathDisplayMode
+    let findingKind: StorageFindingKind?
     let metadata: DetailFileMetadata?
     let precomputedBytes: Int64?
     let canOpen: Bool
@@ -25,6 +26,7 @@ struct FileRowView: View {
         url: URL,
         isSelected: Bool,
         pathDisplayMode: PathDisplayMode = .parentName,
+        findingKind: StorageFindingKind? = nil,
         metadata: DetailFileMetadata? = nil,
         precomputedBytes: Int64? = nil,
         canOpen: Bool = false,
@@ -36,6 +38,7 @@ struct FileRowView: View {
         self.url = url
         self.isSelected = isSelected
         self.pathDisplayMode = pathDisplayMode
+        self.findingKind = findingKind
         self.metadata = metadata
         self.precomputedBytes = precomputedBytes
         self.canOpen = canOpen
@@ -168,6 +171,7 @@ struct FileRowView: View {
     private var previewControl: some View {
         FileRowPreviewControl(
             url: url,
+            findingKind: findingKind,
             isFocused: isFocused,
             isHovering: isHovering,
             onPreview: previewAction
@@ -243,6 +247,7 @@ struct FileRowView: View {
 
 private struct FileRowPreviewControl: View {
     let url: URL
+    let findingKind: StorageFindingKind?
     let isFocused: Bool
     let isHovering: Bool
     let onPreview: (() -> Void)?
@@ -277,12 +282,12 @@ private struct FileRowPreviewControl: View {
     private var iconView: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(FileRowIconStyle.background(for: url))
+                .fill(FileRowIconStyle.background(for: url, kind: findingKind))
                 .frame(width: 36, height: 36)
 
-            Image(systemName: FileRowIconStyle.symbol(for: url))
+            Image(systemName: FileRowIconStyle.symbol(for: url, kind: findingKind))
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(FileRowIconStyle.foreground(for: url))
+                .foregroundStyle(FileRowIconStyle.foreground(for: url, kind: findingKind))
         }
         .accessibilityHidden(true)
     }
@@ -321,6 +326,13 @@ enum FileRowIconStyle {
     ]
 
     static func symbol(for url: URL) -> String {
+        symbol(for: url, kind: nil)
+    }
+
+    static func symbol(for url: URL, kind: StorageFindingKind?) -> String {
+        if let kindSymbol = symbol(for: kind) {
+            return kindSymbol
+        }
         if url.hasDirectoryPath {
             return "folder.fill"
         }
@@ -328,6 +340,13 @@ enum FileRowIconStyle {
     }
 
     static func background(for url: URL) -> Color {
+        background(for: url, kind: nil)
+    }
+
+    static func background(for url: URL, kind: StorageFindingKind?) -> Color {
+        if let kindColor = color(for: kind) {
+            return kindColor.opacity(0.12)
+        }
         if url.hasDirectoryPath {
             return AppTheme.accent.opacity(0.12)
         }
@@ -352,6 +371,13 @@ enum FileRowIconStyle {
     }
 
     static func foreground(for url: URL) -> Color {
+        foreground(for: url, kind: nil)
+    }
+
+    static func foreground(for url: URL, kind: StorageFindingKind?) -> Color {
+        if let kindColor = color(for: kind) {
+            return kindColor
+        }
         if url.hasDirectoryPath {
             return AppTheme.accent
         }
@@ -372,6 +398,24 @@ enum FileRowIconStyle {
             return AppTheme.mint
         default:
             return .secondary
+        }
+    }
+
+    private static func symbol(for kind: StorageFindingKind?) -> String? {
+        switch kind {
+        case .iosDeviceSupport:
+            return "iphone"
+        case .none, .some:
+            return nil
+        }
+    }
+
+    private static func color(for kind: StorageFindingKind?) -> Color? {
+        switch kind {
+        case .iosDeviceSupport:
+            return AppTheme.accent
+        case .none, .some:
+            return nil
         }
     }
 }

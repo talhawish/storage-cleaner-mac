@@ -13,7 +13,7 @@ struct SystemJunkView: View {
     @State private var typeFilter: SystemJunkTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
     @State private var cleanupRequest: SystemJunkCleanupRequest?
-    @State private var cleanupFailureMessage: String?
+    @State private var cleanupFailureFeedback: SystemJunkCleanupFeedback?
     @State private var isDeleting = false
 
     /// Per-filter aggregates from the scan results — bytes and item counts are pre-computed off
@@ -124,15 +124,16 @@ struct SystemJunkView: View {
             }
         }
         .sheet(item: $cleanupRequest) { request in
+            let feedback = cleanupFeedback(for: request)
             ConfirmationModal(
                 variant: .destructive,
-                title: "Move \(request.urls.count) item\(request.urls.count == 1 ? "" : "s") to Trash?",
-                message: cleanupConfirmationMessage(for: request),
+                title: feedback.title,
+                message: feedback.message,
                 iconSystemName: "trash.fill",
                 showsCloseButton: !isDeleting,
                 preferredHeight: 520,
                 confirm: AppModalActionBar.Action(
-                    title: isDeleting ? "Moving..." : "Move to Trash",
+                    title: isDeleting ? "Moving..." : feedback.confirmTitle,
                     systemImage: "trash.fill",
                     isProminent: true,
                     isDestructive: true,
@@ -142,7 +143,7 @@ struct SystemJunkView: View {
                         performCleanup(request)
                     }
                 ),
-                cancel: AppModalActionBar.CancelAction(title: "Cancel"),
+                cancel: AppModalActionBar.CancelAction(title: feedback.cancelTitle),
                 isProcessing: isDeleting
             ) {
                 SystemJunkCleanupPreview(urls: request.urls)
@@ -174,7 +175,7 @@ struct SystemJunkView: View {
             onRequirePro()
             return
         }
-        cleanupRequest = makeCleanupRequest(from: filteredRecords, useAggregateBytes: true)
+        presentCleanupRequest(makeCleanupRequest(from: filteredRecords, useAggregateBytes: true))
     }
 
     private var emptyState: some View {
@@ -257,6 +258,7 @@ struct SystemJunkView: View {
                     url: record.url,
                     isSelected: selectedURLs.contains(record.url),
                     pathDisplayMode: .fullPath,
+                    findingKind: record.kind,
                     precomputedBytes: record.bytes,
                     canRevealInFinder: canUseProActions,
                     onToggle: { toggle(record.url) }
@@ -360,7 +362,7 @@ struct SystemJunkView: View {
             return
         }
         let selectedRecords = filteredRecords.filter { selectedURLs.contains($0.url) }
-        cleanupRequest = makeCleanupRequest(from: selectedRecords, useAggregateBytes: allVisibleSelected)
+        presentCleanupRequest(makeCleanupRequest(from: selectedRecords, useAggregateBytes: allVisibleSelected))
     }
 
     private func makeCleanupRequest(
@@ -373,6 +375,11 @@ struct SystemJunkView: View {
             records: records,
             bytes: byteTotal
         )
+    }
+
+    private func presentCleanupRequest(_ request: SystemJunkCleanupRequest?) {
+        cleanupFailureFeedback = nil
+        cleanupRequest = request
     }
 }
 
@@ -415,19 +422,17 @@ private extension SystemJunkView {
         }
     }
 
-    private func cleanupConfirmationMessage(for request: SystemJunkCleanupRequest) -> String {
-        if let cleanupFailureMessage {
-            return cleanupFailureMessage
+    private func cleanupFeedback(for request: SystemJunkCleanupRequest) -> SystemJunkCleanupFeedback {
+        if let cleanupFailureFeedback {
+            return cleanupFailureFeedback
         }
-        return "This will move \(request.urls.count) "
-            + "item\(request.urls.count == 1 ? "" : "s") to your Trash "
-            + "(\(StorageFormatting.bytes(request.bytes))). You can recover them from Trash if needed."
+        return .pending(itemCount: request.urls.count, bytes: request.bytes)
     }
 
     private func performCleanup(_ request: SystemJunkCleanupRequest) {
         guard !isDeleting else { return }
         isDeleting = true
-        cleanupFailureMessage = nil
+        cleanupFailureFeedback = nil
 
         Task { @MainActor in
             let result = await onDelete(request.urls)
@@ -451,16 +456,9 @@ private extension SystemJunkView {
         for url in failedURLs {
             selectedURLs.insert(url)
         }
-        cleanupFailureMessage = cleanupFailureMessage(for: result)
-        cleanupRequest = request.retaining(urls: failedURLs)
-    }
-
-    private func cleanupFailureMessage(for result: CleanupResult) -> String {
-        let count = result.failedCount
-        let itemLabel = count == 1 ? "item" : "items"
-        let recovery = result.failedURLs.first?.1.localizedDescription
-            ?? "Check file permissions, then try again."
-        return "\(count) \(itemLabel) could not be deleted. \(recovery)"
+        cleanupFailureFeedback = .failed(result: result)
+        let retainedRequest = request.retaining(urls: failedURLs)
+        cleanupRequest = retainedRequest.urls.isEmpty ? nil : retainedRequest
     }
 }
 

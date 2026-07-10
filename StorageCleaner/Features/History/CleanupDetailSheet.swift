@@ -86,7 +86,7 @@ struct CleanupDetailSheet: View {
                     tint: AppTheme.accent
                 )
             }
-            if summary.hasDiskSnapshot {
+            if summary.hasPostCleanupDiskSnapshot {
                 diskSpaceRow
             }
         }
@@ -115,6 +115,9 @@ struct CleanupDetailSheet: View {
                 } else {
                     Text("\(before) → \(after)")
                         .font(.subheadline.weight(.semibold).monospacedDigit())
+                    Text("Free space is unchanged until the Trash is emptied.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 0)
@@ -131,9 +134,18 @@ struct CleanupDetailSheet: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            freed.map { "Free space \(before) before, \(after) after, grew by \(StorageFormatting.bytes($0))" }
-                ?? "Free space \(before) before, \(after) after"
+            diskSpaceAccessibilityLabel(before: before, after: after, freed: freed)
         )
+    }
+
+    private func diskSpaceAccessibilityLabel(before: String, after: String, freed: Int64?) -> String {
+        guard let freed else {
+            return "Free space \(before) before, \(after) after"
+        }
+        if freed > 0 {
+            return "Free space \(before) before, \(after) after, grew by \(StorageFormatting.bytes(freed))"
+        }
+        return "Free space \(before) before, \(after) after, unchanged until Trash is emptied"
     }
 
     private var cleanupBreakdown: some View {
@@ -232,7 +244,7 @@ private struct CleanupCategoryRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(summary.kind.title), \(StorageFormatting.items(summary.itemCount)) items, "
-                + "\(StorageFormatting.bytes(summary.bytesReclaimed)) reclaimed"
+                + "\(StorageFormatting.bytes(summary.bytesReclaimed)) cleaned"
         )
     }
 

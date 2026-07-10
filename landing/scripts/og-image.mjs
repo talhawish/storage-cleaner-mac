@@ -5,7 +5,7 @@
  *
  * The site's deploy URL is read from `nuxt.config.ts → site.url` so
  * there's only one place to change it. The display label on each card
- * is the host portion of that URL (e.g. `storagecleaner.horizm.com`).
+ * is the host portion of that URL (e.g. `storage-cleaner-a0c0f.web.app`).
  */
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'

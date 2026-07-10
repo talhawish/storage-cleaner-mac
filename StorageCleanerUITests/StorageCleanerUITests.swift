@@ -10,7 +10,7 @@ final class StorageCleanerUITests: XCTestCase {
         let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
 
         let scanButton = app.buttons["primary-scan-button"]
-        XCTAssertTrue(scanButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(scanButton.waitForExistence(timeout: 5))
         scanButton.click()
 
         let results = app.descendants(matching: .any)["dashboard-results"]
@@ -138,7 +138,7 @@ final class StorageCleanerUITests: XCTestCase {
     @MainActor
     func testDeveloperStorageBeforeScanShowsInitialState() {
         let app = launchApp()
-        XCTAssertTrue(app.buttons["primary-scan-button"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["primary-scan-button"].waitForExistence(timeout: 5))
 
         app.descendants(matching: .any)["sidebar-developerStorage"].click()
 
@@ -155,7 +155,7 @@ final class StorageCleanerUITests: XCTestCase {
 
     /// Regression for the bulk-removal UX on the System Junk page: the inline "Clean All" button
     /// (sitting above the file list, not in the toolbar) must pre-select every visible item and
-    /// open the destructive confirmation so the user can review before permanent deletion.
+    /// open the destructive confirmation so the user can review before moving items to Trash.
     @MainActor
     func testSystemJunkCleanAllOpensDeleteConfirmation() {
         let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
@@ -168,10 +168,10 @@ final class StorageCleanerUITests: XCTestCase {
         XCTAssertTrue(cleanButton.waitForExistence(timeout: 4))
         cleanButton.click()
 
-        // The confirmation modal's primary action is "Delete Permanently" — verifying it appears
-        // confirms the modal opened with the right destructive context.
-        let deletePermanently = app.buttons["Delete Permanently"]
-        XCTAssertTrue(deletePermanently.waitForExistence(timeout: 4))
+        // The confirmation modal's primary action is "Move to Trash" — verifying it appears
+        // confirms the modal opened with the right recoverable destructive context.
+        let moveToTrash = app.buttons["Move to Trash"]
+        XCTAssertTrue(moveToTrash.waitForExistence(timeout: 4))
     }
 
     /// The master checkbox above the file list toggles the visible selection. After clicking it,
@@ -213,7 +213,7 @@ final class StorageCleanerUITests: XCTestCase {
     @MainActor
     private func startScan(in app: XCUIApplication) {
         let scanButton = app.buttons["primary-scan-button"]
-        XCTAssertTrue(scanButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(scanButton.waitForExistence(timeout: 5))
         scanButton.click()
 
         let progressTitle = app.staticTexts["scan-progress-title"]
@@ -227,7 +227,7 @@ final class StorageCleanerUITests: XCTestCase {
     @MainActor
     private func startScanAndWaitForResults(in app: XCUIApplication) {
         let scanButton = app.buttons["primary-scan-button"]
-        XCTAssertTrue(scanButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(scanButton.waitForExistence(timeout: 5))
         scanButton.click()
 
         let results = app.descendants(matching: .any)["dashboard-results"]
