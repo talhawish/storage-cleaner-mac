@@ -23,23 +23,41 @@ actor LiveDiskSpaceService: DiskSpaceReading {
         let keys: Set<URLResourceKey> = [
             .volumeTotalCapacityKey,
             .volumeAvailableCapacityKey,
-            .volumeAvailableCapacityForOpportunisticUsageKey
+            .volumeAvailableCapacityForImportantUsageKey
         ]
         guard let values = try? path.resourceValues(forKeys: keys) else {
             return .unavailable
         }
 
         let total = Int64(values.volumeTotalCapacity ?? 0)
-        // Prefer the "for important usage" value when present — it matches the
-        // number macOS shows in About This Mac, so the UI tells the same story
-        // as the system. Fall back to the generic available capacity. The two
-        // resource keys report different integer types (`Int64` and `Int`
-        // respectively) so the conversion is done explicitly.
-        let opportunistic = values.volumeAvailableCapacityForOpportunisticUsage ?? 0
+        let important = values.volumeAvailableCapacityForImportantUsage
         let generic = Int64(values.volumeAvailableCapacity ?? 0)
-        let freeSource = opportunistic > 0 ? opportunistic : generic
-        let used = max(0, total - freeSource)
-        return VolumeSnapshot(totalBytes: total, usedBytes: used, freeBytes: freeSource)
+        return Self.snapshot(
+            totalCapacity: total,
+            availableCapacityForImportantUsage: important,
+            availableCapacity: generic
+        )
+    }
+
+    /// Builds the user-facing snapshot from the values reported by macOS.
+    /// Important-usage capacity is the system's user-visible estimate, including
+    /// space macOS can safely make available. Opportunistic capacity is deliberately
+    /// excluded because it includes additional purgeable space intended for
+    /// non-essential work and can disagree substantially with System Settings.
+    static func snapshot(
+        totalCapacity: Int64,
+        availableCapacityForImportantUsage: Int64?,
+        availableCapacity: Int64
+    ) -> VolumeSnapshot {
+        guard totalCapacity > 0 else { return .unavailable }
+
+        let reportedFree = availableCapacityForImportantUsage ?? availableCapacity
+        let free = min(totalCapacity, max(0, reportedFree))
+        return VolumeSnapshot(
+            totalBytes: totalCapacity,
+            usedBytes: totalCapacity - free,
+            freeBytes: free
+        )
     }
 }
 

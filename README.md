@@ -16,6 +16,7 @@ screenshots, loose APKs, browser caches, Trash, local AI models, and other devel
 - Live read-only scanner orchestration with separate services for Xcode, Docker, Flutter, Android Studio,
   APK/AAB files, browser caches, packages, media, duplicates, junk files, and Trash
 - Permission status service for common storage locations
+- Disk-capacity reporting aligned with macOS System Settings by using the system's important-usage estimate
 - Typed detection taxonomy for developer artifacts, media, photos, screenshots, packages, browser caches, and Trash
 - Per-category scanning loaders with pending, scanning, completed, and skipped states
 - Overview that opens with a "where your space is going" breakdown grid (storage rolled up by domain
