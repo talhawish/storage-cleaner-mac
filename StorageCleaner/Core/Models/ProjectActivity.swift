@@ -56,6 +56,20 @@ enum ProjectActivityStatus: String, CaseIterable, Identifiable, Hashable, Sendab
     }
 }
 
+/// Whether a project's git working tree has pending changes.
+struct GitStatus: Equatable, Hashable, Sendable {
+    /// `true` when a `.git` directory exists at the project root.
+    let isRepo: Bool
+    /// Unstaged or staged changes that haven't been committed.
+    let hasUncommittedChanges: Bool
+    /// Commits on the current branch that haven't been pushed to the remote.
+    let hasUnpushedCommits: Bool
+
+    static let notARepo = GitStatus(isRepo: false, hasUncommittedChanges: false, hasUnpushedCommits: false)
+
+    var hasPendingWork: Bool { hasUncommittedChanges || hasUnpushedCommits }
+}
+
 /// A single developer project discovered on disk.
 struct ProjectInfo: Identifiable, Hashable, Sendable {
     let id: UUID
@@ -70,6 +84,8 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
     let iconURL: URL?
     /// Most specific stack identity available for fallback icon rendering.
     let iconFallback: ProjectIconFallback
+    /// Git working-tree status detected during the scan.
+    let gitStatus: GitStatus
 
     init(
         id: UUID = UUID(),
@@ -81,7 +97,8 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         childProjectCount: Int,
         dependencySize: Int64,
         iconURL: URL? = nil,
-        iconFallback: ProjectIconFallback? = nil
+        iconFallback: ProjectIconFallback? = nil,
+        gitStatus: GitStatus = .notARepo
     ) {
         self.id = id
         self.name = name
@@ -93,6 +110,7 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         self.dependencySize = dependencySize
         self.iconURL = iconURL
         self.iconFallback = iconFallback ?? ProjectIconFallback(technology: technology)
+        self.gitStatus = gitStatus
     }
 
     /// Whole days elapsed since the newest source file was modified.
@@ -136,7 +154,8 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
             childProjectCount: childProjectCount,
             dependencySize: 0,
             iconURL: iconURL,
-            iconFallback: iconFallback
+            iconFallback: iconFallback,
+            gitStatus: gitStatus
         )
     }
 }

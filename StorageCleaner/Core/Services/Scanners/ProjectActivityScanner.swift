@@ -125,6 +125,7 @@ actor ProjectActivityScanner {
             ?? (try? fileMgr.attributesOfItem(atPath: dir.path))?[.modificationDate] as? Date
             ?? .distantPast
         let nested = countSubs(at: dir, fileMgr: fileMgr)
+        let gitStatus = GitStatusDetector.detect(at: dir, fileManager: fileMgr)
         return ProjectInfo(
             name: dir.lastPathComponent,
             path: dir,
@@ -134,7 +135,8 @@ actor ProjectActivityScanner {
             childProjectCount: nested,
             dependencySize: metrics.dependencySize,
             iconURL: metrics.iconURL,
-            iconFallback: ProjectIconFallback.detect(at: dir, technology: technology, fileManager: fileMgr)
+            iconFallback: ProjectIconFallback.detect(at: dir, technology: technology, fileManager: fileMgr),
+            gitStatus: gitStatus
         )
     }
 

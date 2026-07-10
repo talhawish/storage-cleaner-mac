@@ -48,6 +48,7 @@ struct ProjectDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: AppTheme.Spacing.large) {
                         activityBanner
+                        gitSection
                         sizeBreakdown
                         technologyInfo
                         locationInfo
@@ -217,6 +218,35 @@ struct ProjectDetailView: View {
 
     private var activityBanner: some View {
         ProjectActivityBanner(project: project)
+    }
+
+    private var gitSection: some View {
+        Group {
+            if project.gitStatus.hasPendingWork {
+                GitStatusBanner(gitStatus: project.gitStatus)
+            } else if !project.gitStatus.isRepo {
+                AppModalSection(
+                    title: "Version Control",
+                    subtitle: "This project is not tracked by Git",
+                    systemImage: "arrow.triangle.branch",
+                    tint: .secondary
+                ) {
+                    AppModalCard {
+                        HStack(spacing: 12) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 28)
+                                .accessibilityHidden(true)
+                            Text("No Git repository found in this project folder.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private var sizeBreakdown: some View {
@@ -491,5 +521,55 @@ private struct ProjectLocationInfo: View {
                 }
             }
         }
+    }
+}
+
+private struct GitStatusBanner: View {
+    let gitStatus: GitStatus
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppTheme.orange.opacity(0.14))
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppTheme.orange)
+            }
+            .frame(width: 48, height: 48)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(gitStatus.hasUncommittedChanges ? "Uncommitted changes" : "Unpushed commits")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.orange)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(AppTheme.Spacing.mediumLarge)
+        .background(
+            AppTheme.orange.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppTheme.orange.opacity(0.22), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var message: String {
+        var parts: [String] = []
+        if gitStatus.hasUncommittedChanges {
+            parts.append("Files have been modified but not committed.")
+        }
+        if gitStatus.hasUnpushedCommits {
+            parts.append("Committed changes have not been pushed to the remote.")
+        }
+        return parts.joined(separator: " ")
     }
 }
