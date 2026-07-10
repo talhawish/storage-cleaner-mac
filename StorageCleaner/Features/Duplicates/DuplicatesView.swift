@@ -45,10 +45,43 @@ struct DuplicatesView: View {
         Group {
             if !hasAnyDuplicates {
                 emptyState
-            } else if groups.isEmpty {
-                filteredEmptyState
             } else {
-                content
+                VStack(spacing: 0) {
+                    DuplicatesSummaryHeader(
+                        groupCount: groups.count,
+                        copyCount: totalCopyCount,
+                        totalReclaimableBytes: totalReclaimableBytes,
+                        selectedCount: selectedURLs.count,
+                        selectedBytes: selection.removalBytes(in: groups),
+                        filter: $filter,
+                        onSelectAll: { for group in groups { selection.selectAllRemovable(in: group) } },
+                        onDeselectAll: { for group in groups { selection.clearSelection(in: group) } },
+                        onReset: { selection.reset() },
+                        onRemoveSelected: requestDeleteConfirmation
+                    )
+
+                    if groups.isEmpty {
+                        filteredEmptyState
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: AppTheme.Spacing.mediumLarge) {
+                                ForEach(groups) { group in
+                                    DuplicateGroupCard(
+                                        group: group,
+                                        selection: selection,
+                                        onToggleRemoval: { selection.toggleRemoval($0, in: group) },
+                                        onSetKeep: { selection.setKeep($0, in: group) },
+                                        onKeepBestRemoveOthers: { keepBestRemoveOthers(in: group) },
+                                        onPreview: { previewURL = $0 },
+                                        permissionHandler: permissionHandler,
+                                        canRevealInFinder: canUseProActions
+                                    )
+                                }
+                            }
+                            .padding(AppTheme.Spacing.mediumLarge)
+                        }
+                    }
+                }
             }
         }
         .navigationTitle("Duplicates")
@@ -86,43 +119,6 @@ struct DuplicatesView: View {
         let size = StorageFormatting.bytes(selection.removalBytes(in: groups))
         return "This moves \(selectedURLs.count) duplicate copies (\(size)) to the Trash. "
             + "The copy marked “Keep” in each group is left untouched."
-    }
-
-    // MARK: - Content
-
-    private var content: some View {
-        VStack(spacing: 0) {
-            DuplicatesSummaryHeader(
-                groupCount: groups.count,
-                copyCount: totalCopyCount,
-                totalReclaimableBytes: totalReclaimableBytes,
-                selectedCount: selectedURLs.count,
-                selectedBytes: selection.removalBytes(in: groups),
-                filter: $filter,
-                onSelectAll: { for group in groups { selection.selectAllRemovable(in: group) } },
-                onDeselectAll: { for group in groups { selection.clearSelection(in: group) } },
-                onReset: { selection.reset() },
-                onRemoveSelected: requestDeleteConfirmation
-            )
-
-            ScrollView {
-                LazyVStack(spacing: AppTheme.Spacing.mediumLarge) {
-                    ForEach(groups) { group in
-                        DuplicateGroupCard(
-                            group: group,
-                            selection: selection,
-                            onToggleRemoval: { selection.toggleRemoval($0, in: group) },
-                            onSetKeep: { selection.setKeep($0, in: group) },
-                            onKeepBestRemoveOthers: { keepBestRemoveOthers(in: group) },
-                            onPreview: { previewURL = $0 },
-                            permissionHandler: permissionHandler,
-                            canRevealInFinder: canUseProActions
-                        )
-                    }
-                }
-                .padding(AppTheme.Spacing.mediumLarge)
-            }
-        }
     }
 
     // MARK: - Empty states

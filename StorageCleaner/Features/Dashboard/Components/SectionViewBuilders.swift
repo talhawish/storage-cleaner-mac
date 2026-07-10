@@ -37,6 +37,13 @@ extension AppShellView {
         case .idle:
             developerStorageInitialState(action: scanAction)
                 .padding(28)
+        case .results where !viewModel.hasScanned(kinds):
+            // Developer Storage overlaps several targeted sections (for example,
+            // Simulators, Docker, and CLI Programs). Findings from one of those
+            // scans are only a partial developer inventory, so keep the primary
+            // scan action visible until every developer kind has been covered.
+            developerStorageInitialState(action: scanAction)
+                .padding(28)
         case .empty:
             scannedSectionState(
                 kinds: kinds,

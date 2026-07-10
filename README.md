@@ -342,6 +342,10 @@ Keyboard shortcuts currently available:
 - **Return** — activate the primary scan action
 - **Escape** — cancel an active scan
 
+Developer Storage only presents results after all developer-storage categories have been scanned.
+Results from overlapping targeted scans, such as simulator or Docker scans, remain available in their
+dedicated sections but do not replace Developer Storage's initial full-scan prompt.
+
 ## Development workflow
 
 1. Read `AGENTS.md` before changing code.
