@@ -233,9 +233,8 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
         )
     }
 
-    private static func isCrashReport(_ url: URL) -> Bool {
-        let ext = url.pathExtension.lowercased()
-        return [
+    private static func isCrashReport(_ record: FileRecord) -> Bool {
+        [
             "crash",
             "diag",
             "hang",
@@ -244,7 +243,7 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
             "panic",
             "spin",
             "synced"
-        ].contains(ext)
+        ].contains(record.pathExtensionLowercased)
     }
 }
 

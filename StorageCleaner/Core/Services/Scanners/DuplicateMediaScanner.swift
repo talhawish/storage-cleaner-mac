@@ -8,7 +8,10 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
     private let extensions: Set<String>
     private let minimumBytes: Int64
     private let exclusionPolicy: DuplicateScanExclusionPolicy?
-    private let collector: FileSystemCollector
+    private let collector: any FileTraversing
+    /// When set, project-root detection is memoized here (once per root per
+    /// scan) instead of each duplicate scanner re-walking the same trees.
+    private let snapshotCache: DirectorySnapshotCache?
     private let builder: CandidateFindingBuilder
 
     init(
@@ -18,7 +21,8 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
         extensions: Set<String>,
         minimumBytes: Int64,
         exclusionPolicy: DuplicateScanExclusionPolicy? = nil,
-        collector: FileSystemCollector,
+        collector: any FileTraversing,
+        snapshotCache: DirectorySnapshotCache? = nil,
         builder: CandidateFindingBuilder = CandidateFindingBuilder()
     ) {
         self.kind = kind
@@ -29,21 +33,26 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
         self.minimumBytes = minimumBytes
         self.exclusionPolicy = exclusionPolicy
         self.collector = collector
+        self.snapshotCache = snapshotCache
         self.builder = builder
     }
 
     func scan() async -> CategoryScanResult {
-        let exclusionPolicy = exclusionPolicy ?? DuplicateScanExclusionPolicy.detectingProjects(under: roots)
-        let result = collector.collectDuplicateGroups(
+        let exclusionPolicy = await resolveExclusionPolicy()
+        let result = await collector.collectMatchingFiles(
             at: roots,
-            extensions: extensions,
-            minimumBytes: minimumBytes,
-            excluding: exclusionPolicy.shouldExclude
+            matching: { [extensions] record in
+                extensions.contains(record.pathExtensionLowercased)
+                    && !exclusionPolicy.shouldExclude(record.url)
+            },
+            limit: FileTraversalDefaults.fileLimit,
+            prioritizeLargest: false
         )
+        let groups = await DuplicateGrouper.groups(from: result.candidates, minimumBytes: minimumBytes)
         let finding = builder.makeDuplicateFinding(
             kind: kind,
             domain: domain,
-            groups: result.groups,
+            groups: groups,
             safety: .review
         )
 
@@ -52,5 +61,20 @@ struct DuplicateMediaScanner: StorageCategoryScanning {
             inspectedItemCount: result.inspectedItemCount,
             message: finding == nil ? "No likely duplicate groups found" : "Found likely duplicates"
         )
+    }
+
+    private func resolveExclusionPolicy() async -> DuplicateScanExclusionPolicy {
+        if let exclusionPolicy {
+            return exclusionPolicy
+        }
+        guard let snapshotCache else {
+            return DuplicateScanExclusionPolicy.detectingProjects(under: roots)
+        }
+        var detectedRoots: [URL] = []
+        for root in roots {
+            guard !Task.isCancelled else { break }
+            detectedRoots += await snapshotCache.projectRoots(under: root)
+        }
+        return DuplicateScanExclusionPolicy(projectRoots: detectedRoots)
     }
 }

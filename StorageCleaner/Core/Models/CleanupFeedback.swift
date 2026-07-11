@@ -1,13 +1,17 @@
 import Foundation
 
-struct SystemJunkCleanupFeedback {
+/// User-facing copy for a cleanup confirmation or failure prompt. Built from a
+/// `CleanupResult` so every delete path — System Junk's inline flow, the
+/// app-wide failure sheet, Quick Clean — describes outcomes with the same
+/// wording and recovery guidance.
+struct CleanupFeedback {
     let title: String
     let message: String
     let confirmTitle: String
     let cancelTitle: String
 
-    static func pending(itemCount: Int, bytes: Int64) -> SystemJunkCleanupFeedback {
-        SystemJunkCleanupFeedback(
+    static func pending(itemCount: Int, bytes: Int64) -> CleanupFeedback {
+        CleanupFeedback(
             title: "Move \(itemCount) \(Self.itemLabel(itemCount)) to Trash?",
             message: "This will move \(itemCount) \(Self.itemLabel(itemCount)) to your Trash "
                 + "(\(StorageFormatting.bytes(bytes))). You can recover them from Trash if needed.",
@@ -16,7 +20,7 @@ struct SystemJunkCleanupFeedback {
         )
     }
 
-    static func failed(result: CleanupResult) -> SystemJunkCleanupFeedback {
+    static func failed(result: CleanupResult) -> CleanupFeedback {
         let failedCount = result.failedCount
         let failedLabel = Self.itemLabel(failedCount)
         let recovery = Self.recoveryMessage(from: result)
@@ -30,7 +34,7 @@ struct SystemJunkCleanupFeedback {
             message = "\(failedCount) \(failedLabel) could not be moved to Trash. \(recovery)"
         }
 
-        return SystemJunkCleanupFeedback(
+        return CleanupFeedback(
             title: "\(failedCount) \(failedLabel) \(Self.needsVerb(failedCount)) permission",
             message: message,
             confirmTitle: "Retry Move",

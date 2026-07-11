@@ -1,21 +1,39 @@
 import Foundation
 
 struct LiveStorageScanner: StorageScanning {
-    private let scanners: [any StorageCategoryScanning]
+    /// How many category scanners run at once. Each scanner performs blocking
+    /// filesystem enumeration, so running all ~36 at once would thrash the
+    /// disk and monopolize the cooperative thread pool; a small window keeps
+    /// the disk busy without starving the rest of the app.
+    static let maxConcurrentScanners = 6
 
-    init(scanners: [any StorageCategoryScanning]) {
+    private let scanners: [any StorageCategoryScanning]
+    /// Per-scan traversal memoization shared by the user-folder scanners.
+    /// `nil` in tests that construct scanners directly.
+    private let snapshotCache: DirectorySnapshotCache?
+
+    init(scanners: [any StorageCategoryScanning], snapshotCache: DirectorySnapshotCache? = nil) {
         self.scanners = scanners
+        self.snapshotCache = snapshotCache
     }
 
     func scanEvents(for kinds: Set<StorageFindingKind>? = nil) -> AsyncStream<ScanEvent> {
         AsyncStream { continuation in
-            let task = Task {
+            let task = Task { [snapshotCache] in
+                // Fresh cache generation per scan so rescans re-read the disk.
+                await snapshotCache?.beginScan()
                 await scan(scanners: scanners(matching: kinds), to: continuation)
+                await snapshotCache?.endScan()
                 continuation.finish()
             }
 
-            continuation.onTermination = { _ in
+            continuation.onTermination = { [snapshotCache] _ in
                 task.cancel()
+                // The cache's walks are detached tasks, not children of `task`,
+                // so cancel them explicitly when the stream is torn down.
+                if let snapshotCache {
+                    Task { await snapshotCache.endScan() }
+                }
             }
         }
     }
@@ -34,24 +52,57 @@ struct LiveStorageScanner: StorageScanning {
         var progress = initialProgress(for: activeScanners)
         var findings: [StorageFinding?] = Array(repeating: nil, count: count)
         var inspectedCounts: [Int] = Array(repeating: 0, count: count)
+
+        await runWindowedScan(
+            scanners: activeScanners,
+            progress: &progress,
+            findings: &findings,
+            inspectedCounts: &inspectedCounts,
+            continuation: continuation
+        )
+
+        guard !Task.isCancelled else { return }
+
+        yieldCompleted(
+            findings: findings.compactMap { $0 },
+            scannedItemCount: inspectedCounts.reduce(0, +),
+            startedAt: scanStart,
+            to: continuation
+        )
+    }
+
+    /// Windowed execution: start at most `maxConcurrentScanners`, then launch
+    /// the next scanner as each one finishes. Event semantics are unchanged —
+    /// per-kind results still stream as they complete, and not-yet-started
+    /// scanners keep their "Waiting" progress state.
+    private func runWindowedScan(
+        scanners activeScanners: [any StorageCategoryScanning],
+        progress: inout [ScannerProgress],
+        findings: inout [StorageFinding?],
+        inspectedCounts: inout [Int],
+        continuation: AsyncStream<ScanEvent>.Continuation
+    ) async {
+        let count = activeScanners.count
         var completedCount = 0
 
-        for index in 0..<count {
-            progress[index] = progressItem(
-                for: activeScanners[index],
-                state: .scanning,
-                message: "Scanning…"
-            )
-        }
-        yieldProgress(0, count, 0, progress, continuation)
-
         await withTaskGroup(of: (Int, CategoryScanResult).self) { group in
-            for (index, scanner) in activeScanners.enumerated() {
+            var pending = activeScanners.enumerated().makeIterator()
+            func addNextScanner() {
+                guard let (index, scanner) = pending.next() else { return }
+                progress[index] = progressItem(
+                    for: scanner,
+                    state: .scanning,
+                    message: "Scanning…"
+                )
                 group.addTask { [scanner] in
                     let result = await scanner.scan()
                     return (index, result)
                 }
             }
+            for _ in 0..<min(Self.maxConcurrentScanners, count) {
+                addNextScanner()
+            }
+            yieldProgress(0, count, 0, progress, continuation)
 
             for await (index, result) in group {
                 guard !Task.isCancelled else {
@@ -70,19 +121,11 @@ struct LiveStorageScanner: StorageScanning {
                     message: result.message
                 )
 
+                addNextScanner()
                 let totalInspected = inspectedCounts.reduce(0, +)
                 yieldProgress(completedCount, count, totalInspected, progress, continuation)
             }
         }
-
-        guard !Task.isCancelled else { return }
-
-        yieldCompleted(
-            findings: findings.compactMap { $0 },
-            scannedItemCount: inspectedCounts.reduce(0, +),
-            startedAt: scanStart,
-            to: continuation
-        )
     }
 
     private func yieldEmptyCompleted(to continuation: AsyncStream<ScanEvent>.Continuation) {
@@ -178,6 +221,13 @@ extension LiveStorageScanner {
     static func live(permissionHandler: (any StoragePermissionHandling)?) -> LiveStorageScanner {
         let collector = FileSystemCollector()
         let appCatalog = LazyInstalledAppCatalog()
+        // The scanners below share the user's home folders (Downloads, Desktop,
+        // Documents, Movies, Pictures). `SnapshotTraversal` memoizes one walk
+        // per root per scan instead of each of them re-enumerating the same
+        // trees concurrently; scanners with unique roots keep the direct
+        // collector, which walks without snapshot overhead.
+        let snapshotCache = DirectorySnapshotCache()
+        let shared = SnapshotTraversal(cache: snapshotCache)
         let scanners: [any StorageCategoryScanning] = [
             XcodeStorageScanner(collector: collector),
             IosDeviceSupportScanner(),
@@ -185,7 +235,7 @@ extension LiveStorageScanner {
             FlutterStorageScanner(collector: collector),
             ReactNativeStorageScanner(collector: collector),
             AndroidStudioStorageScanner(collector: collector),
-            AndroidPackageScanner(collector: collector),
+            AndroidPackageScanner(collector: shared),
             NodeDependencyScanner(collector: collector),
             PythonDependencyScanner(collector: collector),
             RustDependencyScanner(collector: collector),
@@ -196,16 +246,16 @@ extension LiveStorageScanner {
             GradleCacheScanner(collector: collector),
             AIModelCacheScanner(collector: collector),
             BrowserCacheScanner(collector: collector),
-            LargeFileScanner(collector: collector),
-            LargeVideoScanner(collector: collector),
-            ScreenRecordingScanner(collector: collector),
-            LargePhotoScanner(collector: collector),
-            DuplicatePhotoScanner(collector: collector),
-            DuplicateVideoScanner(collector: collector),
-            DuplicateDocumentScanner(collector: collector),
-            ScreenshotStorageScanner(collector: collector),
-            JunkFileScanner(collector: collector),
-            LeftoversScanner(collector: collector),
+            LargeFileScanner(collector: shared),
+            LargeVideoScanner(collector: shared),
+            ScreenRecordingScanner(collector: shared),
+            LargePhotoScanner(collector: shared),
+            DuplicatePhotoScanner(collector: shared, snapshotCache: snapshotCache),
+            DuplicateVideoScanner(collector: shared, snapshotCache: snapshotCache),
+            DuplicateDocumentScanner(collector: shared, snapshotCache: snapshotCache),
+            ScreenshotStorageScanner(collector: shared),
+            JunkFileScanner(collector: shared),
+            LeftoversScanner(collector: shared),
             CLIAppScanner(collector: collector),
             RuntimeVersionScanner(),
             OrphanedAppSupportScanner(collector: collector, catalog: appCatalog),
@@ -222,7 +272,8 @@ extension LiveStorageScanner {
         } ?? scanners
 
         return LiveStorageScanner(
-            scanners: scopedScanners
+            scanners: scopedScanners,
+            snapshotCache: snapshotCache
         )
     }
 }

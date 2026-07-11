@@ -72,10 +72,13 @@ struct SettingsIconTile: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 14, weight: .semibold))
+            .font(AppTheme.Typography.rowLabel)
             .foregroundStyle(tint)
             .frame(width: 32, height: 32)
-            .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(
+                tint.opacity(0.14),
+                in: RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
+            )
             .accessibilityHidden(true)
     }
 }

@@ -12,11 +12,11 @@ struct QuickCleanHeader: View {
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                     .fill(AppTheme.accent.opacity(0.14))
                     .frame(width: 36, height: 36)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTheme.Typography.bodyIcon)
                     .foregroundStyle(AppTheme.accent)
             }
             .accessibilityHidden(true)

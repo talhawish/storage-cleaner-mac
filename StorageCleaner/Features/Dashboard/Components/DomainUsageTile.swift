@@ -19,7 +19,10 @@ struct DomainUsageTile: View {
                         .font(.system(size: AppTheme.IconSize.body, weight: .semibold))
                         .foregroundStyle(tint)
                         .frame(width: 34, height: 34)
-                        .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .background(
+                            tint.opacity(0.13),
+                            in: RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
+                        )
                         .accessibilityHidden(true)
 
                     Spacer()

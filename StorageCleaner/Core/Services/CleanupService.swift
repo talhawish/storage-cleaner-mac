@@ -38,27 +38,12 @@ struct CleanupResult: Sendable {
 
 protocol CleanupService: Sendable {
     func delete(urls: [URL]) async -> CleanupResult
-    func deletePermanently(urls: [URL]) async -> CleanupResult
-}
-
-extension CleanupService {
-    func deletePermanently(urls: [URL]) async -> CleanupResult {
-        await delete(urls: urls)
-    }
 }
 
 struct FileManagerCleanupService: CleanupService {
     private static var trashPrefix: String { UserHomeDirectory.path + "/.Trash/" }
 
     func delete(urls: [URL]) async -> CleanupResult {
-        await delete(urls: urls, mode: .trashUnlessAlreadyTrashed)
-    }
-
-    func deletePermanently(urls: [URL]) async -> CleanupResult {
-        await delete(urls: urls, mode: .permanent)
-    }
-
-    private func delete(urls: [URL], mode: DeletionMode) async -> CleanupResult {
         let deletionURLs = Self.normalizedDeletionURLs(urls)
         guard !deletionURLs.isEmpty else {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
@@ -67,7 +52,7 @@ struct FileManagerCleanupService: CleanupService {
         return await withTaskGroup(of: CleanupResult.self) { group in
             for url in deletionURLs {
                 group.addTask(priority: .userInitiated) {
-                    Self.deleteSynchronously(url: url, mode: mode)
+                    Self.deleteSynchronously(url: url)
                 }
             }
 
@@ -88,12 +73,7 @@ struct FileManagerCleanupService: CleanupService {
         }
     }
 
-    private enum DeletionMode {
-        case trashUnlessAlreadyTrashed
-        case permanent
-    }
-
-    private static func deleteSynchronously(url: URL, mode: DeletionMode) -> CleanupResult {
+    private static func deleteSynchronously(url: URL) -> CleanupResult {
         let fileManager = FileManager.default
         var trashed: [URL] = []
         var deletedItems: [DeletedItem] = []
@@ -120,7 +100,7 @@ struct FileManagerCleanupService: CleanupService {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
-        if mode == .permanent || url.path.hasPrefix(Self.trashPrefix) {
+        if url.path.hasPrefix(Self.trashPrefix) {
             do {
                 try fileManager.removeItem(at: url)
             } catch {

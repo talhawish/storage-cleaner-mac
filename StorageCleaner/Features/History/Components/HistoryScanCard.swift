@@ -232,11 +232,11 @@ private struct FreeSpacePill: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .fill(Color.primary.opacity(0.04))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)

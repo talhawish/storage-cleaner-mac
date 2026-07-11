@@ -125,7 +125,7 @@ struct DockerView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 16) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                         .fill(AppTheme.violet.opacity(0.14))
                         .frame(width: 58, height: 58)
                     Image(systemName: "shippingbox.fill")
@@ -528,6 +528,6 @@ private struct DockerMetricTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(AppTheme.subtleSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous))
     }
 }

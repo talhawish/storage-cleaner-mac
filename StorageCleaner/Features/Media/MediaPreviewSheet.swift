@@ -165,7 +165,7 @@ private struct PreviewHeaderBadges: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(StorageFormatting.bytes(bytes))
-                .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+                .font(AppTheme.Typography.summaryValue.monospacedDigit())
                 .foregroundStyle(.primary)
         }
     }

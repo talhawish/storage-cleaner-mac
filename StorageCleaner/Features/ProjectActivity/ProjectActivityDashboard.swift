@@ -58,9 +58,12 @@ extension ProjectActivityView {
             .tint(AppTheme.orange)
         }
         .padding(20)
-        .background(AppTheme.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            AppTheme.orange.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous)
                 .stroke(AppTheme.orange.opacity(0.2), lineWidth: 1)
         }
     }
@@ -84,7 +87,7 @@ extension ProjectActivityView {
             }
         }
         .padding(20)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous))
     }
 
     func activityTimeline(snapshot: ProjectActivitySnapshot) -> some View {

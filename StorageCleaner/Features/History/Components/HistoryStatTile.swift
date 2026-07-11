@@ -13,10 +13,10 @@ struct HistoryStatTile: View {
     var body: some View {
         HStack(alignment: .center, spacing: AppTheme.Spacing.medium) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                     .fill(tint.opacity(0.14))
                 Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTheme.Typography.bodyIcon)
                     .foregroundStyle(tint)
             }
             .frame(width: 36, height: 36)
@@ -46,11 +46,11 @@ struct HistoryStatTile: View {
         .padding(AppTheme.Spacing.mediumLarge)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                 .fill(Color.primary.opacity(0.045))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)

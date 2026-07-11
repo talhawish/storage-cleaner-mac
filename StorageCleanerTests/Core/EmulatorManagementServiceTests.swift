@@ -421,6 +421,7 @@ final class EmulatorManagementServiceTests: XCTestCase {
             "tvOS 18.4"
         )
     }
+
 }
 
 private func simulatorDevicesJSON(udid: String, deviceDirectory: URL) -> String {

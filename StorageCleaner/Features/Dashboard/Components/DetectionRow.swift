@@ -16,7 +16,10 @@ struct DetectionRow: View {
                     .font(.system(size: AppTheme.IconSize.body, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 36, height: 36)
-                    .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .background(
+                        tint.opacity(0.13),
+                        in: RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
+                    )
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {

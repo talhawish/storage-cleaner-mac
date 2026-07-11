@@ -92,34 +92,6 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot?.findings.first?.itemCount, 1)
     }
 
-    func testPermanentDeleteUsesPermanentCleanupAndPrunesSystemJunk() async {
-        let removed = URL(fileURLWithPath: "/Users/test/Library/Caches/StaleApp", isDirectory: true)
-        let kept = URL(fileURLWithPath: "/Users/test/Library/Caches/OtherApp", isDirectory: true)
-        let finding = StorageFinding(
-            kind: .orphanedAppCaches,
-            domain: .systemJunk,
-            bytes: 100,
-            itemCount: 2,
-            safety: .safe,
-            examples: [],
-            filePaths: [removed, kept],
-            pathBytes: [removed: 40, kept: 60]
-        )
-        let viewModel = makeViewModel(
-            finding: finding,
-            cleanupService: PermanentOnlyCleanupService(reclaimedBytesByURL: [removed: 40])
-        )
-        await loadSnapshot(in: viewModel)
-
-        let result = await viewModel.deleteFilesPermanently([removed])
-
-        XCTAssertEqual(result.totalBytesReclaimed, 40)
-        XCTAssertEqual(result.failedCount, 0)
-        XCTAssertEqual(viewModel.snapshot?.findings.first?.filePaths, [kept])
-        XCTAssertEqual(viewModel.snapshot?.findings.first?.bytes, 60)
-        XCTAssertEqual(viewModel.snapshot?.findings.first?.pathBytes, [kept: 60])
-    }
-
     func testPartialSystemJunkCleanupPrunesDeletedPathsAndLeavesPermissionFailures() async {
         let removed = URL(fileURLWithPath: "/Users/test/Library/Caches/StaleApp", isDirectory: true)
         let denied = URL(fileURLWithPath: "/Users/test/Library/Caches/LockedApp", isDirectory: true)
@@ -304,31 +276,6 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         for _ in 0..<20 where viewModel.phase != .results {
             await Task.yield()
         }
-    }
-}
-
-private struct PermanentOnlyCleanupService: CleanupService {
-    let reclaimedBytesByURL: [URL: Int64]
-
-    func delete(urls: [URL]) async -> CleanupResult {
-        CleanupResult(
-            deletedURLs: [],
-            deletedItems: [],
-            failedURLs: urls.map { ($0, CleanupError.deletionFailed($0, CocoaError(.fileWriteUnknown))) },
-            totalBytesReclaimed: 0
-        )
-    }
-
-    func deletePermanently(urls: [URL]) async -> CleanupResult {
-        let deletedItems = urls.map {
-            DeletedItem(originalURL: $0, bytesReclaimed: reclaimedBytesByURL[$0] ?? 0)
-        }
-        return CleanupResult(
-            deletedURLs: [],
-            deletedItems: deletedItems,
-            failedURLs: [],
-            totalBytesReclaimed: deletedItems.reduce(Int64(0)) { $0 + $1.bytesReclaimed }
-        )
     }
 }
 

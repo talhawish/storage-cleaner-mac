@@ -75,6 +75,7 @@ struct LargeFilesView: View {
                         Label("Delete Selected", systemImage: "trash")
                     }
                     .foregroundStyle(.red)
+                    .accessibilityHint("Asks for confirmation, then moves the selected items to the Trash")
                 }
             }
 

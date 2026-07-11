@@ -1,5 +1,14 @@
 import Foundation
 
+/// Result of an emulator inventory pass. `failureMessage` is set when a probe
+/// failed outright (e.g. `simctl` errored even though the Xcode tooling is
+/// installed) so the UI can distinguish "nothing installed" from "the
+/// inventory is unreliable" instead of showing a misleading empty state.
+struct EmulatorDiscovery: Sendable {
+    let images: [EmulatorImage]
+    let failureMessage: String?
+}
+
 /// Discovers and removes simulator/emulator **OS images** — the biggest space hogs in a developer's
 /// toolchain (an Apple runtime is often 8+ GB; Android system images run several GB per API level).
 ///
@@ -54,18 +63,30 @@ struct EmulatorManagementService: Sendable {
     /// `bytes == 0` and sized separately via ``measuringRemainingSizes(in:)`` so the list can appear
     /// immediately.
     func discover() async -> [EmulatorImage] {
+        await discoverWithDiagnostics().images
+    }
+
+    /// Like ``discover()``, but also reports when a probe failed outright — e.g. `simctl`
+    /// returned a non-zero exit even though the Xcode tooling is installed. Lets the
+    /// Emulators view distinguish "nothing installed" from "the inventory is unreliable".
+    func discoverWithDiagnostics() async -> EmulatorDiscovery {
         // The only async work is the simctl call; the rest is filesystem walking, which is fast
         // enough to do sequentially without blocking the main thread.
         let runtimes = await discoverAppleRuntimes()
         let deviceSupport = discoverAppleDeviceSupport()
         let simulatorDevices = await discoverSimulatorDevices()
         let android = discoverAndroidImages()
-        return (runtimes + deviceSupport + simulatorDevices + android).sorted { lhs, rhs in
-            if lhs.platform.sortIndex != rhs.platform.sortIndex {
-                return lhs.platform.sortIndex < rhs.platform.sortIndex
+        let images = (runtimes.images + deviceSupport + simulatorDevices.images + android)
+            .sorted { lhs, rhs in
+                if lhs.platform.sortIndex != rhs.platform.sortIndex {
+                    return lhs.platform.sortIndex < rhs.platform.sortIndex
+                }
+                return lhs.key > rhs.key
             }
-            return lhs.key > rhs.key
-        }
+        return EmulatorDiscovery(
+            images: images,
+            failureMessage: runtimes.failureMessage ?? simulatorDevices.failureMessage
+        )
     }
 
     /// Returns `images` with the on-disk size of every trash-managed entry filled in. Apple
@@ -80,17 +101,22 @@ struct EmulatorManagementService: Sendable {
         }
     }
 
-    private func discoverAppleRuntimes() async -> [EmulatorImage] {
-        guard let xcrun = locateXcrun() else { return [] }
+    private func discoverAppleRuntimes() async -> (images: [EmulatorImage], failureMessage: String?) {
+        // No xcrun means no Xcode tooling: an empty result is a true empty, not a failure.
+        guard let xcrun = locateXcrun() else { return ([], nil) }
         let output = await runCommand(xcrun, ["simctl", "runtime", "list", "-j"])
-        guard output.succeeded, let data = output.output.data(using: .utf8) else { return [] }
-        guard let decoded = try? JSONDecoder().decode([String: RuntimeJSON].self, from: data) else { return [] }
+        guard output.succeeded, let data = output.output.data(using: .utf8) else {
+            return ([], Self.simctlFailureMessage(listing: "simulator runtimes", output: output))
+        }
+        guard let decoded = try? JSONDecoder().decode([String: RuntimeJSON].self, from: data) else {
+            return ([], "simctl returned an unreadable simulator runtime list.")
+        }
 
         let isoFormatter = ISO8601DateFormatter()
         let relativeFormatter = RelativeDateTimeFormatter()
         let referenceDate = Date()
 
-        return decoded.values.map { runtime in
+        let images = decoded.values.map { runtime -> EmulatorImage in
             let platformName = Self.applePlatformName(
                 platformIdentifier: runtime.platformIdentifier,
                 runtimeIdentifier: runtime.runtimeIdentifier
@@ -115,6 +141,15 @@ struct EmulatorManagementService: Sendable {
                 lastUsed: lastUsed
             )
         }
+        return (images, nil)
+    }
+
+    /// One-line, user-presentable description of a failed `simctl` invocation.
+    private static func simctlFailureMessage(
+        listing subject: String,
+        output: CommandOutput
+    ) -> String {
+        "simctl couldn't list \(subject): \(firstMeaningfulLine(output.output))"
     }
 
     private func discoverAppleDeviceSupport() -> [EmulatorImage] {
@@ -129,24 +164,31 @@ struct EmulatorManagementService: Sendable {
         }
     }
 
-    private func discoverSimulatorDevices() async -> [EmulatorImage] {
+    private func discoverSimulatorDevices() async -> (images: [EmulatorImage], failureMessage: String?) {
         let simctlDevices = await discoverSimulatorDevicesFromSimctl()
-        guard simctlDevices.didInspect else { return [] }
+        guard simctlDevices.didInspect else { return ([], simctlDevices.failureMessage) }
 
         let orphanedFolders = discoverOrphanedSimulatorDeviceFolders(
             excluding: simctlDevices.deviceDirectories
         )
-        return simctlDevices.images + orphanedFolders
+        return (simctlDevices.images + orphanedFolders, nil)
     }
 
     private func discoverSimulatorDevicesFromSimctl() async -> SimulatorDeviceDiscovery {
         guard let xcrun = locateXcrun() else {
-            return SimulatorDeviceDiscovery(images: [], deviceDirectories: [], didInspect: false)
+            return SimulatorDeviceDiscovery(
+                images: [], deviceDirectories: [], didInspect: false, failureMessage: nil
+            )
         }
         let output = await runCommand(xcrun, ["simctl", "list", "devices", "-j"])
         guard output.succeeded, let data = output.output.data(using: .utf8),
               let decoded = try? JSONDecoder().decode(SimulatorDevicesJSON.self, from: data) else {
-            return SimulatorDeviceDiscovery(images: [], deviceDirectories: [], didInspect: false)
+            return SimulatorDeviceDiscovery(
+                images: [],
+                deviceDirectories: [],
+                didInspect: false,
+                failureMessage: Self.simctlFailureMessage(listing: "simulator devices", output: output)
+            )
         }
 
         let isoFormatter = ISO8601DateFormatter()
@@ -183,7 +225,8 @@ struct EmulatorManagementService: Sendable {
         return SimulatorDeviceDiscovery(
             images: images,
             deviceDirectories: directories,
-            didInspect: true
+            didInspect: true,
+            failureMessage: nil
         )
     }
 
@@ -299,167 +342,6 @@ struct EmulatorManagementService: Sendable {
     }
 }
 
-// MARK: - JSON + parsing helpers
-
-extension EmulatorManagementService {
-    /// Maps an Apple platform identifier (or runtime identifier) to a friendly OS name.
-    static func applePlatformName(platformIdentifier: String?, runtimeIdentifier: String?) -> String {
-        switch platformIdentifier {
-        case "com.apple.platform.iphonesimulator": return "iOS"
-        case "com.apple.platform.appletvsimulator": return "tvOS"
-        case "com.apple.platform.watchsimulator": return "watchOS"
-        case "com.apple.platform.xrsimulator": return "visionOS"
-        default: break
-        }
-        // Fallback: com.apple.CoreSimulator.SimRuntime.iOS-26-5 → "iOS"
-        if let runtimeIdentifier, let suffix = runtimeIdentifier.split(separator: ".").last {
-            return String(suffix.prefix { $0.isLetter })
-        }
-        return "Simulator"
-    }
-
-    /// Maps a Device Support root directory to its friendly OS name. The trailing folder name
-    /// encodes the OS (`iOS`, `tvOS`, `watchOS`, `visionOS`).
-    static func appleDeviceSupportPlatformName(forRoot root: URL) -> String {
-        switch root.lastPathComponent {
-        case "iOS DeviceSupport": return "iOS"
-        case "tvOS DeviceSupport": return "tvOS"
-        case "watchOS DeviceSupport": return "watchOS"
-        case "visionOS DeviceSupport": return "visionOS"
-        default: return "Apple"
-        }
-    }
-
-    /// Builds a Device Support image from a folder like `iPhone15,3 26.5 (23F77)`. The version is
-    /// read from the on-disk `Info.plist` when present (so pre-release / older versions surface
-    /// correctly); otherwise the version is extracted from the folder name. The build identifier
-    /// in parentheses is preserved in the detail line.
-    static func deviceSupportImage(
-        folder: URL,
-        platformName: String,
-        versionReader: (URL) -> String?
-    ) -> EmulatorImage? {
-        let folderName = folder.lastPathComponent
-        let plistVersion = versionReader(folder)
-        let parsed = parseDeviceSupportName(folderName)
-        let version = plistVersion ?? parsed.version ?? folderName
-        let detail = "Build \(parsed.build ?? "—")"
-        return EmulatorImage(
-            id: folder.path,
-            platform: .iosDeviceSupport,
-            title: "\(platformName) \(version)\(parsed.deviceSuffix.map { " · \($0)" } ?? "")",
-            versionLabel: version,
-            key: VersionKey.parse(version),
-            bytes: 0,
-            detail: detail,
-            removal: .trashDirectory(folder),
-            isRemovable: true,
-            lastUsed: nil
-        )
-    }
-
-    /// Parses a folder name like `iPhone15,3 26.5 (23F77)` into its `(device, version, build)`
-    /// components. Returns `nil` parts when a component is missing.
-    static func parseDeviceSupportName(_ name: String) -> DeviceSupportNameComponents {
-        // Strip the build suffix `(...)` if present.
-        var working = name
-        var build: String?
-        if let openParen = working.lastIndex(of: "("), working.hasSuffix(")") {
-            let inner = String(working[working.index(after: openParen)..<working.index(before: working.endIndex)])
-            build = inner
-            working = String(working[..<openParen]).trimmingCharacters(in: .whitespaces)
-        }
-
-        // Split remaining `device version` on the last whitespace so multi-segment versions like
-        // `26.4.1` stay intact.
-        guard let lastSpace = working.lastIndex(of: " ") else {
-            return DeviceSupportNameComponents(deviceSuffix: working, version: nil, build: build)
-        }
-        let device = String(working[..<lastSpace]).trimmingCharacters(in: .whitespaces)
-        let version = String(working[working.index(after: lastSpace)...]).trimmingCharacters(in: .whitespaces)
-        return DeviceSupportNameComponents(
-            deviceSuffix: device.isEmpty ? nil : device,
-            version: version.isEmpty ? nil : version,
-            build: build
-        )
-    }
-
-    /// "android-36" → "API 36"; non-numeric previews keep their name ("API TiramisuPrivacySandbox").
-    static func androidAPILabel(from directoryName: String) -> String {
-        let level = directoryName.hasPrefix("android-")
-            ? String(directoryName.dropFirst("android-".count))
-            : directoryName
-        return "API \(level)"
-    }
-
-    /// Best-effort metadata for a simulator device instance folder. The folder name is a UUID
-    /// (e.g. `A01F28DA-DDAC-446E-B66B-8F7D47A7FDF0`), so the human-readable name comes from
-    /// `device.plist` when present.
-    static func simulatorDeviceMetadata(at directory: URL) -> SimulatorDeviceMetadata? {
-        let plist = directory.appendingPathComponent("device.plist")
-        guard let data = try? Data(contentsOf: plist),
-              let raw = try? PropertyListSerialization.propertyList(from: data, format: nil) else {
-            return nil
-        }
-        let dict = raw as? [String: Any] ?? [:]
-        let name = (dict["name"] as? String) ?? (dict["deviceName"] as? String) ?? directory.lastPathComponent
-        let runtime = (dict["runtime"] as? String) ?? ""
-        let version = Self.runtimeVersionLabel(from: runtime)
-        let detail = runtime.isEmpty ? "Orphaned simulator device" : "Runtime: \(runtime)"
-        return SimulatorDeviceMetadata(title: name, versionLabel: version, detail: detail)
-    }
-
-    /// Falls back to deriving a title from the folder contents (e.g. `device.plist` not present).
-    private static func parseSimulatorDeviceName(_ folderName: String) -> SimulatorDeviceMetadata {
-        SimulatorDeviceMetadata(
-            title: String(folderName.prefix(8)),
-            versionLabel: "0",
-            detail: "Orphaned simulator device"
-        )
-    }
-
-    private static func simulatorDeviceDirectory(for device: SimulatorDeviceJSON, root: URL?) -> URL? {
-        if let dataPath = device.dataPath {
-            let dataURL = URL(fileURLWithPath: dataPath)
-            return dataURL.lastPathComponent == "data" ? dataURL.deletingLastPathComponent() : dataURL
-        }
-        return root?.appendingPathComponent(device.udid, isDirectory: true)
-    }
-
-    /// "com.apple.CoreSimulator.SimRuntime.iOS-26-4" → "iOS 26.4"
-    static func runtimeVersionLabel(from runtimeIdentifier: String) -> String {
-        let lastSegment = runtimeIdentifier.split(separator: ".").last.map(String.init) ?? runtimeIdentifier
-        // "iOS-26-4" → "iOS 26.4"
-        let pieces = lastSegment.split(separator: "-").map(String.init)
-        guard let head = pieces.first else { return lastSegment }
-        let tail = pieces.dropFirst().joined(separator: ".")
-        return tail.isEmpty ? head : "\(head) \(tail)"
-    }
-
-    /// Immediate real subdirectories, skipping hidden entries and symlinks.
-    static func subdirectories(of base: URL) -> [URL] {
-        let fileManager = FileManager.default
-        guard let entries = try? fileManager.contentsOfDirectory(
-            at: base,
-            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-        return entries.filter { url in
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-            return (values?.isDirectory ?? url.hasDirectoryPath) && (values?.isSymbolicLink != true)
-        }
-    }
-
-    private static func firstMeaningfulLine(_ output: String) -> String {
-        output
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty } ?? "The simulator tool reported an error."
-    }
-}
-
 // MARK: - Live implementation
 
 extension EmulatorManagementService {
@@ -568,13 +450,15 @@ private struct SimulatorDeviceDiscovery: Sendable {
     let images: [EmulatorImage]
     let deviceDirectories: Set<String>
     let didInspect: Bool
+    /// Set when simctl ran but failed; `nil` when xcrun is simply absent.
+    let failureMessage: String?
 }
 
 private struct SimulatorDevicesJSON: Decodable {
     let devices: [String: [SimulatorDeviceJSON]]
 }
 
-private struct SimulatorDeviceJSON: Decodable, Sendable {
+struct SimulatorDeviceJSON: Decodable, Sendable {
     let name: String
     let udid: String
     let state: String?

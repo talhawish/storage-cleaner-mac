@@ -42,7 +42,10 @@ struct StatCardTab: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(tint)
                         .frame(width: 26, height: 26)
-                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .background(
+                            tint.opacity(0.14),
+                            in: RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
+                        )
                         .accessibilityHidden(true)
 
                     Spacer(minLength: 6)
@@ -74,7 +77,7 @@ struct StatCardTab: View {
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .fill(isSelected ? tint.opacity(0.16) : Color.secondary.opacity(0.08))
         )
         .overlay(alignment: .bottom) {
@@ -82,9 +85,9 @@ struct StatCardTab: View {
                 .fill(isSelected ? tint : Color.clear)
                 .frame(height: 3)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .stroke(isSelected ? tint.opacity(0.55) : Color.secondary.opacity(0.14), lineWidth: 1)
         }
         .accessibilityLabel("\(title), \(count) \(countLabel), \(StorageFormatting.bytes(bytes))")

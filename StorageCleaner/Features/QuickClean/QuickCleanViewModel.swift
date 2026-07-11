@@ -163,9 +163,11 @@ final class QuickCleanViewModel {
             lastResult = result
             freeBytesAtEnd = await self.volumeProvider()
 
-            if result.deletedCount == 0 && !result.failedURLs.isEmpty {
+            if !result.failedURLs.isEmpty {
+                // Partial failures matter as much as total ones: "cleaned some,
+                // couldn't move N" must never be reported as a clean success.
                 failureMessage = Self.failureSummary(from: result)
-            } else if result.deletedCount == 0 && result.failedURLs.isEmpty {
+            } else if result.deletedCount == 0 {
                 failureMessage = "No items were deleted. You may need to upgrade "
                     + "to Pro to perform cleanup actions."
             }

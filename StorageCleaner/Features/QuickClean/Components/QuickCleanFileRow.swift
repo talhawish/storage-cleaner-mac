@@ -18,7 +18,7 @@ struct QuickCleanFileRow: View {
             .toggleStyle(.checkbox)
 
             ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                     .fill(FileRowIconStyle.background(for: item.url))
                     .frame(width: 24, height: 24)
                 Image(systemName: FileRowIconStyle.symbol(for: item.url))

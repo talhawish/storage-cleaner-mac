@@ -53,7 +53,7 @@ struct DeleteAppConfirmationSheet: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 48, height: 48)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous))
                                 .accessibilityHidden(true)
                         }
 

@@ -57,6 +57,16 @@ struct AppShellView: View {
                 trigger: trigger
             )
         }
+        .sheet(item: $viewModel.cleanupFailure) { prompt in
+            CleanupFailureSheet(
+                prompt: prompt,
+                onRetry: {
+                    viewModel.cleanupFailure = nil
+                    Task { await viewModel.retryCleanup(prompt) }
+                },
+                onDismiss: { viewModel.cleanupFailure = nil }
+            )
+        }
     }
 }
 
@@ -143,7 +153,11 @@ private extension AppShellView {
                         case .section(.systemJunk):
                             systemJunkView(kinds: section?.filterKinds ?? [])
                         case .section(.cleanupHistory):
-                            CleanupHistoryView(canRevealInFinder: viewModel.canCleanup)
+                            CleanupHistoryView(
+                                canRevealInFinder: viewModel.canCleanup,
+                                persistenceWarning: viewModel.historyPersistenceWarning,
+                                onClearHistory: { viewModel.clearHistory() }
+                            )
                         case .section(.settings):
                             InAppSettingsView(subscriptionController: subscriptionController)
                         }

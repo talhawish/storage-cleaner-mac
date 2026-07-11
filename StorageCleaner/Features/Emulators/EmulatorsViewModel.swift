@@ -8,8 +8,18 @@ import Observation
 /// `xcrun` subprocesses.
 protocol EmulatorsServicing: Sendable {
     func discover() async -> [EmulatorImage]
+    /// Discovery plus probe diagnostics. Defaults to a diagnostics-free wrap of
+    /// `discover()` so simple fakes stay one method; the live service reports
+    /// real probe failures (e.g. a broken `simctl`).
+    func discoverWithDiagnostics() async -> EmulatorDiscovery
     func measuringRemainingSizes(in images: [EmulatorImage]) -> [EmulatorImage]
     func remove(_ images: [EmulatorImage]) async -> EmulatorCleanupResult
+}
+
+extension EmulatorsServicing {
+    func discoverWithDiagnostics() async -> EmulatorDiscovery {
+        EmulatorDiscovery(images: await discover(), failureMessage: nil)
+    }
 }
 
 extension EmulatorManagementService: EmulatorsServicing {}
@@ -25,6 +35,9 @@ final class EmulatorsViewModel {
         case empty
         case loaded
         case permissionRequired
+        /// Discovery ran but a probe failed outright (e.g. `simctl` errored),
+        /// so an empty inventory would be misleading rather than reassuring.
+        case failed(message: String)
     }
 
     private let service: any EmulatorsServicing
@@ -168,7 +181,8 @@ final class EmulatorsViewModel {
         let access = permissionHandler.beginHomeFolderAccess()
         defer { access?.stop() }
 
-        let discovered = await service.discover()
+        let discovery = await service.discoverWithDiagnostics()
+        let discovered = discovery.images
         guard !Task.isCancelled else { return }
 
         // Two-phase sizing: show the list immediately, then fill in on-disk sizes for
@@ -194,7 +208,13 @@ final class EmulatorsViewModel {
             }
         }
 
-        state = images.isEmpty ? .empty : .loaded
+        if images.isEmpty, let failure = discovery.failureMessage {
+            // A failed probe with nothing to show must not masquerade as
+            // "all clean" — surface the error with a retry instead.
+            state = .failed(message: failure)
+        } else {
+            state = images.isEmpty ? .empty : .loaded
+        }
     }
 
     private func apply(_ newImages: [EmulatorImage], forceLoaded: Bool) {

@@ -17,7 +17,7 @@ struct ProjectCardView: View {
                         fallback: project.iconFallback,
                         permissionHandler: permissionHandler,
                         size: 40,
-                        cornerRadius: 10
+                        cornerRadius: AppTheme.Radius.chip
                     )
                     .accessibilityHidden(true)
 
@@ -60,9 +60,9 @@ struct ProjectCardView: View {
                 }
             }
             .padding(16)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous)
                     .stroke(isHovering ? Color(hex: project.technology.color).opacity(0.4) : .clear, lineWidth: 1.5)
             }
             .scaleEffect(isHovering ? 1.01 : 1.0)

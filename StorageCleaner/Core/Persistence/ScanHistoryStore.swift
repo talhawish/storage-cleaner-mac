@@ -67,35 +67,110 @@ protocol ScanHistoryStore: AnyObject {
     /// Cleanup History row can render "X was free before, Y is free after" without a follow-up
     /// `statfs` roundtrip.
     func recordCleanupActions(_ entries: [CleanupAuditEntry], disk: ScanDiskSnapshot)
+    /// Deletes every stored scan (and, via cascade, its findings and cleanup
+    /// actions). Backs the History screen's "Clear History" action.
+    func clearHistory()
+    /// Human-readable description of the most recent persistence failure, or
+    /// `nil` when every write has landed. Lets the UI warn that the audit
+    /// trail is incomplete instead of losing records silently.
+    var lastPersistenceError: String? { get }
+}
+
+extension ScanHistoryStore {
+    func clearHistory() {}
+    var lastPersistenceError: String? { nil }
 }
 
 @MainActor
+@Observable
 final class SwiftDataScanHistoryStore: ScanHistoryStore {
-    private let context: ModelContext
+    @ObservationIgnored private let context: ModelContext
+    /// Injected save so tests can exercise the failure path — SwiftData's
+    /// `ModelContext.save()` cannot be made to throw on demand.
+    @ObservationIgnored private let performSave: (ModelContext) throws -> Void
+    private(set) var lastPersistenceError: String?
 
-    init(context: ModelContext) {
+    /// Newest scans kept on disk. Every full scan persists all findings
+    /// (including file-path arrays), so an uncapped store grows without bound
+    /// over months of use; 50 scans is months of history at typical usage.
+    static let maxStoredScans = 50
+
+    /// Serial chain of pending persistence work. Each write awaits the
+    /// previous one, preserving scan-then-cleanup ordering while the heavy
+    /// payload encoding runs off the main actor.
+    @ObservationIgnored private var pendingWork: Task<Void, Never>?
+
+    init(
+        context: ModelContext,
+        performSave: @escaping (ModelContext) throws -> Void = { try $0.save() }
+    ) {
         self.context = context
+        self.performSave = performSave
     }
 
     func recordCompletedScan(_ snapshot: ScanSnapshot, disk: ScanDiskSnapshot) {
         guard !snapshot.findings.isEmpty else { return }
 
-        let scan = StoredScan(
-            durationSeconds: snapshot.duration.totalSeconds,
-            scannedItemCount: snapshot.scannedItemCount,
-            reclaimableBytes: snapshot.reclaimableBytes,
-            volumeTotalBytes: disk.totalBytes,
-            freeBytesBefore: disk.freeBytes,
-            findings: snapshot.findings.map(StoredFinding.init(from:))
-        )
-        context.insert(scan)
-        save()
+        enqueue { store in
+            // Encoding pathBytes/duplicateGroups for a full scan serializes
+            // thousands of URLs — do it on a detached task so results landing
+            // never hitch the UI.
+            let findings = snapshot.findings
+            let payloads = await Task.detached(priority: .utility) {
+                findings.map(StoredFindingPayload.init(from:))
+            }.value
+            store.insertScan(payloads: payloads, snapshot: snapshot, disk: disk)
+        }
     }
 
     func recordCleanupActions(_ entries: [CleanupAuditEntry], disk: ScanDiskSnapshot) {
         let entries = sanitizedEntries(from: entries)
         guard !entries.isEmpty else { return }
 
+        enqueue { store in
+            store.insertCleanupActions(entries: entries, disk: disk)
+        }
+    }
+
+    func clearHistory() {
+        enqueue { store in
+            store.deleteAllScans()
+        }
+    }
+
+    /// Awaits all queued persistence work. Test seam — production code never
+    /// needs to block on history writes.
+    func flush() async {
+        await pendingWork?.value
+    }
+
+    private func enqueue(_ work: @escaping @MainActor (SwiftDataScanHistoryStore) async -> Void) {
+        pendingWork = Task { [weak self, previous = pendingWork] in
+            await previous?.value
+            guard let self else { return }
+            await work(self)
+        }
+    }
+
+    private func insertScan(
+        payloads: [StoredFindingPayload],
+        snapshot: ScanSnapshot,
+        disk: ScanDiskSnapshot
+    ) {
+        let scan = StoredScan(
+            durationSeconds: snapshot.duration.totalSeconds,
+            scannedItemCount: snapshot.scannedItemCount,
+            reclaimableBytes: snapshot.reclaimableBytes,
+            volumeTotalBytes: disk.totalBytes,
+            freeBytesBefore: disk.freeBytes,
+            findings: payloads.map(StoredFinding.init(payload:))
+        )
+        context.insert(scan)
+        enforceRetention()
+        save()
+    }
+
+    private func insertCleanupActions(entries: [CleanupAuditEntry], disk: ScanDiskSnapshot) {
         let scan = mostRecentScan() ?? createCleanupOnlyScan(disk: disk)
         let newBytes = saturatedCleanupTotal(for: entries)
         for entry in entries {
@@ -113,6 +188,28 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         scan.cleanedBytes = saturatedAdd(scan.cleanedBytes, newBytes)
         if disk.isAvailable {
             scan.freeBytesAfter = disk.freeBytes
+        }
+        save()
+    }
+
+    /// Drops the oldest scans past `maxStoredScans`; cascade deletes remove
+    /// their findings and cleanup actions.
+    private func enforceRetention() {
+        let descriptor = FetchDescriptor<StoredScan>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        guard let scans = try? context.fetch(descriptor), scans.count > Self.maxStoredScans else { return }
+        for stale in scans.dropFirst(Self.maxStoredScans) {
+            context.delete(stale)
+        }
+    }
+
+    /// Individual deletes (not a batch delete) so SwiftData's cascade rules
+    /// reliably remove findings and actions on every supported macOS version.
+    private func deleteAllScans() {
+        let scans = (try? context.fetch(FetchDescriptor<StoredScan>())) ?? []
+        for scan in scans {
+            context.delete(scan)
         }
         save()
     }
@@ -177,9 +274,16 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
     }
 
     /// Audit records are best-effort: a persistence failure must never crash the app or block
-    /// cleanup. Failures are intentionally non-fatal here.
+    /// cleanup. Failures stay non-fatal, but they are logged and surfaced through
+    /// `lastPersistenceError` so the user can learn the audit trail is incomplete.
     private func save() {
-        try? context.save()
+        do {
+            try performSave(context)
+            lastPersistenceError = nil
+        } catch {
+            AppLog.persistence.error("Failed to save scan history: \(error.localizedDescription)")
+            lastPersistenceError = error.localizedDescription
+        }
     }
 }
 

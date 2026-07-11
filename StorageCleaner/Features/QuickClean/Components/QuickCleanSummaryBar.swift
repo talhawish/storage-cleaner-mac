@@ -25,7 +25,7 @@ struct QuickCleanSummaryBar: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(StorageFormatting.bytes(selectedBytes))
-                    .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(AppTheme.Typography.summaryValue.monospacedDigit())
                     .foregroundStyle(AppTheme.accent)
                     .contentTransition(.numericText())
                 Text("to reclaim")
@@ -79,7 +79,7 @@ private struct BulkSelectionMenu: View {
             .padding(.vertical, 6)
             .background(
                 AppTheme.accent.opacity(0.12),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
             )
         }
         .menuStyle(.borderlessButton)

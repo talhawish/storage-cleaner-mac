@@ -48,26 +48,26 @@ struct MediaGridItem: View {
                 MediaThumbnailView(
                     url: url,
                     sideLength: 150,
-                    cornerRadius: 10,
+                    cornerRadius: AppTheme.Radius.chip,
                     contentMode: .fill,
                     permissionHandler: permissionHandler
                 )
             }
             .overlay {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                         .fill(AppTheme.accent.opacity(0.14))
                 }
             }
             .overlay(alignment: .bottomLeading) {
                 if isVideo { playBadge }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: isSelected ? 2.5 : 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous))
             .onTapGesture {
                 isFocused = true
                 onPreview()
@@ -86,7 +86,7 @@ struct MediaGridItem: View {
     private var selectionToggle: some View {
         Button(action: onToggle) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 20, weight: .semibold))
+                .font(AppTheme.Typography.sectionIcon)
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(
                     isSelected ? Color.white : Color.white,
@@ -113,7 +113,7 @@ struct MediaGridItem: View {
         if isSelected { return AppTheme.accent }
         if isFocused { return AppTheme.accent.opacity(0.6) }
         if isHovering { return .secondary.opacity(0.6) }
-        return .black.opacity(0.06)
+        return .primary.opacity(0.06)
     }
 
     // MARK: - Caption

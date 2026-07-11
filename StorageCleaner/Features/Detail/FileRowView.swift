@@ -109,7 +109,7 @@ struct FileRowView: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
         .background(rowBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous))
         .onHover { isHovering = $0 }
         .focusable(onPreview != nil)
         .focused($isFocused)
@@ -270,23 +270,23 @@ private struct FileRowPreviewControl: View {
             url: url,
             sideLength: 80,
             displaySideLength: 40,
-            cornerRadius: 8,
+            cornerRadius: AppTheme.Radius.small,
             contentMode: .fill
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .strokeBorder(thumbnailBorderColor, lineWidth: isFocused ? 2 : 1)
         }
     }
 
     private var iconView: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .fill(FileRowIconStyle.background(for: url, kind: findingKind))
                 .frame(width: 36, height: 36)
 
             Image(systemName: FileRowIconStyle.symbol(for: url, kind: findingKind))
-                .font(.system(size: 16, weight: .semibold))
+                .font(AppTheme.Typography.bodyIcon)
                 .foregroundStyle(FileRowIconStyle.foreground(for: url, kind: findingKind))
         }
         .accessibilityHidden(true)
@@ -296,7 +296,8 @@ private struct FileRowPreviewControl: View {
         if isFocused {
             return AppTheme.accent.opacity(0.7)
         }
-        return isHovering ? .secondary.opacity(0.5) : .black.opacity(0.06)
+        // Adaptive: a black border disappears against dark-mode surfaces.
+        return isHovering ? .secondary.opacity(0.5) : .primary.opacity(0.06)
     }
 }
 

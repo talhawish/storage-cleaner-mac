@@ -1,17 +1,27 @@
 import Foundation
 
 enum StorageFormatting {
-    static func bytes(_ value: Int64) -> String {
-        guard value > 0 else { return "0 KB" }
-
+    /// One shared formatter instead of allocating and configuring a new one
+    /// per call — `bytes(_:)` runs for every visible row while scrolling large
+    /// lists. Configured once and never mutated afterwards, which keeps
+    /// `string(fromByteCount:)` safe to call from any thread. KB/bytes are
+    /// allowed so small tools (e.g. a few-KB shell script) don't render as
+    /// "0 MB"; isAdaptive keeps large values at GB/MB.
+    /// `nonisolated(unsafe)` is sound here: the formatter is configured once
+    /// inside this initializer and only ever read afterwards, and Formatter
+    /// string conversion is safe for concurrent use on immutable instances.
+    nonisolated(unsafe) private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
-        // Include KB/bytes so small tools (e.g. a few-KB shell script) don't render
-        // as "0 MB". isAdaptive keeps large values at GB/MB.
         formatter.allowedUnits = [.useGB, .useMB, .useKB, .useBytes]
         formatter.countStyle = .file
         formatter.includesUnit = true
         formatter.isAdaptive = true
-        return formatter.string(fromByteCount: value)
+        return formatter
+    }()
+
+    static func bytes(_ value: Int64) -> String {
+        guard value > 0 else { return "0 KB" }
+        return byteFormatter.string(fromByteCount: value)
     }
 
     static func bytes(_ value: Int) -> String {

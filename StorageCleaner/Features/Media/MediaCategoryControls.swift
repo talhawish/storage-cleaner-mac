@@ -94,7 +94,7 @@ struct MediaSummaryHeader: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: AppTheme.Radius.small))
     }
 }
 

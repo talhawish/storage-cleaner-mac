@@ -13,7 +13,7 @@ struct SystemJunkView: View {
     @State private var typeFilter: SystemJunkTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
     @State private var cleanupRequest: SystemJunkCleanupRequest?
-    @State private var cleanupFailureFeedback: SystemJunkCleanupFeedback?
+    @State private var cleanupFailureFeedback: CleanupFeedback?
     @State private var isDeleting = false
 
     /// Per-filter aggregates from the scan results — bytes and item counts are pre-computed off
@@ -328,11 +328,11 @@ struct SystemJunkView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .fill(Color.secondary.opacity(0.06))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
     }
@@ -422,7 +422,7 @@ private extension SystemJunkView {
         }
     }
 
-    private func cleanupFeedback(for request: SystemJunkCleanupRequest) -> SystemJunkCleanupFeedback {
+    private func cleanupFeedback(for request: SystemJunkCleanupRequest) -> CleanupFeedback {
         if let cleanupFailureFeedback {
             return cleanupFailureFeedback
         }

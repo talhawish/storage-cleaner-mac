@@ -47,9 +47,9 @@ struct RuntimeVersionsSection: View {
                 content
             }
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                 .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
         }
         .task { await load() }
@@ -74,11 +74,11 @@ struct RuntimeVersionsSection: View {
     private var header: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                     .fill(AppTheme.violet.opacity(0.14))
                     .frame(width: 44, height: 44)
                 Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(AppTheme.Typography.sectionIcon)
                     .foregroundStyle(AppTheme.violet)
             }
             .accessibilityHidden(true)

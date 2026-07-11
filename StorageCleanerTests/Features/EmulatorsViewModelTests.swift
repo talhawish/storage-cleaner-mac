@@ -10,6 +10,7 @@ final class EmulatorsViewModelTests: XCTestCase {
         var discoverCalls = 0
         var measureCalls = 0
         var nextDiscover: [EmulatorImage] = []
+        var nextFailureMessage: String?
         var nextMeasure: [EmulatorImage] = []
         var removeCalls: [[EmulatorImage]] = []
         var nextRemove: EmulatorCleanupResult = .init(removedIDs: [], totalBytesReclaimed: 0, failures: [])
@@ -17,6 +18,10 @@ final class EmulatorsViewModelTests: XCTestCase {
         func discover() async -> [EmulatorImage] {
             discoverCalls += 1
             return nextDiscover
+        }
+
+        func discoverWithDiagnostics() async -> EmulatorDiscovery {
+            EmulatorDiscovery(images: await discover(), failureMessage: nextFailureMessage)
         }
 
         func measuringRemainingSizes(in images: [EmulatorImage]) -> [EmulatorImage] {
@@ -123,6 +128,61 @@ final class EmulatorsViewModelTests: XCTestCase {
         let elapsed = Date().timeIntervalSince(started)
         XCTAssertGreaterThanOrEqual(elapsed, 0.4, "loading state must remain visible for at least 400 ms")
         XCTAssertEqual(viewModel.state, .loaded)
+    }
+
+    /// A probe that fails outright with nothing to show must surface `.failed`
+    /// instead of the empty state — "all clean" would be a lie.
+    func testFailedProbeWithNoImagesTransitionsToFailedState() async {
+        let service = FakeEmulatorService()
+        service.nextDiscover = []
+        service.nextFailureMessage = "simctl couldn't list simulator runtimes: broken toolchain"
+
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
+        viewModel.start()
+
+        try? await Task.sleep(for: .milliseconds(700))
+        XCTAssertEqual(
+            viewModel.state,
+            .failed(message: "simctl couldn't list simulator runtimes: broken toolchain")
+        )
+    }
+
+    /// Partial results beat the error screen: when one probe fails but others
+    /// found images, the inventory still renders.
+    func testFailedProbeWithPartialImagesStillShowsContent() async {
+        let service = FakeEmulatorService()
+        service.nextDiscover = [deviceSupport()]
+        service.nextFailureMessage = "simctl couldn't list simulator runtimes"
+
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
+        viewModel.start()
+
+        try? await Task.sleep(for: .milliseconds(700))
+        XCTAssertEqual(viewModel.state, .loaded)
+        XCTAssertEqual(viewModel.images.count, 1)
+    }
+
+    /// Retry from the error state re-runs discovery and recovers once the
+    /// underlying failure clears.
+    func testRetryAfterFailureRecoversToLoaded() async {
+        let service = FakeEmulatorService()
+        service.nextDiscover = []
+        service.nextFailureMessage = "simctl couldn't list simulator devices"
+
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
+        viewModel.start()
+        try? await Task.sleep(for: .milliseconds(700))
+        guard case .failed = viewModel.state else {
+            return XCTFail("expected failed state, got \(viewModel.state)")
+        }
+
+        service.nextDiscover = [runtime()]
+        service.nextFailureMessage = nil
+        viewModel.start()
+        try? await Task.sleep(for: .milliseconds(700))
+
+        XCTAssertEqual(viewModel.state, .loaded)
+        XCTAssertEqual(viewModel.images.count, 1)
     }
 
     /// The Rescan button calls `start()` again. We verify the previous load is cancelled and

@@ -15,7 +15,7 @@ struct TrustStripView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(15)
-                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: AppTheme.Radius.medium))
             }
         }
     }

@@ -375,7 +375,7 @@ private struct ProjectActivityBanner: View {
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                     .fill(Color(hex: project.activityStatus.color).opacity(0.14))
                 Image(systemName: project.activityStatus.icon)
                     .font(.system(size: 22, weight: .semibold))
@@ -404,10 +404,10 @@ private struct ProjectActivityBanner: View {
         .padding(AppTheme.Spacing.mediumLarge)
         .background(
             Color(hex: project.activityStatus.color).opacity(0.06),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            in: RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                 .stroke(
                     Color(hex: project.activityStatus.color).opacity(0.22),
                     lineWidth: 1
@@ -439,7 +439,7 @@ private struct ProjectTechnologyInfo: View {
                             fallback: project.iconFallback,
                             permissionHandler: permissionHandler,
                             size: 36,
-                            cornerRadius: 10
+                            cornerRadius: AppTheme.Radius.chip
                         )
                         .accessibilityHidden(true)
 
@@ -512,7 +512,7 @@ private struct ProjectLocationInfo: View {
                     Button(action: onReveal) {
                         Label("Reveal", systemImage: "arrow.up.right.square")
                             .labelStyle(.iconOnly)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(AppTheme.Typography.rowLabel)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -530,10 +530,10 @@ private struct GitStatusBanner: View {
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                     .fill(AppTheme.orange.opacity(0.14))
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(AppTheme.Typography.sectionIcon)
                     .foregroundStyle(AppTheme.orange)
             }
             .frame(width: 48, height: 48)
@@ -553,10 +553,10 @@ private struct GitStatusBanner: View {
         .padding(AppTheme.Spacing.mediumLarge)
         .background(
             AppTheme.orange.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            in: RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                 .stroke(AppTheme.orange.opacity(0.22), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)

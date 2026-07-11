@@ -74,7 +74,9 @@ struct DashboardView: View {
                 viewModel: QuickCleanViewModel.make(
                     permissionHandler: viewModel.permissionHandler,
                     onClean: { urls in
-                        await viewModel.deleteFiles(urls)
+                        // Quick Clean reports failures in its success view,
+                        // so the app-wide failure sheet stays suppressed.
+                        await viewModel.deleteFiles(urls, surfacingFailure: false)
                     },
                     volumeProvider: {
                         viewModel.refreshVolumeSnapshot()

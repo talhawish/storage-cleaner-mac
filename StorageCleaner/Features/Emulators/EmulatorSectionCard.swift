@@ -44,11 +44,11 @@ struct EmulatorSectionCard: View {
     private var header: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                     .fill(accent.opacity(0.14))
                     .frame(width: 44, height: 44)
                 Image(systemName: platform.symbolName)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(AppTheme.Typography.sectionIcon)
                     .foregroundStyle(accent)
             }
             .accessibilityHidden(true)

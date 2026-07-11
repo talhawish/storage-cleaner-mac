@@ -171,12 +171,12 @@ struct CLIProgramsView: View {
     private var header: some View {
         HStack(spacing: 20) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous)
                     .fill(AppTheme.teal.opacity(0.12))
                     .frame(width: 64, height: 64)
 
                 Image(systemName: "terminal.fill")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(AppTheme.Typography.heroIcon)
                     .foregroundStyle(AppTheme.teal)
             }
             .accessibilityHidden(true)
@@ -194,7 +194,7 @@ struct CLIProgramsView: View {
 
             VStack(alignment: .trailing, spacing: 6) {
                 Text(StorageFormatting.bytes(totalBytes))
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(AppTheme.Typography.statValue)
                     .contentTransition(.numericText())
                 Text("\(allPrograms.count) tools")
                     .font(.caption)

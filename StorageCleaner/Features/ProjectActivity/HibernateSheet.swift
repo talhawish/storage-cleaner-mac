@@ -144,7 +144,10 @@ struct HibernateSheet: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppTheme.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(
+                    AppTheme.orange.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
+                )
             }
 
             Text("Removed dependencies are in the Trash until you empty it, "
@@ -191,7 +194,7 @@ struct ProjectSelectionRow: View {
             HStack(spacing: 14) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18))
-                    .foregroundStyle(isSelected ? AppTheme.orange : Color(white: 0.55))
+                    .foregroundStyle(isSelected ? AppTheme.orange : .secondary)
 
                 ProjectIconView(
                     iconURL: project.iconURL,
@@ -199,7 +202,7 @@ struct ProjectSelectionRow: View {
                     fallback: project.iconFallback,
                     permissionHandler: permissionHandler,
                     size: 32,
-                    cornerRadius: 8
+                    cornerRadius: AppTheme.Radius.small
                 )
                     .accessibilityHidden(true)
 

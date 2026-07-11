@@ -207,7 +207,7 @@ struct InitialStateView: View {
             ForEach(highlights) { highlight in
                 VStack(spacing: 6) {
                     Image(systemName: highlight.systemImage)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(AppTheme.Typography.bodyIcon)
                         .foregroundStyle(tint)
                         .frame(width: 32, height: 32)
                         .background(tint.opacity(0.10), in: Circle())
@@ -224,11 +224,11 @@ struct InitialStateView: View {
                 .padding(.vertical, 14)
                 .padding(.horizontal, 10)
                 .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                         .fill(Color.primary.opacity(0.04))
                 )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                         .stroke(AppTheme.hairline, lineWidth: 1)
                 }
             }

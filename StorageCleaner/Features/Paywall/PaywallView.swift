@@ -489,7 +489,7 @@ private struct PaywallBanner: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .fill(tint.opacity(0.10))
         )
         .transition(.opacity.combined(with: .move(edge: .top)))

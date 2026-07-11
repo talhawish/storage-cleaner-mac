@@ -45,7 +45,7 @@ struct AppRowView: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
         .background(isHovering ? Color.accentColor.opacity(0.04) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous))
         .onHover { isHovering = $0 }
         .contextMenu {
             contextMenuContent
@@ -69,7 +69,7 @@ struct AppRowView: View {
             }
         }
         .frame(width: 36, height: 36)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous))
         .task {
             appIcon = NSWorkspace.shared.icon(forFile: app.url.path)
         }
@@ -101,6 +101,7 @@ struct AppRowView: View {
                 .buttonStyle(.plain)
                 .help("Move to Trash")
                 .accessibilityLabel("Move to Trash")
+                .accessibilityHint("Asks for confirmation, then uninstalls the app by moving it to the Trash")
             }
         }
     }

@@ -18,7 +18,10 @@ struct OverviewTipCard: View {
                     .font(.system(size: AppTheme.IconSize.sub, weight: .semibold))
                     .foregroundStyle(tip.tint)
                     .frame(width: 38, height: 38)
-                    .background(tip.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(
+                        tip.tint.opacity(0.13),
+                        in: RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
+                    )
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {

@@ -80,10 +80,10 @@ struct StorageStatusCard: View {
 
     private var iconChip: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .fill(tint.opacity(0.14))
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(AppTheme.Typography.rowLabel)
                 .foregroundStyle(tint)
         }
         .frame(width: 30, height: 30)

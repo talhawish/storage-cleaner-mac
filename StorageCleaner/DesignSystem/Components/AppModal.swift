@@ -33,9 +33,9 @@ struct AppModal<Content: View>: View {
             maxHeight: maxHeight
         )
         .background(background)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.modal, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.modal, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.18), radius: 32, x: 0, y: 16)
@@ -117,10 +117,10 @@ struct AppModalHeader: View {
 
     private func iconTile(systemName: String, tint: Color) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                 .fill(tint.opacity(0.14))
             Image(systemName: systemName)
-                .font(.system(size: 20, weight: .semibold))
+                .font(AppTheme.Typography.sectionIcon)
                 .foregroundStyle(tint)
         }
         .frame(width: 40, height: 40)
@@ -171,7 +171,7 @@ enum AppModalTrailing: View {
         case let .sizeBadge(value, tint):
             VStack(alignment: .trailing, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(AppTheme.Typography.summaryValue.monospacedDigit())
                     .foregroundStyle(tint)
             }
         case let .statusBadge(text, tint):
@@ -286,7 +286,7 @@ struct AppModalBanner: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(AppTheme.Typography.rowLabel)
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
             Text(text)
@@ -296,7 +296,7 @@ struct AppModalBanner: View {
             Spacer(minLength: 0)
         }
         .padding(AppTheme.Spacing.mediumLarge)
-        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous))
     }
 }
 

@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 struct FileSystemCollector: Sendable {
@@ -35,7 +34,7 @@ struct FileSystemCollector: Sendable {
     /// whichever happened to be enumerated first.
     func collectFiles(
         at roots: [URL],
-        matching matcher: @Sendable (URL) -> Bool,
+        matching matcher: @Sendable (FileRecord) -> Bool,
         limit: Int = 2_000,
         prioritizeLargest: Bool = false
     ) -> FileCollectionResult {
@@ -100,32 +99,9 @@ struct FileSystemCollector: Sendable {
         let limit: Int
     }
 
-    /// Collects byte-identical duplicate groups under `roots`. Each returned group has 2+ copies
-    /// and a recommended file to keep; the rest are safe to remove.
-    func collectDuplicateGroups(
-        at roots: [URL],
-        extensions allowedExtensions: Set<String>,
-        minimumBytes: Int64,
-        limit: Int = 2_000,
-        excluding isExcluded: @Sendable (URL) -> Bool = { _ in false }
-    ) -> DuplicateCollectionResult {
-        let result = collectFiles(
-            at: roots,
-            matching: { url in
-                allowedExtensions.contains(url.pathExtension.lowercased()) && !isExcluded(url)
-            },
-            limit: limit
-        )
-
-        return DuplicateCollectionResult(
-            groups: duplicateGroups(from: result.candidates, minimumBytes: minimumBytes),
-            inspectedItemCount: result.inspectedItemCount
-        )
-    }
-
     private func collectFiles(
         at root: URL,
-        matching matcher: @Sendable (URL) -> Bool,
+        matching matcher: @Sendable (FileRecord) -> Bool,
         policy: CollectionPolicy,
         into candidates: inout [FileCandidate],
         inspectedItemCount: inout Int
@@ -148,11 +124,12 @@ struct FileSystemCollector: Sendable {
             guard values?.isRegularFile == true else { continue }
             inspectedItemCount += 1
 
-            guard matcher(url) else { continue }
+            let record = FileRecord(url: url, bytes: allocatedSize(from: values))
+            guard matcher(record) else { continue }
 
-            let candidate = FileCandidate(url: url, bytes: allocatedSize(from: values))
+            let candidate = FileCandidate(url: record.url, bytes: record.bytes)
             if policy.prioritizeLargest {
-                retainLargest(candidate, in: &candidates, limit: policy.limit)
+                candidates.retainLargest(candidate, limit: policy.limit)
             } else {
                 candidates.append(candidate)
             }
@@ -197,71 +174,6 @@ struct FileSystemCollector: Sendable {
             candidates.append(FileCandidate(url: url, bytes: sizeOfItem(at: url)))
             enumerator.skipDescendants()
         }
-    }
-
-    /// Inserts `candidate` while keeping at most `limit` of the largest candidates by byte size.
-    private func retainLargest(_ candidate: FileCandidate, in candidates: inout [FileCandidate], limit: Int) {
-        guard candidates.count >= limit else {
-            candidates.append(candidate)
-            return
-        }
-
-        guard let smallestIndex = candidates.indices.min(by: { candidates[$0].bytes < candidates[$1].bytes }),
-              candidates[smallestIndex].bytes < candidate.bytes else {
-            return
-        }
-
-        candidates[smallestIndex] = candidate
-    }
-
-    private func duplicateGroups(from files: [FileCandidate], minimumBytes: Int64) -> [DuplicateGroup] {
-        let candidatesBySize = Dictionary(grouping: files.filter { $0.bytes >= minimumBytes }, by: \.bytes)
-        var groups: [DuplicateGroup] = []
-
-        for sameSizeCandidates in candidatesBySize.values where sameSizeCandidates.count > 1 {
-            let groupedByHash = Dictionary(grouping: sameSizeCandidates) { candidate in
-                contentHash(for: candidate.url)
-            }
-
-            for (hash, members) in groupedByHash where members.count > 1 {
-                let duplicateFiles = members
-                    .map { DuplicateFile(url: $0.url, bytes: $0.bytes, modifiedAt: modificationDate(for: $0.url)) }
-                    .sorted { $0.url.path < $1.url.path }
-                let keep = DuplicateKeepStrategy.bestToKeep(from: duplicateFiles)
-                groups.append(DuplicateGroup(contentHash: hash, files: duplicateFiles, keepURL: keep.url))
-            }
-        }
-
-        // Largest reclaim first; tie-break on hash so ordering is deterministic.
-        return groups.sorted {
-            $0.reclaimableBytes != $1.reclaimableBytes
-                ? $0.reclaimableBytes > $1.reclaimableBytes
-                : $0.contentHash < $1.contentHash
-        }
-    }
-
-    private func modificationDate(for url: URL) -> Date? {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-    }
-
-    private func contentHash(for url: URL) -> String {
-        guard let stream = InputStream(url: url) else { return url.path }
-
-        stream.open()
-        defer { stream.close() }
-
-        var hasher = SHA256()
-        let bufferSize = 1024 * 1024
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { buffer.deallocate() }
-
-        while stream.hasBytesAvailable {
-            let readCount = stream.read(buffer, maxLength: bufferSize)
-            guard readCount > 0 else { break }
-            hasher.update(bufferPointer: UnsafeRawBufferPointer(start: buffer, count: readCount))
-        }
-
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private func sizeOfItem(at url: URL) -> Int64 {

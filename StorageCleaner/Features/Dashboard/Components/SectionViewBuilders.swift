@@ -239,7 +239,9 @@ extension AppShellView {
                 findings: sectionFindings,
                 onScan: { viewModel.startScan(for: kinds) },
                 onDelete: { urls in
-                    await viewModel.deleteFiles(urls)
+                    // System Junk surfaces failures inline via `CleanupFeedback`,
+                    // so the app-wide failure sheet stays out of the way.
+                    await viewModel.deleteFiles(urls, surfacingFailure: false)
                 },
                 canUseProActions: viewModel.canCleanup,
                 onRequirePro: { _ = viewModel.gateFileAction() }
@@ -484,7 +486,7 @@ extension AppShellView {
         SystemJunkView(
             findings: filteredFindings(for: AppSection.systemJunk.filterKinds),
             onScan: { viewModel.startScan(for: AppSection.systemJunk.filterKinds) },
-            onDelete: { urls in await viewModel.deleteFiles(urls) },
+            onDelete: { urls in await viewModel.deleteFiles(urls, surfacingFailure: false) },
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
         )

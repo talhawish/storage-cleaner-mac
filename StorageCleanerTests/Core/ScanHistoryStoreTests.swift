@@ -20,7 +20,7 @@ final class ScanHistoryStoreTests: XCTestCase {
         )
     }
 
-    private func recordMinimalScan(in store: SwiftDataScanHistoryStore) {
+    private func recordMinimalScan(in store: SwiftDataScanHistoryStore) async {
         store.recordCompletedScan(
             ScanSnapshot(
                 findings: [
@@ -39,9 +39,10 @@ final class ScanHistoryStoreTests: XCTestCase {
             ),
             disk: .unavailable
         )
+        await store.flush()
     }
 
-    func testRecordCompletedScanPersistsScanAndFindings() throws {
+    func testRecordCompletedScanPersistsScanAndFindings() async throws {
         let fixture = makeStore()
         let snapshot = ScanSnapshot(
             findings: [
@@ -61,6 +62,7 @@ final class ScanHistoryStoreTests: XCTestCase {
         let disk = ScanDiskSnapshot(totalBytes: 1_000_000_000_000, freeBytes: 500_000_000_000)
 
         fixture.store.recordCompletedScan(snapshot, disk: disk)
+        await fixture.store.flush()
 
         let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
         XCTAssertEqual(scans.count, 1)
@@ -75,18 +77,19 @@ final class ScanHistoryStoreTests: XCTestCase {
         XCTAssertEqual(scan.freeBytesAfter, 0)
     }
 
-    func testEmptyScanIsNotRecorded() throws {
+    func testEmptyScanIsNotRecorded() async throws {
         let fixture = makeStore()
 
         fixture.store.recordCompletedScan(
             ScanSnapshot(findings: [], scannedItemCount: 0, duration: .seconds(1)),
             disk: .unavailable
         )
+        await fixture.store.flush()
 
         XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredScan>()).isEmpty)
     }
 
-    func testCleanupActionsAttachToMostRecentScan() throws {
+    func testCleanupActionsAttachToMostRecentScan() async throws {
         let fixture = makeStore()
         fixture.store.recordCompletedScan(
             ScanSnapshot(
@@ -106,11 +109,13 @@ final class ScanHistoryStoreTests: XCTestCase {
             ),
             disk: .unavailable
         )
+        await fixture.store.flush()
 
         fixture.store.recordCleanupActions(
             [CleanupAuditEntry(kind: .trash, bytesReclaimed: 10, itemCount: 1)],
             disk: .unavailable
         )
+        await fixture.store.flush()
 
         let actions = try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>())
         XCTAssertEqual(actions.count, 1)
@@ -121,7 +126,7 @@ final class ScanHistoryStoreTests: XCTestCase {
         XCTAssertEqual(scans.first?.cleanupActions.count, 1)
     }
 
-    func testDuplicateGroupsSurvivePersistenceRoundTrip() throws {
+    func testDuplicateGroupsSurvivePersistenceRoundTrip() async throws {
         let fixture = makeStore()
         let keep = URL(filePath: "/tmp/keep.png")
         let dupe = URL(filePath: "/tmp/dupe.png")
@@ -151,6 +156,7 @@ final class ScanHistoryStoreTests: XCTestCase {
         )
 
         fixture.store.recordCompletedScan(snapshot, disk: .unavailable)
+        await fixture.store.flush()
 
         let stored = try XCTUnwrap(try fixture.context.fetch(FetchDescriptor<StoredFinding>()).first)
         let restored = try XCTUnwrap(stored.toStorageFinding())
@@ -160,4 +166,112 @@ final class ScanHistoryStoreTests: XCTestCase {
         XCTAssertEqual(restored.duplicateGroups.first?.keepURL, keep)
     }
 
+    /// The audit trail is best-effort, but a failed write must be observable —
+    /// `lastPersistenceError` powers the History screen's warning banner.
+    func testSaveFailureSurfacesLastPersistenceError() async {
+        let container = PersistenceController.makeInMemory()
+        let store = SwiftDataScanHistoryStore(
+            context: container.mainContext,
+            performSave: { _ in throw CocoaError(.fileWriteNoPermission) }
+        )
+
+        await recordMinimalScan(in: store)
+
+        XCTAssertNotNil(store.lastPersistenceError)
+    }
+
+    func testSuccessfulSaveClearsPreviousPersistenceError() async {
+        final class FlakySave {
+            var shouldThrow = true
+            func save(_ context: ModelContext) throws {
+                if shouldThrow { throw CocoaError(.fileWriteNoPermission) }
+                try context.save()
+            }
+        }
+        let container = PersistenceController.makeInMemory()
+        let flaky = FlakySave()
+        let store = SwiftDataScanHistoryStore(
+            context: container.mainContext,
+            performSave: { try flaky.save($0) }
+        )
+
+        await recordMinimalScan(in: store)
+        XCTAssertNotNil(store.lastPersistenceError)
+
+        flaky.shouldThrow = false
+        await recordMinimalScan(in: store)
+        XCTAssertNil(store.lastPersistenceError)
+    }
+
+    /// The store keeps only the newest `maxStoredScans` scans; older records
+    /// (and their findings, via cascade) are pruned on every write so history
+    /// can never grow without bound.
+    func testRetentionPrunesOldestScansPastTheCap() async throws {
+        let fixture = makeStore()
+
+        for _ in 0..<(SwiftDataScanHistoryStore.maxStoredScans + 5) {
+            await recordMinimalScan(in: fixture.store)
+        }
+
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
+        XCTAssertEqual(scans.count, SwiftDataScanHistoryStore.maxStoredScans)
+        let findings = try fixture.context.fetch(FetchDescriptor<StoredFinding>())
+        XCTAssertEqual(
+            findings.count,
+            SwiftDataScanHistoryStore.maxStoredScans,
+            "cascade deletes must remove pruned scans' findings"
+        )
+    }
+
+    func testClearHistoryRemovesEveryScanFindingAndAction() async throws {
+        let fixture = makeStore()
+        await recordMinimalScan(in: fixture.store)
+        fixture.store.recordCleanupActions(
+            [CleanupAuditEntry(kind: .trash, bytesReclaimed: 1, itemCount: 1)],
+            disk: .unavailable
+        )
+        await fixture.store.flush()
+
+        fixture.store.clearHistory()
+        await fixture.store.flush()
+
+        XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredScan>()).isEmpty)
+        XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredFinding>()).isEmpty)
+        XCTAssertTrue(try fixture.context.fetch(FetchDescriptor<StoredCleanupAction>()).isEmpty)
+    }
+
+    /// The scan record and its cleanup actions are written on an ordered
+    /// chain: a cleanup enqueued right after a scan must attach to that scan
+    /// even though both writes complete asynchronously.
+    func testScanThenCleanupOrderingIsPreservedAcrossTheAsyncChain() async throws {
+        let fixture = makeStore()
+
+        fixture.store.recordCompletedScan(
+            ScanSnapshot(
+                findings: [
+                    StorageFinding(
+                        kind: .trash,
+                        domain: .trash,
+                        bytes: 1,
+                        itemCount: 1,
+                        safety: .review,
+                        examples: [],
+                        filePaths: [URL(filePath: "/tmp/x")]
+                    )
+                ],
+                scannedItemCount: 1,
+                duration: .seconds(1)
+            ),
+            disk: .unavailable
+        )
+        fixture.store.recordCleanupActions(
+            [CleanupAuditEntry(kind: .trash, bytesReclaimed: 1, itemCount: 1)],
+            disk: .unavailable
+        )
+        await fixture.store.flush()
+
+        let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
+        XCTAssertEqual(scans.count, 1, "the cleanup must attach to the scan, not create its own record")
+        XCTAssertEqual(scans.first?.cleanupActions.count, 1)
+    }
 }

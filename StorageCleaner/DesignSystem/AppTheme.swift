@@ -1,8 +1,30 @@
 import SwiftUI
 
 enum AppTheme {
-    static let cornerRadius: CGFloat = 18
+    static let cornerRadius: CGFloat = Radius.card
     static let contentSpacing: CGFloat = 20
+
+    /// Corner-radius scale. Use these instead of ad-hoc literals so rounded
+    /// corners stay consistent across the app (enforced by the
+    /// `no_radius_literal` SwiftLint rule).
+    enum Radius {
+        /// Tiny inline chips and swatches.
+        static let tiny: CGFloat = 4
+        /// Small controls: badges, small buttons, thumbnails.
+        static let small: CGFloat = 8
+        /// Compact chips and pills.
+        static let chip: CGFloat = 10
+        /// Standard controls and inner cards.
+        static let medium: CGFloat = 12
+        /// Prominent controls and grouped rows.
+        static let control: CGFloat = 14
+        /// Large tiles and content wells.
+        static let large: CGFloat = 16
+        /// Top-level cards (the `cardSurface()` radius).
+        static let card: CGFloat = 18
+        /// Modal sheets (`AppModal`).
+        static let modal: CGFloat = 22
+    }
 
     /// Spacing scale. Use these instead of ad-hoc literals for consistent rhythm.
     enum Spacing {
@@ -13,6 +35,27 @@ enum AppTheme {
         static let large: CGFloat = 20
         static let extraLarge: CGFloat = 28
         static let huge: CGFloat = 40
+    }
+
+    /// Semantic text styles for the roles repeated across screens — one source
+    /// of truth for stat numerals, hero values, and icon fonts so screens stay
+    /// visually consistent. Prefer these (or the built-in relative styles like
+    /// `.title2`, `.subheadline`) over ad-hoc `.system(size:)` literals.
+    enum Typography {
+        /// Hero numeral on welcome/settings hero cards.
+        static let heroValue = Font.system(size: 36, weight: .bold, design: .rounded)
+        /// Large stat numeral on screen headers (e.g. total reclaimable bytes).
+        static let statValue = Font.system(size: 28, weight: .bold, design: .rounded)
+        /// Mid-size numeral in modals and summary bars; pair with `.monospacedDigit()`.
+        static let summaryValue = Font.system(size: 22, weight: .bold, design: .rounded)
+        /// SF Symbol font for screen-header hero icons.
+        static let heroIcon = Font.system(size: IconSize.title, weight: .semibold)
+        /// SF Symbol font for section/card leading icons.
+        static let sectionIcon = Font.system(size: IconSize.sub, weight: .semibold)
+        /// SF Symbol font for row/tile icons.
+        static let bodyIcon = Font.system(size: IconSize.body, weight: .semibold)
+        /// Emphasized row label / compact button text.
+        static let rowLabel = Font.system(size: 14, weight: .semibold)
     }
 
     /// Icon point sizes by context.

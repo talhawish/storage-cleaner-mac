@@ -11,7 +11,7 @@ struct LeftoversScanner: StorageCategoryScanning {
 
     init(
         roots: [URL] = DependencyPaths.Leftovers.searchRoots,
-        collector: FileSystemCollector
+        collector: any FileTraversing
     ) {
         scanner = FilePatternScanner(
             kind: .installerLeftovers,
@@ -29,10 +29,12 @@ struct LeftoversScanner: StorageCategoryScanning {
 
     /// A file qualifies as a leftover installer when it has a known installer/package extension and
     /// is not hidden, inside an app bundle, or inside a build/dependency directory.
-    static func isLeftover(_ url: URL) -> Bool {
-        guard !url.lastPathComponent.hasPrefix(".") else { return false }
-        let components = PathSafetyComponents.relevantComponents(for: url)
-        guard components.isDisjoint(with: DependencyPaths.Leftovers.blockedPathComponents) else { return false }
-        return DependencyPaths.Leftovers.installerExtensions.contains(url.pathExtension.lowercased())
+    static func isLeftover(_ record: FileRecord) -> Bool {
+        guard !record.nameLowercased.hasPrefix(".") else { return false }
+        guard DependencyPaths.Leftovers.installerExtensions.contains(record.pathExtensionLowercased) else {
+            return false
+        }
+        let components = PathSafetyComponents.relevantComponents(for: record.url)
+        return components.isDisjoint(with: DependencyPaths.Leftovers.blockedPathComponents)
     }
 }

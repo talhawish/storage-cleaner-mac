@@ -32,9 +32,10 @@ extension DashboardViewModel {
         from groups: [DuplicateGroup],
         deletedURLs: [URL: Int64]
     ) -> [DuplicateGroup] {
-        groups.compactMap { group in
+        let deletedPaths = Set(deletedURLs.keys.map(\.normalizedFilesystemPath))
+        return groups.compactMap { group in
             let remainingFiles = group.files.filter { file in
-                !deletedURLs.keys.contains { $0.matchesFilesystemURL(file.url) }
+                !deletedPaths.contains(file.url.normalizedFilesystemPath)
             }
             guard remainingFiles.count > 1 else { return nil }
 

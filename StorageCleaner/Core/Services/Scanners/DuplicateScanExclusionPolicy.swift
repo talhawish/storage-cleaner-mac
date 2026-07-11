@@ -47,7 +47,9 @@ struct DuplicateScanExclusionPolicy: Sendable {
     }
 }
 
-private struct DuplicateProjectRootDetector {
+/// Internal (not private) so `DirectorySnapshotCache` can memoize one
+/// detection walk per root per scan for all duplicate scanners.
+struct DuplicateProjectRootDetector {
     private let fileManager = FileManager.default
     private let maxDepth: Int
 

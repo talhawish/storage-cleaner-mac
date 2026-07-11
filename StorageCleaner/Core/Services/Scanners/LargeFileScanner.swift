@@ -16,7 +16,7 @@ struct LargeFileScanner: StorageCategoryScanning {
         ]),
         minimumBytes: Int64 = LargeFileThreshold.collectionFloor.bytes,
         safetyPolicy: LargeFileSafetyPolicy = LargeFileSafetyPolicy(),
-        collector: FileSystemCollector
+        collector: any FileTraversing
     ) {
         self.safetyPolicy = safetyPolicy
         scanner = FilePatternScanner(
@@ -26,9 +26,12 @@ struct LargeFileScanner: StorageCategoryScanning {
             safety: .review,
             collector: collector,
             prioritizeLargest: true
-        ) { url in
-            safetyPolicy.isReviewSafeCandidate(url)
-                && StorageFormatting.fileSize(at: url) >= minimumBytes
+        ) { record in
+            // The size gate reads the traversal's prefetched bytes — cheap —
+            // so the safety policy (which may stat for executability) only
+            // runs for files already past the floor.
+            record.bytes >= minimumBytes
+                && safetyPolicy.isReviewSafeCandidate(record.url)
         }
     }
 

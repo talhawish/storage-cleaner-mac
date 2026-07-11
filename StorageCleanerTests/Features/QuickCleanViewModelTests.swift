@@ -123,6 +123,42 @@ final class QuickCleanViewModelTests: XCTestCase {
     /// no home folder grant), the view model must transition to a
     /// dedicated `.needsAccess` phase so the view can prompt for
     /// permission instead of misleadingly showing an empty review list.
+    /// A cleanup that moves some items but fails others must surface the
+    /// failure — "cleaned some, couldn't move N" is not a clean success.
+    @MainActor
+    func testPartialCleanupFailureSetsFailureMessage() async throws {
+        let dir = temporaryDirectory.appending(path: "partial", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(count: 10_000).write(to: dir.appending(path: "a.bin"))
+
+        let scanner = QuickCleanScanner(
+            options: [makeOption(id: "partial", path: dir.path)],
+            enabledIDs: ["partial"]
+        )
+        let scan = await scanner.scan()
+        let locked = URL(filePath: "/tmp/locked.bin")
+        let viewModel = QuickCleanViewModel(onClean: { urls in
+            let deleted = urls.map { DeletedItem(originalURL: $0, bytesReclaimed: 10) }
+            return CleanupResult(
+                deletedURLs: urls,
+                deletedItems: deleted,
+                failedURLs: [(locked, CleanupError.fileNotFound(locked))],
+                totalBytesReclaimed: 10
+            )
+        })
+        viewModel.setScanResultForTesting(scan)
+        XCTAssertEqual(viewModel.phase, .review)
+
+        viewModel.performCleanup()
+        for _ in 0..<50 where viewModel.phase != .success {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.phase, .success)
+        XCTAssertNotNil(viewModel.failureMessage)
+        XCTAssertTrue(viewModel.failureMessage?.contains("1 item") ?? false)
+    }
+
     @MainActor
     func testAccessDeniedScanTransitionsToNeedsAccessPhase() {
         let viewModel = QuickCleanViewModel(onClean: { _ in

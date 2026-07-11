@@ -29,6 +29,6 @@ struct SearchField: View {
             }
         }
         .padding(10)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: AppTheme.Radius.chip))
     }
 }

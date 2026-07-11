@@ -115,7 +115,7 @@ struct AndroidPackageScanner: StorageCategoryScanning {
             DependencyPaths.home("Documents"),
             DependencyPaths.home("Developer")
         ]),
-        collector: FileSystemCollector
+        collector: any FileTraversing
     ) {
         scanner = FilePatternScanner(
             kind: .androidPackages,
@@ -123,8 +123,8 @@ struct AndroidPackageScanner: StorageCategoryScanning {
             roots: roots,
             safety: .review,
             collector: collector
-        ) { url in
-            DependencyPaths.Leftovers.androidPackageExtensions.contains(url.pathExtension.lowercased())
+        ) { record in
+            DependencyPaths.Leftovers.androidPackageExtensions.contains(record.pathExtensionLowercased)
         }
     }
 
@@ -144,7 +144,7 @@ struct ScreenshotStorageScanner: StorageCategoryScanning {
             DependencyPaths.home("Pictures"),
             DependencyPaths.home("Downloads")
         ]),
-        collector: FileSystemCollector
+        collector: any FileTraversing
     ) {
         scanner = FilePatternScanner(
             kind: .screenshots,
@@ -152,10 +152,11 @@ struct ScreenshotStorageScanner: StorageCategoryScanning {
             roots: roots,
             safety: .review,
             collector: collector
-        ) { url in
-            let ext = url.pathExtension.lowercased()
-            guard DependencyPaths.Media.allImageExtensions.contains(ext) else { return false }
-            let name = url.lastPathComponent.lowercased()
+        ) { record in
+            guard DependencyPaths.Media.allImageExtensions.contains(record.pathExtensionLowercased) else {
+                return false
+            }
+            let name = record.nameLowercased
             return name.contains("screenshot") || name.contains("screen shot") || name.contains("simulator screen shot")
         }
     }

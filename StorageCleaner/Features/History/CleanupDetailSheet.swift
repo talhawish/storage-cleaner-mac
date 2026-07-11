@@ -125,11 +125,11 @@ struct CleanupDetailSheet: View {
         .padding(AppTheme.Spacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                 .fill(AppTheme.cyan.opacity(0.08))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
@@ -205,10 +205,13 @@ private struct CleanupCategoryRow: View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.small) {
             HStack(alignment: .center, spacing: AppTheme.Spacing.medium) {
                 Image(systemName: summary.domain.symbolName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTheme.Typography.bodyIcon)
                     .foregroundStyle(tint)
                     .frame(width: 32, height: 32)
-                    .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(
+                        tint.opacity(0.13),
+                        in: RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
+                    )
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {

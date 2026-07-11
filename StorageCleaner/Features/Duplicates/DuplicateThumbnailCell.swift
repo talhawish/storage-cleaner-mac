@@ -51,23 +51,23 @@ struct DuplicateThumbnailCell: View {
                 MediaThumbnailView(
                     url: file.url,
                     sideLength: 150,
-                    cornerRadius: 12,
+                    cornerRadius: AppTheme.Radius.medium,
                     contentMode: .fill,
                     permissionHandler: permissionHandler
                 )
             }
             .overlay {
                 if isMarkedForRemoval {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                         .fill(AppTheme.rose.opacity(0.18))
                 }
             }
             .overlay(alignment: .bottomLeading) {
                 if file.isVideo { playBadge }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: isKept || isMarkedForRemoval ? 2.5 : 1)
             }
             .overlay(alignment: .topLeading) { statusControl.padding(7) }
@@ -78,7 +78,7 @@ struct DuplicateThumbnailCell: View {
                         .opacity(isHovering ? 1 : 0)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous))
             .onTapGesture { onPreview() }
             .accessibilityAddTraits(.isButton)
             .onHover { isHovering = $0 }
@@ -92,7 +92,7 @@ struct DuplicateThumbnailCell: View {
         } else {
             Button(action: onToggleRemoval) {
                 Image(systemName: isMarkedForRemoval ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(AppTheme.Typography.sectionIcon)
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(
                         isMarkedForRemoval ? Color.white : Color.white,
@@ -145,7 +145,7 @@ struct DuplicateThumbnailCell: View {
         if isKept { return AppTheme.mint }
         if isMarkedForRemoval { return AppTheme.rose }
         if isHovering { return .secondary.opacity(0.6) }
-        return .black.opacity(0.06)
+        return .primary.opacity(0.06)
     }
 
     // MARK: - Caption

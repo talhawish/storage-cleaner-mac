@@ -6,8 +6,8 @@ struct FilePatternScanner: StorageCategoryScanning {
     private let domain: StorageDomain
     private let roots: [URL]
     private let safety: CleanupSafety
-    private let collector: FileSystemCollector
-    private let matcher: @Sendable (URL) -> Bool
+    private let collector: any FileTraversing
+    private let matcher: @Sendable (FileRecord) -> Bool
     private let builder: CandidateFindingBuilder
     private let prioritizeLargest: Bool
 
@@ -16,9 +16,9 @@ struct FilePatternScanner: StorageCategoryScanning {
         domain: StorageDomain,
         roots: [URL],
         safety: CleanupSafety,
-        collector: FileSystemCollector,
+        collector: any FileTraversing,
         prioritizeLargest: Bool = false,
-        matcher: @escaping @Sendable (URL) -> Bool,
+        matcher: @escaping @Sendable (FileRecord) -> Bool,
         builder: CandidateFindingBuilder = CandidateFindingBuilder()
     ) {
         self.kind = kind
@@ -33,7 +33,12 @@ struct FilePatternScanner: StorageCategoryScanning {
     }
 
     func scan() async -> CategoryScanResult {
-        let result = collector.collectFiles(at: roots, matching: matcher, prioritizeLargest: prioritizeLargest)
+        let result = await collector.collectMatchingFiles(
+            at: roots,
+            matching: matcher,
+            limit: FileTraversalDefaults.fileLimit,
+            prioritizeLargest: prioritizeLargest
+        )
         let finding = builder.makeFinding(
             kind: kind,
             domain: domain,

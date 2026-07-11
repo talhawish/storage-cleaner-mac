@@ -100,7 +100,10 @@ struct PostScanPaywallCard: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
-            .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(
+                AppTheme.accent,
+                in: RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
+            )
             .shadow(color: AppTheme.accent.opacity(0.30), radius: 10, y: 4)
         }
         .buttonStyle(.plain)

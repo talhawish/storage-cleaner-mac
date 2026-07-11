@@ -54,11 +54,11 @@ struct KeyboardHintBadge: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .fill(Color.primary.opacity(0.06))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .accessibilityHidden(true)
@@ -106,7 +106,7 @@ struct WelcomeHeroText: View {
 
     private var headline: some View {
         Text("Find the space your tools leave behind.")
-            .font(.system(size: 36, weight: .bold, design: .rounded))
+            .font(AppTheme.Typography.heroValue)
             .lineSpacing(1)
             .fixedSize(horizontal: false, vertical: true)
             .foregroundStyle(
@@ -396,7 +396,7 @@ struct WelcomeHeroVisual: View {
 
     private func orbiterChip(orbiter: Orbiter) -> some View {
         Image(systemName: orbiter.symbol)
-            .font(.system(size: 16, weight: .semibold))
+            .font(AppTheme.Typography.bodyIcon)
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(orbiter.color)
             .accessibilityHidden(true)

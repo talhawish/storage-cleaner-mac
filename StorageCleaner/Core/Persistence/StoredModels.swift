@@ -57,6 +57,38 @@ final class StoredScan {
     }
 }
 
+/// Pre-encoded, `Sendable` representation of a finding ready to persist. The
+/// JSON encoding of `pathBytes`/`duplicateGroups` (thousands of URLs on big
+/// scans) happens off the main actor when payloads are built on a detached
+/// task; the main-actor store then only inserts pre-built values.
+struct StoredFindingPayload: Sendable {
+    let kindRaw: String
+    let domainRaw: String
+    let bytes: Int64
+    let itemCount: Int
+    let safetyRaw: String
+    let examples: [String]
+    let filePaths: [URL]
+    let duplicateGroupsJSON: String?
+    let pathBytesJSON: String?
+
+    init(from finding: StorageFinding) {
+        kindRaw = finding.kind.rawValue
+        domainRaw = finding.domain.rawValue
+        bytes = finding.bytes
+        itemCount = finding.itemCount
+        safetyRaw = finding.safety.rawValue
+        examples = finding.examples
+        filePaths = finding.filePaths
+        duplicateGroupsJSON = finding.duplicateGroups.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(finding.duplicateGroups)).flatMap { String(data: $0, encoding: .utf8) }
+        pathBytesJSON = finding.pathBytes.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(finding.pathBytes)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+}
+
 @Model
 final class StoredFinding {
     var kindRaw: String
@@ -73,20 +105,20 @@ final class StoredFinding {
 
     var scan: StoredScan?
 
-    init(from finding: StorageFinding) {
-        self.kindRaw = finding.kind.rawValue
-        self.domainRaw = finding.domain.rawValue
-        self.bytes = finding.bytes
-        self.itemCount = finding.itemCount
-        self.safetyRaw = finding.safety.rawValue
-        self.examples = finding.examples
-        self.filePaths = finding.filePaths
-        self.duplicateGroupsJSON = finding.duplicateGroups.isEmpty
-            ? nil
-            : (try? JSONEncoder().encode(finding.duplicateGroups)).flatMap { String(data: $0, encoding: .utf8) }
-        self.pathBytesJSON = finding.pathBytes.isEmpty
-            ? nil
-            : (try? JSONEncoder().encode(finding.pathBytes)).flatMap { String(data: $0, encoding: .utf8) }
+    convenience init(from finding: StorageFinding) {
+        self.init(payload: StoredFindingPayload(from: finding))
+    }
+
+    init(payload: StoredFindingPayload) {
+        kindRaw = payload.kindRaw
+        domainRaw = payload.domainRaw
+        bytes = payload.bytes
+        itemCount = payload.itemCount
+        safetyRaw = payload.safetyRaw
+        examples = payload.examples
+        filePaths = payload.filePaths
+        duplicateGroupsJSON = payload.duplicateGroupsJSON
+        pathBytesJSON = payload.pathBytesJSON
     }
 
     var kind: StorageFindingKind? {

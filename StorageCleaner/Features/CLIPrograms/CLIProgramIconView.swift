@@ -28,7 +28,7 @@ struct CLIProgramIconView: View {
     }
 
     private var symbolTile: some View {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
+        RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
             .fill(program.accent.opacity(0.14))
             .overlay {
                 Image(systemName: program.symbolName)

@@ -171,7 +171,7 @@ struct LargeVideoScanner: StorageCategoryScanning {
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
         ]),
-        collector: FileSystemCollector
+        collector: any FileTraversing
     ) {
         scanner = FilePatternScanner(
             kind: .largeVideos,
@@ -179,8 +179,8 @@ struct LargeVideoScanner: StorageCategoryScanning {
             roots: roots,
             safety: .review,
             collector: collector
-        ) { url in
-            DependencyPaths.Media.videoExtensions.contains(url.pathExtension.lowercased())
+        ) { record in
+            DependencyPaths.Media.videoExtensions.contains(record.pathExtensionLowercased)
         }
     }
 
@@ -200,7 +200,7 @@ struct ScreenRecordingScanner: StorageCategoryScanning {
             DependencyPaths.home("Desktop"),
             DependencyPaths.home("Downloads")
         ]),
-        collector: FileSystemCollector
+        collector: any FileTraversing
     ) {
         scanner = FilePatternScanner(
             kind: .screenRecordings,
@@ -208,9 +208,11 @@ struct ScreenRecordingScanner: StorageCategoryScanning {
             roots: roots,
             safety: .review,
             collector: collector
-        ) { url in
-            guard DependencyPaths.Media.videoExtensions.contains(url.pathExtension.lowercased()) else { return false }
-            let name = url.lastPathComponent.lowercased()
+        ) { record in
+            guard DependencyPaths.Media.videoExtensions.contains(record.pathExtensionLowercased) else {
+                return false
+            }
+            let name = record.nameLowercased
             return name.contains("screen recording") || name.contains("recording")
         }
     }
@@ -231,7 +233,7 @@ struct LargePhotoScanner: StorageCategoryScanning {
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop")
         ]),
-        collector: FileSystemCollector
+        collector: any FileTraversing
     ) {
         scanner = FilePatternScanner(
             kind: .largePhotos,
@@ -239,8 +241,8 @@ struct LargePhotoScanner: StorageCategoryScanning {
             roots: roots,
             safety: .review,
             collector: collector
-        ) { url in
-            DependencyPaths.Media.allImageExtensions.contains(url.pathExtension.lowercased())
+        ) { record in
+            DependencyPaths.Media.allImageExtensions.contains(record.pathExtensionLowercased)
         }
     }
 
@@ -254,7 +256,7 @@ struct DuplicatePhotoScanner: StorageCategoryScanning {
     let title = StorageFindingKind.duplicatePhotos.title
     private let scanner: DuplicateMediaScanner
 
-    init(collector: FileSystemCollector) {
+    init(collector: any FileTraversing, snapshotCache: DirectorySnapshotCache? = nil) {
         let mediaRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Pictures"),
             DependencyPaths.home("Downloads"),
@@ -266,7 +268,8 @@ struct DuplicatePhotoScanner: StorageCategoryScanning {
             roots: mediaRoots,
             extensions: DependencyPaths.Media.allImageExtensions,
             minimumBytes: 250_000,
-            collector: collector
+            collector: collector,
+            snapshotCache: snapshotCache
         )
     }
 
@@ -280,7 +283,7 @@ struct DuplicateVideoScanner: StorageCategoryScanning {
     let title = StorageFindingKind.duplicateVideos.title
     private let scanner: DuplicateMediaScanner
 
-    init(collector: FileSystemCollector) {
+    init(collector: any FileTraversing, snapshotCache: DirectorySnapshotCache? = nil) {
         let mediaRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Movies"),
             DependencyPaths.home("Downloads"),
@@ -292,7 +295,8 @@ struct DuplicateVideoScanner: StorageCategoryScanning {
             roots: mediaRoots,
             extensions: DependencyPaths.Media.videoExtensions,
             minimumBytes: 5_000_000,
-            collector: collector
+            collector: collector,
+            snapshotCache: snapshotCache
         )
     }
 
@@ -306,7 +310,7 @@ struct DuplicateDocumentScanner: StorageCategoryScanning {
     let title = StorageFindingKind.duplicateDocuments.title
     private let scanner: DuplicateMediaScanner
 
-    init(collector: FileSystemCollector) {
+    init(collector: any FileTraversing, snapshotCache: DirectorySnapshotCache? = nil) {
         let documentRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Documents"),
             DependencyPaths.home("Downloads"),
@@ -318,7 +322,8 @@ struct DuplicateDocumentScanner: StorageCategoryScanning {
             roots: documentRoots,
             extensions: DependencyPaths.Documents.documentExtensions,
             minimumBytes: 50_000,
-            collector: collector
+            collector: collector,
+            snapshotCache: snapshotCache
         )
     }
 
@@ -332,7 +337,7 @@ struct JunkFileScanner: StorageCategoryScanning {
     let title = StorageFindingKind.junkFiles.title
     private let scanner: FilePatternScanner
 
-    init(collector: FileSystemCollector) {
+    init(collector: any FileTraversing) {
         let junkRoots = ScanPreferences.includingExternalVolumes([
             DependencyPaths.home("Downloads"),
             DependencyPaths.home("Desktop"),
@@ -344,9 +349,9 @@ struct JunkFileScanner: StorageCategoryScanning {
             roots: junkRoots,
             safety: .review,
             collector: collector
-        ) { url in
+        ) { record in
             let junkExtensions = ["tmp", "temp", "log", "crash"]
-            return junkExtensions.contains(url.pathExtension.lowercased())
+            return junkExtensions.contains(record.pathExtensionLowercased)
         }
     }
 

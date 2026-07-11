@@ -84,17 +84,17 @@ struct SubscriptionSettingsSection: View {
         }
         .padding(AppTheme.Spacing.medium)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .fill(AppTheme.subtleSurface)
         )
     }
 
     private var planIcon: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .fill(planIconColor.opacity(0.14))
             Image(systemName: planIconName)
-                .font(.system(size: 14, weight: .semibold))
+                .font(AppTheme.Typography.rowLabel)
                 .foregroundStyle(planIconColor)
         }
         .frame(width: 36, height: 36)

@@ -81,4 +81,16 @@ cyclomatic_complexity:
   warning: 10
   error: 15
 
+custom_rules:
+  no_radius_literal:
+    name: "Corner radius literal"
+    regex: 'cornerRadius: [0-9]'
+    match_kinds:
+      - identifier
+      - keyword
+      - number
+    message: "Use an AppTheme.Radius token instead of a corner-radius literal."
+    severity: warning
+    excluded: ".*AppTheme\\.swift"
+
 reporter: xcode

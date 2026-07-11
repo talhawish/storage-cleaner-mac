@@ -82,7 +82,7 @@ struct SettingsHeroView: View {
 
     private var headline: some View {
         Text("Settings")
-            .font(.system(size: 36, weight: .bold, design: .rounded))
+            .font(AppTheme.Typography.heroValue)
             .lineSpacing(1)
             .foregroundStyle(
                 LinearGradient(
@@ -241,7 +241,10 @@ struct SettingsStatusPill: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(tint)
                 .frame(width: 22, height: 22)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(
+                    tint.opacity(0.14),
+                    in: RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
+                )
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -258,11 +261,11 @@ struct SettingsStatusPill: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .fill(AppTheme.surface)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .accessibilityElement(children: .combine)

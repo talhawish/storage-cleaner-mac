@@ -10,7 +10,7 @@ struct OverviewStatCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTheme.Typography.bodyIcon)
                     .foregroundStyle(color)
                 Text(title)
                     .font(.caption)
@@ -21,9 +21,9 @@ struct OverviewStatCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                 .stroke(color.opacity(0.2), lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)
@@ -54,10 +54,10 @@ struct TechnologyRow: View {
 
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.tiny)
                             .fill(Color(hex: technology.color).opacity(0.15))
                             .frame(height: 8)
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.tiny)
                             .fill(Color(hex: technology.color))
                             .frame(width: geo.size.width * percentage, height: 8)
                     }
@@ -77,7 +77,7 @@ struct TechnologyRow: View {
             .padding(.horizontal, 8)
             .background(
                 isSelected ? Color(hex: technology.color).opacity(0.12) : .clear,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
             )
             .contentShape(Rectangle())
         }
@@ -120,11 +120,11 @@ struct ActivityStatusCard: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
-                isSelected ? Color(hex: status.color).opacity(0.1) : Color(white: 0.9).opacity(0.3),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                isSelected ? Color(hex: status.color).opacity(0.1) : AppTheme.subtleSurface,
+                in: RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                     .stroke(isSelected ? Color(hex: status.color).opacity(0.4) : .clear, lineWidth: 1.5)
             }
             .contentShape(Rectangle())

@@ -58,7 +58,7 @@ struct CLIProgramRow: View {
         .padding(.vertical, 7)
         .padding(.horizontal, 8)
         .background(isHovering ? Color.accentColor.opacity(0.04) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous))
         .onHover { isHovering = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)

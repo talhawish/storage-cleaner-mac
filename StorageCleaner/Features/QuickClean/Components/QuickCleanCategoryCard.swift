@@ -36,9 +36,9 @@ struct QuickCleanCategoryCard: View {
             }
         }
         .background(AppTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
     }
@@ -57,11 +57,11 @@ struct QuickCleanCategoryCard: View {
             Button(action: onToggleExpansion) {
                 HStack(spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                             .fill(tint.opacity(0.14))
                             .frame(width: 32, height: 32)
                         Image(systemName: category.icon)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(AppTheme.Typography.rowLabel)
                             .foregroundStyle(tint)
                     }
                     .accessibilityHidden(true)

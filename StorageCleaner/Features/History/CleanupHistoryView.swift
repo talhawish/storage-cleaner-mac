@@ -7,6 +7,12 @@ import SwiftUI
 /// against the page background.
 struct CleanupHistoryView: View {
     var canRevealInFinder = true
+    /// Non-nil when the history store failed to persist a record. Rendered as
+    /// a dismissible warning so the user knows the audit trail is incomplete.
+    var persistenceWarning: String?
+    /// Deletes all stored history after the confirmation sheet. `nil` hides
+    /// the toolbar action (e.g. previews without a store).
+    var onClearHistory: (() -> Void)?
 
     @Query(
         sort: \StoredScan.date,
@@ -16,6 +22,8 @@ struct CleanupHistoryView: View {
 
     @State private var viewModel = CleanupHistoryViewModel()
     @State private var selectedSummary: CleanupScanSummary?
+    @State private var isWarningDismissed = false
+    @State private var showClearConfirmation = false
 
     private let pagePadding: CGFloat = 28
     private let contentSpacing: CGFloat = AppTheme.contentSpacing
@@ -24,6 +32,10 @@ struct CleanupHistoryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: contentSpacing) {
                 header
+
+                if let persistenceWarning, !isWarningDismissed {
+                    persistenceWarningBanner(persistenceWarning)
+                }
 
                 if scans.isEmpty {
                     emptyState
@@ -44,8 +56,50 @@ struct CleanupHistoryView: View {
         .accessibilityIdentifier("cleanup-history-root")
         .onAppear { viewModel.update(with: scans) }
         .onChange(of: scans.count) { _, _ in viewModel.update(with: scans) }
+        .toolbar { clearHistoryToolbarItem }
         .sheet(item: $selectedSummary) { summary in
             CleanupDetailSheet(summary: summary, canRevealInFinder: canRevealInFinder)
+        }
+        .sheet(isPresented: $showClearConfirmation) {
+            ConfirmationModal(
+                variant: .destructive,
+                title: "Clear all history?",
+                message: "This permanently removes every recorded scan and cleanup from the history. "
+                    + "Files already moved to Trash are not affected.",
+                showsCloseButton: false,
+                preferredHeight: 280,
+                confirm: AppModalActionBar.Action(
+                    title: "Clear History",
+                    systemImage: "trash",
+                    isProminent: true,
+                    isDestructive: true,
+                    action: {
+                        onClearHistory?()
+                        showClearConfirmation = false
+                    }
+                ),
+                cancel: AppModalActionBar.CancelAction(
+                    action: { showClearConfirmation = false }
+                )
+            )
+            .accessibilityIdentifier("clear-history-confirmation")
+        }
+    }
+
+    @ToolbarContentBuilder private var clearHistoryToolbarItem: some ToolbarContent {
+        ToolbarItem {
+            if onClearHistory != nil && !scans.isEmpty {
+                Button {
+                    showClearConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                        .accessibilityHidden(true)
+                }
+                .help("Clear all history")
+                .accessibilityLabel("Clear all history")
+                .accessibilityHint("Permanently removes every recorded scan and cleanup")
+                .accessibilityIdentifier("clear-history-button")
+            }
         }
     }
 
@@ -104,6 +158,42 @@ struct CleanupHistoryView: View {
     private var scanListSubtitle: String {
         if viewModel.summaries.count <= 1 { return "Every scan you've ever run" }
         return "Newest first"
+    }
+
+    // MARK: - Persistence warning
+
+    private func persistenceWarningBanner(_ message: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.small) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(AppTheme.amber)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Recent activity couldn't be saved to history")
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                isWarningDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Dismiss this warning")
+            .accessibilityLabel("Dismiss history warning")
+        }
+        .padding(AppTheme.Spacing.medium)
+        .cardSurface()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("history-persistence-warning")
     }
 
     // MARK: - Empty state

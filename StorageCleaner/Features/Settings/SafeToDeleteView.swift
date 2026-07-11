@@ -162,11 +162,11 @@ struct SafeToDeleteView: View {
     ) -> some View {
         HStack(alignment: .center, spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
                     .fill(tint.opacity(0.14))
                     .frame(width: 44, height: 44)
                 Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(AppTheme.Typography.sectionIcon)
                     .foregroundStyle(tint)
             }
             .accessibilityHidden(true)
@@ -207,7 +207,10 @@ struct SafeToDeleteView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(AppTheme.subtleSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(
+            AppTheme.subtleSurface,
+            in: RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
+        )
     }
 
     // MARK: - Empty state
@@ -237,10 +240,13 @@ struct SafeToDeleteView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: iconForCategory(category))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(AppTheme.Typography.rowLabel)
                     .foregroundStyle(colorForCategory(category))
                     .frame(width: 28, height: 28)
-                    .background(colorForCategory(category).opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                    .background(
+                        colorForCategory(category).opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: AppTheme.Radius.small)
+                    )
                     .accessibilityHidden(true)
 
                 Text(category.rawValue)
@@ -270,9 +276,9 @@ struct SafeToDeleteView: View {
                 }
             }
             .background(AppTheme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
                     .stroke(AppTheme.hairline, lineWidth: 1)
             }
         }
@@ -290,11 +296,11 @@ struct SafeToDeleteView: View {
             .accessibilityLabel("Enable \(option.name)")
 
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                     .fill(colorForString(option.iconColor).opacity(0.12))
                     .frame(width: 32, height: 32)
                 Image(systemName: option.icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(AppTheme.Typography.rowLabel)
                     .foregroundStyle(colorForString(option.iconColor))
             }
             .accessibilityHidden(true)

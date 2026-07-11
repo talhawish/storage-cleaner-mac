@@ -44,6 +44,9 @@ struct EmulatorsView: View {
                     onOpenSettings: viewModel.openSystemSettings,
                     onGrantAccess: viewModel.grantAccessAndRetry
                 )
+            case let .failed(message):
+                ErrorStateView(message: message, retry: { viewModel.start() })
+                    .padding(28)
             }
         }
         .navigationTitle("Simulators & Emulators")
@@ -83,6 +86,8 @@ struct EmulatorsView: View {
                 }
                 .foregroundStyle(.red)
                 .help("Remove \(viewModel.selectedIDs.count) selected OS images")
+                .accessibilityHint("Asks for confirmation, then removes the selected OS images. "
+                    + "Apple runtimes can be re-downloaded; other items move to the Trash")
             }
         }
 
@@ -122,11 +127,11 @@ struct EmulatorsView: View {
     private var header: some View {
         HStack(spacing: 20) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous)
                     .fill(AppTheme.accent.opacity(0.12))
                     .frame(width: 64, height: 64)
                 Image(systemName: "iphone.gen3")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(AppTheme.Typography.heroIcon)
                     .foregroundStyle(AppTheme.accent)
             }
             .accessibilityHidden(true)
@@ -145,7 +150,7 @@ struct EmulatorsView: View {
 
             VStack(alignment: .trailing, spacing: 6) {
                 Text(StorageFormatting.bytes(viewModel.totalBytes))
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(AppTheme.Typography.statValue)
                     .contentTransition(.numericText())
                 Text("installed")
                     .font(.caption)

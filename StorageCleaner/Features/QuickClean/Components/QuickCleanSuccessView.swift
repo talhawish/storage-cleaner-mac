@@ -149,7 +149,7 @@ struct QuickCleanSuccessView: View {
             .frame(maxWidth: .infinity)
             .background(
                 AppTheme.subtleSurface,
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
             )
         }
         .frame(maxWidth: 420)
@@ -221,11 +221,11 @@ private struct FreeSpaceImpactPill: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .fill(Color.primary.opacity(0.04))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .frame(maxWidth: 420)

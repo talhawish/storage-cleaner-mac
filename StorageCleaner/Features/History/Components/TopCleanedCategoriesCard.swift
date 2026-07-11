@@ -43,7 +43,7 @@ private struct TopCleanedCategoryRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: AppTheme.Spacing.small) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
                     .fill(tint.opacity(0.14))
                 Image(systemName: category.domain.symbolName)
                     .font(.system(size: 13, weight: .semibold))
@@ -81,11 +81,11 @@ private struct TopCleanedCategoryRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .fill(Color.primary.opacity(0.04))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                 .stroke(AppTheme.hairline, lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)

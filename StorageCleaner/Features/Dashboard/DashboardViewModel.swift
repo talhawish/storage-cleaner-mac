@@ -11,9 +11,12 @@ final class DashboardViewModel {
     /// `internal` (not `private`) for that one call site; treat as
     /// read-only.
     let permissionHandler: any StoragePermissionHandling
-    private let cleanupService: CleanupService
-    private let cliRemovalService: CLIRemovalService
-    private let historyStore: (any ScanHistoryStore)?
+    /// `internal` (not `private`) so the cleanup extension in
+    /// `DashboardViewModel+Cleanup.swift` can reach them; treat all three
+    /// as read-only outside that file.
+    let cleanupService: CleanupService
+    let cliRemovalService: CLIRemovalService
+    let historyStore: (any ScanHistoryStore)?
     /// Owns the app's current Pro/Free entitlement. Optional so existing
     /// unit tests that don't care about subscriptions can still construct
     /// the VM. When `nil`, the cleanup gate is open (legacy behavior)
@@ -32,8 +35,14 @@ final class DashboardViewModel {
     private(set) var scannedItemCount = 0
     private(set) var scannerProgress: [ScannerProgress] = []
     private(set) var permissionStatuses: [StoragePermissionStatus]
-    private(set) var snapshot: ScanSnapshot?
-    private(set) var lastCleanupResult: CleanupResult?
+    /// Setters are `internal` so `DashboardViewModel+Cleanup.swift` can
+    /// reconcile findings after a delete; other files treat them as read-only.
+    var snapshot: ScanSnapshot?
+    var lastCleanupResult: CleanupResult?
+    /// Set when a cleanup leaves items behind and no feature-local flow is
+    /// showing the failure. `AppShellView` presents it as a single app-wide
+    /// sheet with a retry action; views clear it (or the sheet's dismiss does).
+    var cleanupFailure: CleanupFailurePrompt?
     /// Latest disk-space snapshot for the startup volume. Refreshed on init,
     /// after every scan completes, and after every successful cleanup. Drives
     /// the home screen "Storage Status" card and the Quick Clean success
@@ -101,199 +110,6 @@ final class DashboardViewModel {
         } else {
             phase = .idle
         }
-    }
-
-    /// Properly uninstalls CLI programs (Homebrew via `brew uninstall`, others by
-    /// trashing) so nothing is left abandoned, then reconciles the `cliApps` finding
-    /// and records history. Returns the result so the caller can refresh its view.
-    func removeCLIPrograms(_ urls: [URL]) async -> CleanupResult {
-        guard gateCleanup() else {
-            return CleanupResult(
-                deletedURLs: [],
-                deletedItems: [],
-                failedURLs: [],
-                totalBytesReclaimed: 0
-            )
-        }
-        let result = await cliRemovalService.remove(urls)
-        await reconcileCleanup(result, auditKind: .cliApps)
-        return result
-    }
-
-    /// and reconciles the `runtimeVersions` finding. Recorded as a `.runtimeVersions`
-    /// audit entry so Cleanup History reflects what was reclaimed. Returns the result
-    /// so the caller can refresh its view.
-    func removeRuntimeVersions(_ urls: [URL]) async -> CleanupResult {
-        guard gateCleanup() else {
-            return CleanupResult(
-                deletedURLs: [],
-                deletedItems: [],
-                failedURLs: [],
-                totalBytesReclaimed: 0
-            )
-        }
-        let result = await cliRemovalService.remove(urls)
-        await reconcileCleanup(result, auditKind: .runtimeVersions)
-        return result
-    }
-
-    func reconcileEmulatorCleanup(
-        _ result: EmulatorCleanupResult,
-        removedImages images: [EmulatorImage]
-    ) async {
-        let removedIDs = Set(result.removedIDs)
-        let removedImages = images.filter { removedIDs.contains($0.id) }
-        guard !removedImages.isEmpty else { return }
-
-        let deletedItems = removedImages.compactMap { image -> DeletedItem? in
-            guard case let .trashDirectory(url) = image.removal else { return nil }
-            return DeletedItem(originalURL: url, bytesReclaimed: image.bytes)
-        }
-        lastCleanupResult = CleanupResult(
-            deletedURLs: deletedItems.map(\.originalURL),
-            deletedItems: deletedItems,
-            failedURLs: [],
-            totalBytesReclaimed: result.totalBytesReclaimed
-        )
-
-        await refreshVolumeSnapshotAsync()
-        recordEmulatorCleanupAudit(removedImages)
-        pruneSnapshot(reclaimedBytesByURL: reclaimedBytesByURL(from: deletedItems))
-    }
-
-    private func reconcileCleanup(
-        _ result: CleanupResult,
-        auditKind: StorageFindingKind? = nil
-    ) async {
-        lastCleanupResult = result
-        guard !result.deletedItems.isEmpty else { return }
-
-        // Refresh the volume snapshot *before* recording the audit, so the
-        // "free bytes after" captured on `StoredScan` reflects the volume
-        // state once the trashed items are gone. The refresh dispatches a
-        // background task; awaiting it here keeps the audit recording in
-        // lockstep with the post-cleanup free-bytes value.
-        await refreshVolumeSnapshotAsync()
-
-        let reclaimedBytesByURL = reclaimedBytesByURL(from: result.deletedItems)
-        if let auditKind {
-            historyStore?.recordCleanupActions([
-                CleanupAuditEntry(
-                    kind: auditKind,
-                    bytesReclaimed: result.totalBytesReclaimed,
-                    itemCount: result.deletedCount,
-                    samplePaths: CleanupAuditRecorder.samplePaths(
-                        from: result.deletedItems.map(\.originalURL)
-                    )
-                )
-            ], disk: currentScanDiskSnapshot())
-        } else {
-            recordCleanupAudit(reclaimedBytesByURL: reclaimedBytesByURL)
-        }
-
-        pruneSnapshot(reclaimedBytesByURL: reclaimedBytesByURL)
-    }
-
-    private func reclaimedBytesByURL(from deletedItems: [DeletedItem]) -> [URL: Int64] {
-        Dictionary(
-            deletedItems.map { ($0.originalURL, $0.bytesReclaimed) },
-            uniquingKeysWith: { first, _ in first }
-        )
-    }
-
-    private func pruneSnapshot(reclaimedBytesByURL: [URL: Int64]) {
-        guard let currentSnapshot = snapshot, !reclaimedBytesByURL.isEmpty else { return }
-        let updatedFindings = currentSnapshot.findings.compactMap { finding in
-            pruneDeletedPaths(from: finding, reclaimedBytesByURL: reclaimedBytesByURL)
-        }
-        snapshot = ScanSnapshot(
-            findings: updatedFindings,
-            scannedItemCount: currentSnapshot.scannedItemCount,
-            duration: currentSnapshot.duration
-        )
-    }
-
-    private func recordEmulatorCleanupAudit(_ images: [EmulatorImage]) {
-        guard let historyStore else { return }
-        let grouped = Dictionary(grouping: images) { image in
-            emulatorStorageKind(for: image)
-        }
-        let entries = grouped.keys.sorted { $0.rawValue < $1.rawValue }.map { kind in
-            let images = grouped[kind, default: []]
-            let samplePaths = images.compactMap(\.trashDirectoryURL)
-            return CleanupAuditEntry(
-                kind: kind,
-                bytesReclaimed: images.reduce(0) { $0 + $1.bytes },
-                itemCount: images.count,
-                samplePaths: CleanupAuditRecorder.samplePaths(from: samplePaths)
-            )
-        }
-        historyStore.recordCleanupActions(entries, disk: currentScanDiskSnapshot())
-    }
-
-    private func emulatorStorageKind(for image: EmulatorImage) -> StorageFindingKind {
-        switch image.platform {
-        case .appleSimulator, .simulatorDevices:
-            .xcodeArtifacts
-        case .iosDeviceSupport:
-            .iosDeviceSupport
-        case .androidEmulator:
-            .androidStudioArtifacts
-        }
-    }
-
-    /// Removes the deleted paths from a finding and decrements its byte total using the sizes
-    /// captured at delete time, avoiding any synchronous filesystem access on the main actor.
-    /// Returns `nil` when the finding has no remaining paths.
-    private func pruneDeletedPaths(
-        from finding: StorageFinding,
-        reclaimedBytesByURL: [URL: Int64]
-    ) -> StorageFinding? {
-        // Duplicate findings are rebuilt from their (pruned) groups so deletions of any copy —
-        // including a re-elected keep copy that never appears in `filePaths` — stay consistent.
-        if !finding.duplicateGroups.isEmpty {
-            return prunedDuplicateFinding(from: finding, deletedURLs: reclaimedBytesByURL)
-        }
-
-        let remainingPaths = finding.filePaths.filter { scannedURL in
-            !reclaimedBytesByURL.keys.contains { deletedURL in
-                deletedURL.matchesFilesystemURL(scannedURL)
-            }
-        }
-        guard !remainingPaths.isEmpty else { return nil }
-
-        let reclaimedBytes = reclaimedBytesByURL.reduce(Int64(0)) { total, entry in
-            finding.contains(entry.key) ? total + entry.value : total
-        }
-        guard reclaimedBytes > 0 || remainingPaths.count != finding.filePaths.count else { return finding }
-
-        let updatedBytes = max(0, finding.bytes - reclaimedBytes)
-        guard updatedBytes > 0 else { return nil }
-
-        return StorageFinding(
-            kind: finding.kind,
-            domain: finding.domain,
-            bytes: updatedBytes,
-            itemCount: remainingPaths.count,
-            safety: finding.safety,
-            examples: finding.examples,
-            filePaths: remainingPaths,
-            pathBytes: finding.pathBytes.filter { path, _ in
-                remainingPaths.contains { $0.matchesFilesystemURL(path) }
-            }
-        )
-    }
-
-    /// Records one audit entry per affected category so cleanup history reflects what was
-    /// removed. See `DashboardViewModel+CleanupAudit.swift` for the attribution rules
-    /// (snapshot-first, `CleanupOption` fallback, `.junkFiles` last resort).
-    private func recordCleanupAudit(reclaimedBytesByURL: [URL: Int64]) {
-        CleanupAuditRecorder.record(
-            reclaimedBytesByURL: reclaimedBytesByURL,
-            snapshot: snapshot,
-            historyStore: historyStore,
-            disk: currentScanDiskSnapshot()
-        )
     }
 
     private func beginScanning(for kinds: Set<StorageFindingKind>?) {
@@ -519,39 +335,5 @@ extension DashboardViewModel {
     func openSystemSettings() {
         guard let url = SystemSettingsPane.fullDiskAccess.url else { return }
         NSWorkspace.shared.open(url)
-    }
-}
-
-extension DashboardViewModel {
-    func deleteFiles(_ urls: [URL]) async -> CleanupResult {
-        guard gateCleanup() else {
-            return CleanupResult(
-                deletedURLs: [],
-                deletedItems: [],
-                failedURLs: [],
-                totalBytesReclaimed: 0
-            )
-        }
-        let access = permissionHandler.beginHomeFolderAccess()
-        defer { access?.stop() }
-        let result = await cleanupService.delete(urls: urls)
-        await reconcileCleanup(result)
-        return result
-    }
-
-    func deleteFilesPermanently(_ urls: [URL]) async -> CleanupResult {
-        guard gateCleanup() else {
-            return CleanupResult(
-                deletedURLs: [],
-                deletedItems: [],
-                failedURLs: [],
-                totalBytesReclaimed: 0
-            )
-        }
-        let access = permissionHandler.beginHomeFolderAccess()
-        defer { access?.stop() }
-        let result = await cleanupService.deletePermanently(urls: urls)
-        await reconcileCleanup(result)
-        return result
     }
 }

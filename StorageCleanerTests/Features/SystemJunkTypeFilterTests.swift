@@ -65,7 +65,7 @@ final class SystemJunkTypeFilterTests: XCTestCase {
             totalBytesReclaimed: 40
         )
 
-        let feedback = SystemJunkCleanupFeedback.failed(result: result)
+        let feedback = CleanupFeedback.failed(result: result)
 
         XCTAssertEqual(feedback.title, "1 item needs permission")
         XCTAssertEqual(feedback.confirmTitle, "Retry Move")

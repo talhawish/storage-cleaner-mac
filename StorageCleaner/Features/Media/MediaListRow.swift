@@ -16,7 +16,7 @@ struct MediaListRow: View {
                     url: url,
                     sideLength: 64,
                     displaySideLength: 40,
-                    cornerRadius: 6,
+                    cornerRadius: AppTheme.Radius.small,
                     contentMode: .fill,
                     permissionHandler: permissionHandler
                 )
@@ -42,7 +42,7 @@ struct MediaListRow: View {
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18))
-                    .foregroundStyle(isSelected ? AppTheme.accent : Color(white: 0.55))
+                    .foregroundStyle(isSelected ? AppTheme.accent : .secondary)
                     .accessibilityHidden(true)
             }
             .padding(.vertical, 4)

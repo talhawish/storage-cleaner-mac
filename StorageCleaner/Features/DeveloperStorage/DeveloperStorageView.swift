@@ -203,7 +203,7 @@ struct DeveloperStorageRow: View {
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.chip, style: .continuous)
                     .fill(AppTheme.color(for: finding.domain).opacity(0.12))
                     .frame(width: 40, height: 40)
 

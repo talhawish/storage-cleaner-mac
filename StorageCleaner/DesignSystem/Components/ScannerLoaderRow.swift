@@ -119,7 +119,7 @@ struct ScannerLoaderRow: View {
             }
         }
         .frame(height: 2)
-        .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
+        .clipShape(Capsule())
     }
 
     // MARK: - Derived

@@ -120,11 +120,11 @@ struct RuntimeVersionsView: View {
     private var header: some View {
         HStack(spacing: 20) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: AppTheme.Radius.large, style: .continuous)
                     .fill(AppTheme.violet.opacity(0.12))
                     .frame(width: 64, height: 64)
                 Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(AppTheme.Typography.heroIcon)
                     .foregroundStyle(AppTheme.violet)
             }
             .accessibilityHidden(true)
@@ -142,7 +142,7 @@ struct RuntimeVersionsView: View {
 
             VStack(alignment: .trailing, spacing: 6) {
                 Text(StorageFormatting.bytes(totalReclaimable))
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(AppTheme.Typography.statValue)
                     .contentTransition(.numericText())
                 Text("reclaimable")
                     .font(.caption)
