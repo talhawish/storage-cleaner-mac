@@ -15,23 +15,35 @@ final class ProjectActivityScannerGitTests: XCTestCase {
         try? FileManager.default.removeItem(at: temporaryDirectory)
     }
 
-    func testGitStatusDetectsRepoAndUncommittedChanges() throws {
-        let root = temporaryDirectory.appending(path: "git_project", directoryHint: .isDirectory)
+    private func makeRepo(named name: String) throws -> URL {
+        let root = temporaryDirectory.appending(path: name, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let initProcess = Process()
-        initProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        initProcess.arguments = ["-C", root.path, "init"]
-        try initProcess.run()
-        initProcess.waitUntilExit()
+        try runGit(["init"], in: root)
+        return root
+    }
+
+    private func runGit(_ arguments: [String], in root: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-C", root.path] + arguments
+        try process.run()
+        process.waitUntilExit()
+    }
+
+    private func commitAll(in root: URL) throws {
+        try runGit(["add", "."], in: root)
+        try runGit(
+            ["-c", "user.name=test", "-c", "user.email=test@test.com", "commit", "-m", "init"],
+            in: root
+        )
+    }
+
+    func testGitStatusDetectsRepoAndUncommittedChanges() throws {
+        let root = try makeRepo(named: "git_project")
 
         try "{}".write(to: root.appending(path: "package.json"), atomically: true, encoding: .utf8)
         try "tracked-content".write(to: root.appending(path: "file.js"), atomically: true, encoding: .utf8)
-
-        let addProcess = Process()
-        addProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        addProcess.arguments = ["-C", root.path, "add", "file.js"]
-        try addProcess.run()
-        addProcess.waitUntilExit()
+        try runGit(["add", "file.js"], in: root)
 
         try "modified-content".write(to: root.appending(path: "file.js"), atomically: true, encoding: .utf8)
 
@@ -43,30 +55,10 @@ final class ProjectActivityScannerGitTests: XCTestCase {
     }
 
     func testGitStatusDetectsCleanRepo() throws {
-        let root = temporaryDirectory.appending(path: "clean_git", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let initProcess = Process()
-        initProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        initProcess.arguments = ["-C", root.path, "init"]
-        try initProcess.run()
-        initProcess.waitUntilExit()
+        let root = try makeRepo(named: "clean_git")
 
         try "{}".write(to: root.appending(path: "package.json"), atomically: true, encoding: .utf8)
-
-        let addProcess = Process()
-        addProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        addProcess.arguments = ["-C", root.path, "add", "."]
-        try addProcess.run()
-        addProcess.waitUntilExit()
-
-        let commitProcess = Process()
-        commitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        commitProcess.arguments = [
-            "-C", root.path, "-c", "user.name=test",
-            "-c", "user.email=test@test.com", "commit", "-m", "init"
-        ]
-        try commitProcess.run()
-        commitProcess.waitUntilExit()
+        try commitAll(in: root)
 
         let status = GitStatusDetector.detect(at: root)
         XCTAssertTrue(status.isRepo)
@@ -84,23 +76,63 @@ final class ProjectActivityScannerGitTests: XCTestCase {
         XCTAssertFalse(status.hasPendingWork)
     }
 
+    func testGitStatusHandlesFileMtimeOlderThanIndex() throws {
+        let root = try makeRepo(named: "old_mtime")
+
+        let fileURL = root.appending(path: "file.txt")
+        try "content".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "file.txt"], in: root)
+
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 0)],
+            ofItemAtPath: fileURL.path
+        )
+
+        let status = GitStatusDetector.detect(at: root)
+        XCTAssertTrue(status.isRepo)
+        XCTAssertTrue(status.hasUncommittedChanges, "stat mismatch should be treated as modified")
+    }
+
+    func testGitStatusHandlesFileLargerThan4GB() throws {
+        let root = try makeRepo(named: "huge_file")
+
+        let fileURL = root.appending(path: "big.bin")
+        try "x".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "big.bin"], in: root)
+
+        let handle = try FileHandle(forWritingTo: fileURL)
+        try handle.truncate(atOffset: UInt64(UInt32.max) + 1)
+        try handle.close()
+
+        let status = GitStatusDetector.detect(at: root)
+        XCTAssertTrue(status.isRepo)
+        XCTAssertTrue(status.hasUncommittedChanges)
+    }
+
+    func testGitStatusIgnoresSubmoduleDirectoryEntries() throws {
+        let root = try makeRepo(named: "with_submodule")
+
+        try "{}".write(to: root.appending(path: "package.json"), atomically: true, encoding: .utf8)
+        try commitAll(in: root)
+
+        let gitlinkSHA = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        try runGit(["update-index", "--add", "--cacheinfo", "160000,\(gitlinkSHA),vendor"], in: root)
+        try FileManager.default.createDirectory(
+            at: root.appending(path: "vendor", directoryHint: .isDirectory),
+            withIntermediateDirectories: true
+        )
+
+        let status = GitStatusDetector.detect(at: root)
+        XCTAssertTrue(status.isRepo)
+        XCTAssertFalse(status.hasUncommittedChanges, "gitlink entries must not read as modified files")
+    }
+
     func testScannerPropagatesGitStatusToProjectInfo() async throws {
-        let root = temporaryDirectory.appending(path: "scanned_git", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let initProcess = Process()
-        initProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        initProcess.arguments = ["-C", root.path, "init"]
-        try initProcess.run()
-        initProcess.waitUntilExit()
+        let root = try makeRepo(named: "scanned_git")
 
         try "{}".write(to: root.appending(path: "package.json"), atomically: true, encoding: .utf8)
         try Data(repeating: 1, count: 1000).write(to: root.appending(path: "index.js"))
-
-        let addProcess = Process()
-        addProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        addProcess.arguments = ["-C", root.path, "add", "."]
-        try addProcess.run()
-        addProcess.waitUntilExit()
+        try runGit(["add", "."], in: root)
 
         try "modified".write(to: root.appending(path: "index.js"), atomically: true, encoding: .utf8)
 

@@ -87,10 +87,21 @@ private struct GitIndexReader {
             guard let attrs = try? fileManager.attributesOfItem(atPath: fullPath) else {
                 return true
             }
-            let diskSize = UInt32(attrs[.size] as? UInt64 ?? 0)
-            let diskMtime = UInt32((attrs[.modificationDate] as? Date ?? .distantPast)
-                .timeIntervalSince1970)
-            return diskSize != size || abs(Int32(diskMtime - mtime)) > 1
+            // Gitlink (submodule) entries are directories on disk; their stat
+            // data never matches the index entry, so skip them.
+            if attrs[.type] as? FileAttributeType == .typeDirectory {
+                return false
+            }
+            // The index stores only the low 32 bits of the file size.
+            let diskSize = attrs[.size] as? UInt64 ?? 0
+            if UInt32(truncatingIfNeeded: diskSize) != size {
+                return true
+            }
+            guard let modified = attrs[.modificationDate] as? Date else {
+                return true
+            }
+            let delta = Int64(modified.timeIntervalSince1970.rounded()) - Int64(mtime)
+            return abs(delta) > 1
         }
     }
 
