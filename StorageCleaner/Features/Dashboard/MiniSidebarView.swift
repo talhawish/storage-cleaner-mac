@@ -8,7 +8,7 @@ import SwiftUI
 struct MiniSidebarView: View {
     @Binding var selection: SidebarItem?
     let isScanning: Bool
-    @State private var isDockerInstalled = DockerService.live.isInstalled
+    let isDockerInstalled: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,9 +81,6 @@ struct MiniSidebarView: View {
             }
         }
         .frame(width: AppTheme.MiniSidebar.width)
-        .task {
-            isDockerInstalled = DockerService.live.isInstalled
-        }
     }
 }
 

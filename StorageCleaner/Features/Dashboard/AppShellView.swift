@@ -77,13 +77,15 @@ private extension AppShellView {
         if isSidebarExpanded {
             SidebarView(
                 selection: selectionBinding,
-                isScanning: viewModel.isScanning
+                isScanning: viewModel.isScanning,
+                isDockerInstalled: viewModel.dockerService.isInstalled
             )
             .frame(width: 240)
         } else {
             MiniSidebarView(
                 selection: selectionBinding,
-                isScanning: viewModel.isScanning
+                isScanning: viewModel.isScanning,
+                isDockerInstalled: viewModel.dockerService.isInstalled
             )
         }
     }
@@ -115,8 +117,10 @@ private extension AppShellView {
                             developerStorageView()
                         case .section(.docker):
                             DockerView(
+                                service: viewModel.dockerService,
                                 canUseProActions: viewModel.canCleanup,
                                 onRequirePro: { _ = viewModel.gateFileAction() },
+                                onCleanupComplete: viewModel.reconcileDockerCleanup,
                                 onDockerChanged: {
                                     viewModel.startScan(for: [.dockerArtifacts])
                                 }

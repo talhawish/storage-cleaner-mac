@@ -10,10 +10,14 @@ struct DockerSnapshot: Sendable, Equatable {
     let volumes: [DockerVolume]
     let builderCache: DockerBuilderCache
     let stats: [DockerContainerStats]
+    let diskUsage: DockerDiskUsage?
+    let warnings: [String]
 
     var totalBytes: Int64 {
-        imageBytes + containerBytes + volumeBytes + builderCache.bytes
+        diskUsage?.totalBytes ?? (imageBytes + containerBytes + volumeBytes + builderCache.bytes)
     }
+
+    var reclaimableBytes: Int64 { diskUsage?.reclaimableBytes ?? builderCache.reclaimableBytes }
 
     var imageBytes: Int64 { images.reduce(0) { $0 + $1.bytes } }
     var containerBytes: Int64 { containers.reduce(0) { $0 + $1.writableBytes } }
@@ -37,6 +41,9 @@ struct DockerImage: Identifiable, Sendable, Equatable, Hashable {
     let tag: String
     let bytes: Int64
     let createdSince: String
+    let sharedBytes: Int64?
+    let uniqueBytes: Int64?
+    let containerCount: Int?
 
     var displayName: String {
         if repository == "<none>" && tag == "<none>" { return id }
@@ -65,6 +72,7 @@ struct DockerVolume: Identifiable, Sendable, Equatable, Hashable {
     let driver: String
     let mountpoint: URL?
     let bytes: Int64
+    let linkCount: Int?
 
     var id: String { name }
 }
@@ -72,8 +80,9 @@ struct DockerVolume: Identifiable, Sendable, Equatable, Hashable {
 struct DockerBuilderCache: Sendable, Equatable, Hashable {
     let bytes: Int64
     let entryCount: Int
+    let reclaimableBytes: Int64
 
-    static let empty = DockerBuilderCache(bytes: 0, entryCount: 0)
+    static let empty = DockerBuilderCache(bytes: 0, entryCount: 0, reclaimableBytes: 0)
 }
 
 struct DockerContainerStats: Identifiable, Sendable, Equatable, Hashable {
@@ -90,4 +99,9 @@ struct DockerContainerStats: Identifiable, Sendable, Equatable, Hashable {
 struct DockerActionResult: Sendable, Equatable {
     let succeeded: Bool
     let message: String
+}
+
+struct DockerCleanupEvent: Sendable, Equatable {
+    let bytesReclaimed: Int64
+    let itemCount: Int
 }

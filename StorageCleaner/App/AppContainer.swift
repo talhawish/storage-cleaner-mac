@@ -6,18 +6,21 @@ struct AppContainer: Sendable {
     let cleanupService: CleanupService
     let diskSpaceReader: any DiskSpaceReading
     let subscriptionService: any SubscriptionService
+    let dockerService: DockerService
 
     static var live: AppContainer {
         let permissionHandler = FileSystemPermissionService()
+        let dockerService = DockerService.live
         return AppContainer(
             storageScanner: SecurityScopedStorageScanner(
-                scanner: LiveStorageScanner.live(),
+                scanner: LiveStorageScanner.live(dockerService: dockerService),
                 permissionHandler: permissionHandler
             ),
             permissionHandler: permissionHandler,
             cleanupService: FileManagerCleanupService(),
             diskSpaceReader: LiveDiskSpaceService.shared,
-            subscriptionService: StoreKitSubscriptionService()
+            subscriptionService: StoreKitSubscriptionService(),
+            dockerService: dockerService
         )
     }
 
@@ -32,7 +35,8 @@ struct AppContainer: Sendable {
                 diskSpaceReader: DemoDiskSpaceService(),
                 subscriptionService: DemoSubscriptionService(
                     entitlement: arguments.contains("--use-demo-free-subscription") ? .free : .lifetime
-                )
+                ),
+                dockerService: .demo()
             )
         }
 

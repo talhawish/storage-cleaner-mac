@@ -125,6 +125,20 @@ extension DashboardViewModel {
         pruneSnapshot(reclaimedBytesByURL: reclaimedBytesByURL(from: deletedItems))
     }
 
+    /// Records Docker-managed removal in the same durable cleanup history as filesystem and
+    /// simulator cleanups. Docker resources do not have host filesystem URLs on macOS, so the
+    /// audit intentionally has no Finder sample path.
+    func reconcileDockerCleanup(_ event: DockerCleanupEvent) async {
+        await refreshVolumeSnapshotAsync()
+        historyStore?.recordCleanupActions([
+            CleanupAuditEntry(
+                kind: .dockerArtifacts,
+                bytesReclaimed: event.bytesReclaimed,
+                itemCount: event.itemCount
+            )
+        ], disk: currentScanDiskSnapshot())
+    }
+
     private func reconcileCleanup(
         _ result: CleanupResult,
         auditKind: StorageFindingKind? = nil,

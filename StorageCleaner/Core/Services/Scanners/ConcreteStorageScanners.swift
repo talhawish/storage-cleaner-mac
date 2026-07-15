@@ -30,7 +30,7 @@ struct DockerStorageScanner: StorageCategoryScanning {
     private let dockerService: DockerService
     private let fallbackScanner: PathListScanner
 
-    init(collector: FileSystemCollector, dockerService: DockerService = .live) {
+    init(collector: FileSystemCollector, dockerService: DockerService) {
         self.dockerService = dockerService
         fallbackScanner = PathListScanner(
             kind: .dockerArtifacts,
@@ -43,19 +43,34 @@ struct DockerStorageScanner: StorageCategoryScanning {
 
     func scan() async -> CategoryScanResult {
         let snapshot = await dockerService.loadSnapshot()
-        if snapshot.daemonAvailable, snapshot.totalBytes > 0 {
+        if snapshot.daemonAvailable {
+            guard let diskUsage = snapshot.diskUsage else {
+                return CategoryScanResult(
+                    finding: nil,
+                    inspectedItemCount: snapshot.itemCount,
+                    message: "Docker reclaimable storage is temporarily unavailable"
+                )
+            }
+            let reclaimableBytes = diskUsage.reclaimableBytes
+            guard reclaimableBytes > 0 else {
+                return CategoryScanResult(
+                    finding: nil,
+                    inspectedItemCount: snapshot.itemCount,
+                    message: "Docker has no currently reclaimable storage"
+                )
+            }
             return CategoryScanResult(
                 finding: StorageFinding(
                     kind: .dockerArtifacts,
                     domain: .containers,
-                    bytes: snapshot.totalBytes,
+                    bytes: reclaimableBytes,
                     itemCount: max(snapshot.itemCount, 1),
                     safety: .review,
                     examples: snapshot.overviewExamples,
                     filePaths: []
                 ),
                 inspectedItemCount: snapshot.itemCount,
-                message: "Measured Docker images, containers, volumes, and builder cache"
+                message: "Measured reclaimable Docker images, containers, volumes, and builder cache"
             )
         }
 

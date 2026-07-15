@@ -1,35 +1,32 @@
 import SwiftUI
 
 struct DockerView: View {
-    private let service: DockerService
     private let onDockerChanged: () -> Void
+    private let onCleanupComplete: (DockerCleanupEvent) async -> Void
     private let canUseProActions: Bool
     private let onRequirePro: () -> Void
 
-    @State private var snapshot: DockerSnapshot?
-    @State private var isLoading = true
-    @State private var selectedTab: DockerTab = .containers
-    @State private var pendingAction: PendingDockerAction?
-    @State private var actionMessage: String?
-    @State private var loadTask: Task<Void, Never>?
+    @State private var viewModel: DockerViewModel
 
     init(
-        service: DockerService = .live,
+        service: DockerService,
         canUseProActions: Bool = true,
         onRequirePro: @escaping () -> Void = {},
+        onCleanupComplete: @escaping (DockerCleanupEvent) async -> Void = { _ in },
         onDockerChanged: @escaping () -> Void = {}
     ) {
-        self.service = service
         self.canUseProActions = canUseProActions
         self.onRequirePro = onRequirePro
+        self.onCleanupComplete = onCleanupComplete
         self.onDockerChanged = onDockerChanged
+        _viewModel = State(initialValue: DockerViewModel(service: service))
     }
 
     var body: some View {
         Group {
-            if isLoading && snapshot == nil {
+            if viewModel.isLoading && viewModel.snapshot == nil {
                 loadingState
-            } else if let snapshot {
+            } else if let snapshot = viewModel.snapshot {
                 if !snapshot.isInstalled {
                     notInstalledState
                 } else if !snapshot.daemonAvailable {
@@ -42,39 +39,32 @@ struct DockerView: View {
             }
         }
         .navigationTitle("Docker")
-        .navigationSubtitle(subtitle)
+        .navigationSubtitle(viewModel.subtitle)
+        .accessibilityIdentifier("docker-root")
         .toolbar { toolbarContent }
-        .onAppear { startLoading() }
-        .onDisappear { cancelLoading() }
-        .alert(item: $pendingAction) { action in
-            Alert(
-                title: Text(action.title),
-                message: Text(action.message),
-                primaryButton: .destructive(Text(action.confirmTitle)) {
-                    Task { await perform(action) }
+        .onAppear(perform: viewModel.startLoading)
+        .onDisappear(perform: viewModel.cancelLoading)
+        .sheet(item: $viewModel.pendingAction) { action in
+            DockerActionConfirmationSheet(
+                action: action,
+                onConfirm: {
+                    viewModel.pendingAction = nil
+                    perform(action)
                 },
-                secondaryButton: .cancel()
+                onCancel: { viewModel.pendingAction = nil }
             )
         }
-    }
-
-    private var subtitle: String {
-        guard let snapshot else { return "Checking Docker" }
-        if !snapshot.isInstalled { return "Not installed" }
-        if !snapshot.daemonAvailable { return "Installed, daemon unavailable" }
-        return "\(snapshot.containers.count) containers - \(snapshot.images.count) images - "
-            + StorageFormatting.bytes(snapshot.totalBytes)
     }
 
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem {
             Button {
-                startLoading()
+                viewModel.startLoading()
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
             .keyboardShortcut("r", modifiers: [.command])
-            .disabled(isLoading)
+            .disabled(viewModel.isLoading || viewModel.isPerformingAction)
             .help("Refresh Docker inventory")
         }
     }
@@ -86,24 +76,17 @@ struct DockerView: View {
             tabBar
             Divider()
 
-            if let actionMessage {
-                HStack(spacing: 8) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundStyle(AppTheme.accent)
-                        .accessibilityHidden(true)
-                    Text(actionMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 9)
-                .background(.regularMaterial)
+            if !snapshot.warnings.isEmpty {
+                DockerWarningBanner(warnings: snapshot.warnings)
+            }
+
+            if let result = viewModel.actionResult {
+                DockerActionResultBanner(result: result)
             }
 
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    switch selectedTab {
+                    switch viewModel.selectedTab {
                     case .containers:
                         containerList(snapshot)
                     case .images:
@@ -117,6 +100,14 @@ struct DockerView: View {
                     }
                 }
                 .padding(20)
+            }
+            .disabled(viewModel.isPerformingAction)
+            .overlay {
+                if viewModel.isPerformingAction {
+                    ProgressView("Waiting for Docker…")
+                        .padding(14)
+                        .background(.regularMaterial, in: .rect(cornerRadius: AppTheme.Radius.small))
+                }
             }
         }
     }
@@ -147,9 +138,14 @@ struct DockerView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(StorageFormatting.bytes(snapshot.totalBytes))
                         .font(.system(size: 27, weight: .bold, design: .rounded))
-                    Text("tracked")
+                    Text("used by Docker")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if snapshot.reclaimableBytes > 0 {
+                        Text("\(StorageFormatting.bytes(snapshot.reclaimableBytes)) reclaimable")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.mint)
+                    }
                 }
             }
 
@@ -167,28 +163,32 @@ struct DockerView: View {
             DockerMetricTile(
                 title: "Images",
                 value: "\(snapshot.images.count)",
-                detail: StorageFormatting.bytes(snapshot.imageBytes)
+                usedBytes: snapshot.diskUsage?.images.usedBytes ?? snapshot.imageBytes,
+                reclaimableBytes: snapshot.diskUsage?.images.reclaimableBytes
             )
             DockerMetricTile(
                 title: "Containers",
                 value: "\(snapshot.containers.count)",
-                detail: StorageFormatting.bytes(snapshot.containerBytes)
+                usedBytes: snapshot.diskUsage?.containers.usedBytes ?? snapshot.containerBytes,
+                reclaimableBytes: snapshot.diskUsage?.containers.reclaimableBytes
             )
             DockerMetricTile(
                 title: "Volumes",
                 value: "\(snapshot.volumes.count)",
-                detail: StorageFormatting.bytes(snapshot.volumeBytes)
+                usedBytes: snapshot.diskUsage?.volumes.usedBytes ?? snapshot.volumeBytes,
+                reclaimableBytes: snapshot.diskUsage?.volumes.reclaimableBytes
             )
             DockerMetricTile(
                 title: "Build Cache",
                 value: "\(snapshot.builderCache.entryCount)",
-                detail: StorageFormatting.bytes(snapshot.builderCache.bytes)
+                usedBytes: snapshot.builderCache.bytes,
+                reclaimableBytes: snapshot.builderCache.reclaimableBytes
             )
         }
     }
 
     private var tabBar: some View {
-        Picker("Docker section", selection: $selectedTab) {
+        Picker("Docker section", selection: $viewModel.selectedTab) {
             ForEach(DockerTab.allCases) { tab in
                 Label(tab.title, systemImage: tab.symbolName).tag(tab)
             }
@@ -211,8 +211,8 @@ struct DockerView: View {
                     DockerContainerRow(
                         container: container,
                         stats: statsByID[container.id] ?? statsByName[container.name],
-                        onStop: { request(.stopContainer(id: container.id, name: container.name)) },
-                        onRemove: { request(.removeContainer(id: container.id, name: container.name)) }
+                        onStop: { request(.stopContainer(container)) },
+                        onRemove: { request(.removeContainer(container)) }
                     )
                 }
             }
@@ -227,7 +227,7 @@ struct DockerView: View {
                 ForEach(snapshot.images) { image in
                     DockerImageRow(
                         image: image,
-                        onRemove: { request(.removeImage(id: image.id, name: image.displayName)) }
+                        onRemove: { request(.removeImage(image)) }
                     )
                 }
             }
@@ -242,7 +242,7 @@ struct DockerView: View {
                 ForEach(snapshot.volumes) { volume in
                     DockerVolumeRow(
                         volume: volume,
-                        onRemove: { request(.removeVolume(name: volume.name)) }
+                        onRemove: { request(.removeVolume(volume)) }
                     )
                 }
             }
@@ -269,11 +269,11 @@ struct DockerView: View {
                 Spacer()
 
                 Button(role: .destructive) {
-                    request(.pruneBuilderCache)
+                    request(.pruneBuilderCache(cache))
                 } label: {
                     Label("Prune", systemImage: "trash")
                 }
-                .disabled(cache.bytes == 0)
+                .disabled(cache.reclaimableBytes == 0)
             }
 
             Text(
@@ -340,7 +340,7 @@ struct DockerView: View {
                     tint: .secondary
                 )
             ],
-            cancelAction: cancelLoading
+            cancelAction: viewModel.cancelLoading
         )
     }
 
@@ -352,7 +352,7 @@ struct DockerView: View {
             systemImage: "shippingbox",
             tint: AppTheme.violet,
             actionTitle: "Refresh",
-            action: startLoading
+            action: viewModel.startLoading
         )
         .frame(minHeight: 430)
     }
@@ -364,7 +364,7 @@ struct DockerView: View {
             systemImage: "shippingbox.fill",
             tint: AppTheme.violet,
             actionTitle: "Refresh",
-            action: startLoading
+            action: viewModel.startLoading
         )
         .frame(minHeight: 430)
     }
@@ -373,161 +373,22 @@ struct DockerView: View {
 // MARK: - Behaviour
 
 private extension DockerView {
-    func load() async {
-        isLoading = true
-        let nextSnapshot = await service.loadSnapshot()
-        guard !Task.isCancelled else { return }
-        snapshot = nextSnapshot
-        isLoading = false
-        loadTask = nil
-    }
-
-    func startLoading() {
-        loadTask?.cancel()
-        loadTask = Task { await load() }
-    }
-
-    func cancelLoading() {
-        loadTask?.cancel()
-        loadTask = nil
-        isLoading = false
-    }
-
     func request(_ action: PendingDockerAction) {
         guard canUseProActions else {
             onRequirePro()
             return
         }
-        pendingAction = action
+        viewModel.pendingAction = action
     }
 
-    func perform(_ action: PendingDockerAction) async {
-        actionMessage = nil
-        let result: DockerActionResult
-        switch action {
-        case let .stopContainer(id, _):
-            result = await service.stopContainer(id: id)
-        case let .removeContainer(id, _):
-            result = await service.removeContainer(id: id)
-        case let .removeImage(id, _):
-            result = await service.removeImage(id: id)
-        case let .removeVolume(name):
-            result = await service.removeVolume(name: name)
-        case .pruneBuilderCache:
-            result = await service.pruneBuilderCache()
-        }
-
-        actionMessage = result.message
-        if result.succeeded {
-            await load()
+    func perform(_ action: PendingDockerAction) {
+        Task {
+            let outcome = await viewModel.perform(action)
+            guard outcome.succeeded else { return }
+            if let cleanup = outcome.cleanup {
+                await onCleanupComplete(cleanup)
+            }
             onDockerChanged()
         }
-    }
-}
-
-private enum DockerTab: String, CaseIterable, Identifiable {
-    case containers
-    case images
-    case volumes
-    case buildCache
-    case stats
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .containers: "Containers"
-        case .images: "Images"
-        case .volumes: "Volumes"
-        case .buildCache: "Build Cache"
-        case .stats: "Stats"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .containers: "shippingbox"
-        case .images: "photo.stack"
-        case .volumes: "externaldrive"
-        case .buildCache: "hammer"
-        case .stats: "chart.line.uptrend.xyaxis"
-        }
-    }
-}
-
-private enum PendingDockerAction: Identifiable {
-    case stopContainer(id: String, name: String)
-    case removeContainer(id: String, name: String)
-    case removeImage(id: String, name: String)
-    case removeVolume(name: String)
-    case pruneBuilderCache
-
-    var id: String {
-        switch self {
-        case let .stopContainer(id, _): "stop.\(id)"
-        case let .removeContainer(id, _): "remove-container.\(id)"
-        case let .removeImage(id, _): "remove-image.\(id)"
-        case let .removeVolume(name): "remove-volume.\(name)"
-        case .pruneBuilderCache: "prune-builder-cache"
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .stopContainer: "Stop Container?"
-        case .removeContainer: "Remove Container?"
-        case .removeImage: "Remove Image?"
-        case .removeVolume: "Remove Volume?"
-        case .pruneBuilderCache: "Prune Builder Cache?"
-        }
-    }
-
-    var message: String {
-        switch self {
-        case let .stopContainer(_, name):
-            "Docker will stop \(name)."
-        case let .removeContainer(_, name):
-            "Docker will remove \(name). Stopped containers can be recreated from their image."
-        case let .removeImage(_, name):
-            "Docker will remove \(name). Images used by containers may fail to remove "
-                + "until those containers are removed."
-        case let .removeVolume(name):
-            "Docker will remove volume \(name). Volume data is not moved to the Trash."
-        case .pruneBuilderCache:
-            "Docker will remove reusable build cache layers."
-        }
-    }
-
-    var confirmTitle: String {
-        switch self {
-        case .stopContainer: "Stop"
-        case .removeContainer: "Remove"
-        case .removeImage: "Remove"
-        case .removeVolume: "Remove"
-        case .pruneBuilderCache: "Prune"
-        }
-    }
-}
-
-private struct DockerMetricTile: View {
-    let title: String
-    let value: String
-    let detail: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title3.weight(.semibold))
-            Text(detail)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(AppTheme.subtleSurface)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous))
     }
 }

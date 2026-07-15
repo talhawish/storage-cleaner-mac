@@ -280,7 +280,10 @@ Storage cleanup is destructive by nature. Production cleanup work must preserve 
 - Every cleanup produces a detailed audit record.
 - Paths are validated immediately before action to prevent stale or unsafe operations.
 
-The current app intentionally implements no deletion operation.
+Cleanup is always user-initiated and confirmed. Filesystem-backed items move to the Trash whenever
+possible; tool-managed resources such as Docker images, containers, volumes, build cache, and Apple
+simulator runtimes use their owning CLI and are explicitly labeled when removal is permanent. Every
+successful cleanup is written to Cleanup History.
 
 ## Detection coverage
 
@@ -288,7 +291,11 @@ The live scanner currently inspects these storage candidate types:
 
 - Xcode artifacts: DerivedData, archives, simulators, and SwiftPM checkouts
 - Node dependencies: `node_modules`, npm, pnpm, and yarn caches
-- Docker artifacts: Docker, OrbStack, Colima images, layers, volumes, and builder caches
+- Docker artifacts: the Docker screen queries the active Docker context for images, containers,
+  volumes, live stats, canonical daemon disk usage, and reclaimable build cache. Per-resource removal
+  uses the Docker CLI after an exact confirmation preview; permanent volume removal is called out
+  explicitly. The dashboard reports Docker's reclaimable bytes rather than double-counting shared
+  image layers. OrbStack and Colima backing stores remain read-only scan coverage.
 - Flutter artifacts: pub cache, build folders, and generated app bundles
 - Android Studio artifacts: SDK caches, emulator files, system images, Studio caches, and Gradle outputs
 - Leftover mobile packages: loose APK and AAB files from Android builds or emulator exports

@@ -16,6 +16,7 @@ final class DashboardViewModel {
     /// as read-only outside that file.
     let cleanupService: CleanupService
     let cliRemovalService: CLIRemovalService
+    let dockerService: DockerService
     let historyStore: (any ScanHistoryStore)?
     /// Owns the app's current Pro/Free entitlement. Optional so existing
     /// unit tests that don't care about subscriptions can still construct
@@ -77,6 +78,7 @@ final class DashboardViewModel {
         permissionHandler: any StoragePermissionHandling = FileSystemPermissionService(),
         cleanupService: CleanupService = FileManagerCleanupService(),
         cliRemovalService: CLIRemovalService = .live,
+        dockerService: DockerService = .live,
         diskSpaceReader: any DiskSpaceReading = LiveDiskSpaceService.shared,
         historyStore: (any ScanHistoryStore)? = nil,
         subscriptionController: SubscriptionController? = nil
@@ -85,6 +87,7 @@ final class DashboardViewModel {
         self.permissionHandler = permissionHandler
         self.cleanupService = cleanupService
         self.cliRemovalService = cliRemovalService
+        self.dockerService = dockerService
         self.diskSpaceReader = diskSpaceReader
         self.historyStore = historyStore
         self.subscriptionController = subscriptionController

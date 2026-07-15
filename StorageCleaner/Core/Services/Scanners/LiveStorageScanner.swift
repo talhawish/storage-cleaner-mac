@@ -215,10 +215,17 @@ struct LiveStorageScanner: StorageScanning {
 
 extension LiveStorageScanner {
     static func live() -> LiveStorageScanner {
-        live(permissionHandler: nil)
+        live(dockerService: .live, permissionHandler: nil)
     }
 
     static func live(permissionHandler: (any StoragePermissionHandling)?) -> LiveStorageScanner {
+        live(dockerService: .live, permissionHandler: permissionHandler)
+    }
+
+    static func live(
+        dockerService: DockerService,
+        permissionHandler: (any StoragePermissionHandling)? = nil
+    ) -> LiveStorageScanner {
         let collector = FileSystemCollector()
         let appCatalog = LazyInstalledAppCatalog()
         // The scanners below share the user's home folders (Downloads, Desktop,
@@ -231,7 +238,7 @@ extension LiveStorageScanner {
         let scanners: [any StorageCategoryScanning] = [
             XcodeStorageScanner(collector: collector),
             IosDeviceSupportScanner(),
-            DockerStorageScanner(collector: collector),
+            DockerStorageScanner(collector: collector, dockerService: dockerService),
             FlutterStorageScanner(collector: collector),
             ReactNativeStorageScanner(collector: collector),
             AndroidStudioStorageScanner(collector: collector),

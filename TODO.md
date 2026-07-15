@@ -72,7 +72,7 @@
 ## Phase 4 - Containers & Virtualization
 
 * [x] Docker read-only scanner
-* [ ] Docker cleanup
+* [x] Docker cleanup
 * [ ] OrbStack cleanup
 * [ ] Colima cleanup
 * [ ] VM storage analyzer

@@ -42,6 +42,7 @@ struct DockerContainerRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
 
                 containerMetadata
 
@@ -81,20 +82,20 @@ struct DockerContainerRow: View {
     private var actionButtons: some View {
         HStack(spacing: 8) {
             if container.isRunning {
-                Button(action: onStop) {
-                    Image(systemName: "stop.fill")
-                        .accessibilityHidden(true)
-                }
-                .accessibilityLabel("Stop container")
-                .help("Stop container")
+                Button("Stop \(container.name)", systemImage: "stop.fill", action: onStop)
+                    .labelStyle(.iconOnly)
+                    .help("Stop \(container.name)")
             }
 
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "trash")
-                    .accessibilityHidden(true)
-            }
-            .accessibilityLabel("Remove container")
-            .help("Remove container")
+            Button("Remove \(container.name)", systemImage: "trash", role: .destructive, action: onRemove)
+                .labelStyle(.iconOnly)
+                .accessibilityLabel("Remove container")
+                .disabled(container.isRunning)
+                .help(
+                    container.isRunning
+                        ? "Stop \(container.name) before removing it"
+                        : "Remove \(container.name)"
+                )
         }
         .buttonStyle(.bordered)
     }
@@ -116,10 +117,29 @@ struct DockerImageRow: View {
                 Text(image.displayName)
                     .font(.headline)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 Text("\(image.id) - \(image.createdSince)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
+
+                HStack(spacing: 12) {
+                    if let uniqueBytes = image.uniqueBytes {
+                        Label("\(StorageFormatting.bytes(uniqueBytes)) unique", systemImage: "square")
+                    }
+                    if let sharedBytes = image.sharedBytes, sharedBytes > 0 {
+                        Label("\(StorageFormatting.bytes(sharedBytes)) shared", systemImage: "square.stack.3d.up")
+                    }
+                    if let containerCount = image.containerCount, containerCount > 0 {
+                        Label(
+                            "Used by \(containerCount) container\(containerCount == 1 ? "" : "s")",
+                            systemImage: "shippingbox"
+                        )
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -128,16 +148,21 @@ struct DockerImageRow: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
 
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "trash")
-                    .accessibilityHidden(true)
-            }
+            Button("Remove \(image.displayName)", systemImage: "trash", role: .destructive, action: onRemove)
+                .labelStyle(.iconOnly)
             .buttonStyle(.bordered)
-            .accessibilityLabel("Remove image")
-            .help("Remove image")
+            .disabled((image.containerCount ?? 0) > 0)
+            .help(imageRemovalHelp)
         }
         .padding(16)
         .cardSurface()
+    }
+
+    private var imageRemovalHelp: String {
+        guard let containerCount = image.containerCount, containerCount > 0 else {
+            return "Remove \(image.displayName)"
+        }
+        return "Remove the \(containerCount) dependent container\(containerCount == 1 ? "" : "s") first"
     }
 }
 
@@ -157,28 +182,48 @@ struct DockerVolumeRow: View {
                 Text(volume.name)
                     .font(.headline)
                     .lineLimit(1)
-                Text(volume.mountpoint?.path ?? volume.driver)
+                Text(volume.mountpoint?.path ?? "Driver: \(volume.driver)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(volume.mountpoint?.path ?? "Driver: \(volume.driver)")
+
+                if let linkCount = volume.linkCount, linkCount > 0 {
+                    Label(
+                        "Used by \(linkCount) container\(linkCount == 1 ? "" : "s")",
+                        systemImage: "link"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
 
-            Text(StorageFormatting.bytes(volume.bytes))
+            Text(
+                volume.linkCount == nil && volume.bytes == 0
+                    ? "Size unavailable"
+                    : StorageFormatting.bytes(volume.bytes)
+            )
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
 
-            Button(role: .destructive, action: onRemove) {
-                Image(systemName: "trash")
-                    .accessibilityHidden(true)
-            }
+            Button("Remove \(volume.name)", systemImage: "trash", role: .destructive, action: onRemove)
+                .labelStyle(.iconOnly)
             .buttonStyle(.bordered)
-            .accessibilityLabel("Remove volume")
-            .help("Remove volume")
+            .disabled((volume.linkCount ?? 0) > 0)
+            .help(volumeRemovalHelp)
         }
         .padding(16)
         .cardSurface()
+    }
+
+    private var volumeRemovalHelp: String {
+        guard let linkCount = volume.linkCount, linkCount > 0 else {
+            return "Permanently remove \(volume.name)"
+        }
+        return "Remove the \(linkCount) dependent container\(linkCount == 1 ? "" : "s") first"
     }
 }
 

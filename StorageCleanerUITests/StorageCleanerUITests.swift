@@ -69,6 +69,20 @@ final class StorageCleanerUITests: XCTestCase {
     }
 
     @MainActor
+    func testDockerInventoryLoadsFromDemoService() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+
+        let dockerRow = app.descendants(matching: .any)["sidebar-docker"]
+        XCTAssertTrue(dockerRow.waitForExistence(timeout: 4))
+        dockerRow.click()
+
+        let dockerRoot = app.descendants(matching: .any)["docker-root"]
+        XCTAssertTrue(dockerRoot.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["api-dev"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["6.85 GB"].waitForExistence(timeout: 4))
+    }
+
+    @MainActor
     func testSidebarPagesOpenWithoutUnexpectedDetailPushes() {
         let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
         startScanAndWaitForResults(in: app)

@@ -96,7 +96,7 @@ final class SectionStateViewsTests: XCTestCase {
     /// the new phase routing — their `emptyState` is the post-scan empty
     /// state, used only after their own load returns nothing.
     func testNoScanRequiredViewStillUsesEmptyStateView() {
-        let dockView = DockerView()
+        let dockView = DockerView(service: .demo())
         let appsView = AppsView()
 
         let dockMirror = Mirror(reflecting: dockView)
@@ -104,7 +104,7 @@ final class SectionStateViewsTests: XCTestCase {
 
         // Sanity: the views exist and can be reflected (catches accidental
         // refactors that break their public surface).
-        XCTAssertNotNil(dockMirror.children.first(where: { $0.label == "service" }))
+        XCTAssertNotNil(dockMirror.children.first(where: { $0.label == "_viewModel" }))
         XCTAssertNotNil(appsMirror.children.first(where: { $0.label == "inventoryService" }))
     }
 

@@ -237,6 +237,32 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         XCTAssertEqual(store.recordedCleanups.first?.first?.samplePaths, [])
     }
 
+    func testDockerCleanupRecordsPermanentRemovalInAuditHistory() async {
+        let store = SpyHistoryStore()
+        let viewModel = makeViewModel(
+            finding: StorageFinding(
+                kind: .dockerArtifacts,
+                domain: .containers,
+                bytes: 90_000,
+                itemCount: 3,
+                safety: .review,
+                examples: [],
+                filePaths: []
+            ),
+            historyStore: store
+        )
+        await loadSnapshot(in: viewModel)
+
+        await viewModel.reconcileDockerCleanup(
+            DockerCleanupEvent(bytesReclaimed: 64_000, itemCount: 1)
+        )
+
+        XCTAssertEqual(store.recordedCleanups.first?.first?.kind, .dockerArtifacts)
+        XCTAssertEqual(store.recordedCleanups.first?.first?.bytesReclaimed, 64_000)
+        XCTAssertEqual(store.recordedCleanups.first?.first?.itemCount, 1)
+        XCTAssertEqual(store.recordedCleanups.first?.first?.samplePaths, [])
+    }
+
     private func makeViewModel(
         finding: StorageFinding,
         cliSizes: [URL: Int64] = [:],

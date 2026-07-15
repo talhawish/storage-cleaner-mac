@@ -26,8 +26,7 @@ final class DockerServiceTests: XCTestCase {
             isDockerDesktopInstalled: { true },
             runCommand: { _, arguments in
                 outputs[arguments.joined(separator: " ")] ?? .init(exitCode: 1, output: "missing")
-            },
-            measure: { _ in 7_000_000 }
+            }
         )
 
         let snapshot = await service.loadSnapshot()
@@ -39,22 +38,72 @@ final class DockerServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.containers.count, 1)
         XCTAssertEqual(snapshot.volumes.count, 1)
         XCTAssertEqual(snapshot.stats.count, 1)
-        XCTAssertEqual(snapshot.builderCache.entryCount, 2)
-        XCTAssertEqual(snapshot.totalBytes, 214_000_000)
+        XCTAssertEqual(snapshot.builderCache.entryCount, 8)
+        XCTAssertEqual(snapshot.builderCache.reclaimableBytes, 30_000_000)
+        XCTAssertEqual(snapshot.totalBytes, 169_000_000)
+        XCTAssertEqual(snapshot.reclaimableBytes, 72_000_000)
+        XCTAssertEqual(snapshot.images.first?.uniqueBytes, 80_000_000)
+        XCTAssertEqual(snapshot.images.first?.sharedBytes, 40_000_000)
+        XCTAssertEqual(snapshot.images.first?.containerCount, 1)
+        XCTAssertEqual(snapshot.volumes.first?.bytes, 7_000_000)
+        XCTAssertEqual(snapshot.volumes.first?.linkCount, 0)
+        XCTAssertTrue(snapshot.warnings.isEmpty)
     }
 
     func testSnapshotReportsInstalledWhenDesktopExistsButCLIIsMissing() async {
         let service = DockerService(
             locateDocker: { nil },
             isDockerDesktopInstalled: { true },
-            runCommand: { _, _ in .init(exitCode: 1, output: "") },
-            measure: { _ in 0 }
+            runCommand: { _, _ in .init(exitCode: 1, output: "") }
         )
 
         let snapshot = await service.loadSnapshot()
 
         XCTAssertTrue(snapshot.isInstalled)
         XCTAssertFalse(snapshot.daemonAvailable)
+    }
+
+    func testParsesCanonicalDiskUsageWithoutDoubleCountingSharedLayers() throws {
+        let usage = try XCTUnwrap(DockerService.parseDiskUsage(Self.diskUsageSummary))
+
+        XCTAssertEqual(usage.images.usedBytes, 100_000_000)
+        XCTAssertEqual(usage.images.reclaimableBytes, 40_000_000)
+        XCTAssertEqual(usage.volumes.activeCount, 1)
+        XCTAssertEqual(usage.totalBytes, 169_000_000)
+        XCTAssertEqual(usage.reclaimableBytes, 72_000_000)
+    }
+
+    func testPartialInventoryFailureIsSurfacedInsteadOfLookingEmpty() async {
+        let docker = URL(fileURLWithPath: "/usr/local/bin/docker")
+        let service = DockerService(
+            locateDocker: { docker },
+            isDockerDesktopInstalled: { true },
+            runCommand: { _, arguments in
+                if arguments.first == "version" { return .init(exitCode: 0, output: "26.1.0") }
+                if arguments.first == "info" { return .init(exitCode: 0, output: "{}") }
+                return .init(exitCode: 1, output: "permission denied")
+            }
+        )
+
+        let snapshot = await service.loadSnapshot()
+
+        XCTAssertTrue(snapshot.daemonAvailable)
+        XCTAssertTrue(snapshot.images.isEmpty)
+        XCTAssertTrue(snapshot.warnings.contains { $0.contains("images") && $0.contains("permission denied") })
+        XCTAssertTrue(snapshot.warnings.contains { $0.contains("disk usage") })
+    }
+
+    func testDemoServiceProvidesCompleteDeterministicInventory() async {
+        let snapshot = await DockerService.demo().loadSnapshot()
+
+        XCTAssertTrue(snapshot.isInstalled)
+        XCTAssertTrue(snapshot.daemonAvailable)
+        XCTAssertEqual(snapshot.containers.map(\.name), ["api-dev", "redis-dev"])
+        XCTAssertEqual(snapshot.images.count, 2)
+        XCTAssertEqual(snapshot.volumes.count, 2)
+        XCTAssertEqual(snapshot.builderCache.entryCount, 34)
+        XCTAssertEqual(snapshot.reclaimableBytes, 2_177_000_000)
+        XCTAssertTrue(snapshot.warnings.isEmpty)
     }
 
     private static var dockerInventoryOutputs: [String: DockerService.CommandOutput] {
@@ -74,13 +123,10 @@ final class DockerServiceTests: XCTestCase {
                 exitCode: 0,
                 output: #"{"Name":"redis-data","Driver":"local"}"# + "\n"
             ),
-            "volume inspect redis-data --format {{json .}}": .init(
+            "system df --format {{json .}}": .init(exitCode: 0, output: diskUsageSummary),
+            "system df --verbose --format {{json .}}": .init(
                 exitCode: 0,
-                output: #"{"Mountpoint":"/tmp/redis-data"}"# + "\n"
-            ),
-            "builder du --verbose --format {{json .}}": .init(
-                exitCode: 0,
-                output: #"{"Size":"50MB"}"# + "\n" + #"{"Size":"25MB"}"# + "\n"
+                output: detailedDiskUsage
             ),
             "stats --no-stream --format {{json .}}": .init(
                 exitCode: 0,
@@ -98,5 +144,20 @@ final class DockerServiceTests: XCTestCase {
         #"{"Container":"abc123","Name":"redis-dev","CPUPerc":"0.15%","#
             + #""MemUsage":"42MiB / 2GiB","MemPerc":"2.1%","NetIO":"1kB / 2kB","#
             + #""BlockIO":"3MB / 4MB","PIDs":"12"}"#
+    }
+
+    private static var diskUsageSummary: String {
+        [
+            #"{"Type":"Images","TotalCount":"1","Active":"1","Size":"100MB","Reclaimable":"40MB (40%)"}"#,
+            #"{"Type":"Containers","TotalCount":"1","Active":"1","Size":"12MB","Reclaimable":"0B"}"#,
+            #"{"Type":"Local Volumes","TotalCount":"1","Active":"1","Size":"7MB","Reclaimable":"2MB (28%)"}"#,
+            #"{"Type":"Build Cache","TotalCount":"8","Active":"2","Size":"50MB","Reclaimable":"30MB"}"#
+        ].joined(separator: "\n")
+    }
+
+    private static var detailedDiskUsage: String {
+        #"{"Images":[{"ID":"img1","SharedSize":"40MB","UniqueSize":"80MB","Containers":"1"}],"#
+            + #""Containers":[],"Volumes":[{"Name":"redis-data","Links":"0","Size":"7MB"}],"#
+            + #""BuildCache":[]}"#
     }
 }

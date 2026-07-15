@@ -457,8 +457,10 @@ extension AppShellView {
 
     private func dockerDestination() -> some View {
         DockerView(
+            service: viewModel.dockerService,
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() },
+            onCleanupComplete: viewModel.reconcileDockerCleanup,
             onDockerChanged: { viewModel.startScan(for: [.dockerArtifacts]) }
         )
     }
