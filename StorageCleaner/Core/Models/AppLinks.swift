@@ -4,17 +4,18 @@ import Foundation
 /// marketing). Keeping them in one place means a marketing/website
 /// change is a one-line edit instead of a hunt through the codebase.
 ///
-/// Update `terms` and `privacy` to the URLs you publish in App Store
-/// Connect before the first paid release — App Review requires a
-/// working EULA link on every auto-renewable subscription.
+/// Keep these values identical to the URLs supplied in App Store
+/// Connect. App Review requires working EULA and privacy links for
+/// every auto-renewable subscription.
 enum AppLinks {
-    /// End User License Agreement. Required by App Review guideline
-    /// 3.1.2 for any auto-renewable subscription.
-    static let terms = makeURL("https://storage-cleaner-a0c0f.web.app/terms")
+    /// Apple's Standard End User License Agreement. Required by App
+    /// Review guideline 3.1.2 for any auto-renewable subscription and
+    /// included verbatim in the App Store description.
+    static let terms = makeURL("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
     /// Privacy Policy. Required by App Review for any app that
     /// collects data — and shown in the paywall so subscribers know
     /// what they're agreeing to.
-    static let privacy = makeURL("https://storage-cleaner-a0c0f.web.app/privacy")
+    static let privacy = makeURL("https://storagecleaner.horizam.com/privacy")
 
     private static func makeURL(_ value: String) -> URL {
         guard let url = URL(string: value) else {

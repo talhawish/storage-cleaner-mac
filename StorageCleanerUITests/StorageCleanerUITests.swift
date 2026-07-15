@@ -66,6 +66,11 @@ final class StorageCleanerUITests: XCTestCase {
 
         let defaultThreshold = app.descendants(matching: .any)["large-file-threshold-100"]
         XCTAssertTrue(defaultThreshold.waitForExistence(timeout: 3))
+
+        let termsLink = app.links["Terms of Use (EULA)"]
+        let privacyLink = app.links["Privacy Policy"]
+        XCTAssertTrue(termsLink.waitForExistence(timeout: 3))
+        XCTAssertTrue(privacyLink.waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -260,12 +265,15 @@ final class StorageCleanerUITests: XCTestCase {
         let scrollView = app.descendants(matching: .any)["paywall-scroll-view"]
         XCTAssertTrue(scrollView.waitForExistence(timeout: 2))
 
-        let termsButton = app.buttons["paywall-terms"]
-        XCTAssertTrue(termsButton.waitForExistence(timeout: 2))
-        for _ in 0..<3 where !termsButton.isHittable {
+        let termsLink = app.descendants(matching: .any)["paywall-terms"]
+        let privacyLink = app.descendants(matching: .any)["paywall-privacy"]
+        XCTAssertTrue(termsLink.waitForExistence(timeout: 2))
+        XCTAssertTrue(privacyLink.waitForExistence(timeout: 2))
+        for _ in 0..<3 where !termsLink.isHittable || !privacyLink.isHittable {
             scrollView.swipeUp()
         }
-        XCTAssertTrue(termsButton.isHittable, "The paywall footer must be reachable by scrolling.")
+        XCTAssertTrue(termsLink.isHittable, "The Terms link must be reachable by scrolling.")
+        XCTAssertTrue(privacyLink.isHittable, "The Privacy link must be reachable by scrolling.")
     }
 
     @MainActor

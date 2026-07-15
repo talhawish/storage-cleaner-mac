@@ -50,6 +50,7 @@ struct InAppSettingsView: View {
 
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.large) {
                     SubscriptionSettingsSection(controller: subscriptionController)
+                    LegalSettingsSection()
                     appearanceSection
                     quickCleanSection
                     projectActivitySection

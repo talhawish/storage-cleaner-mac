@@ -123,15 +123,15 @@ independent review submission.
 
 ## 2. Project configuration
 
-### 2.1 Update `AppLinks`
+### 2.1 Verify `AppLinks` and App Store metadata
 
-The paywall's Terms of Service and Privacy Policy links are required by
-App Review. Open `StorageCleaner/Core/Models/AppLinks.swift` and replace
-the placeholder URLs with your real ones:
+The paywall's Terms of Use and Privacy Policy links are required by App
+Review. `StorageCleaner/Core/Models/AppLinks.swift` uses these production
+URLs:
 
 ```swift
-static let terms = makeURL("https://your-domain.com/terms")
-static let privacy = makeURL("https://your-domain.com/privacy")
+static let terms = makeURL("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
+static let privacy = makeURL("https://storagecleaner.horizam.com/privacy")
 ```
 
 These URLs must:
@@ -140,6 +140,18 @@ These URLs must:
 - Host your actual legal copy. Apple has rejected apps that point to
   generic landing pages.
 - Be served over HTTPS.
+
+In **App Store Connect → App Information**, put the privacy URL in the
+**Privacy Policy URL** field. Because the app uses Apple's Standard EULA,
+append this exact line to every localized App Description:
+
+```text
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+```
+
+Do not configure the website's supplemental terms as a custom EULA in App
+Store Connect unless legal counsel provides custom EULA text for every
+selected territory.
 
 ### 2.2 Attach the StoreKit configuration to your scheme
 
@@ -281,8 +293,10 @@ addition to the normal app review. Make sure all of these are in place
 - [ ] **Auto-renew disclosure is visible.** `PaywallFooterBar` displays
       payment timing, automatic renewal, the 24-hour cancellation window,
       and where the customer can manage or cancel.
-- [ ] **Link to Terms of Service and Privacy Policy in the paywall.**
-      We have this in `PaywallFooterBar` and both URLs are reachable.
+- [ ] **Links to Terms of Use and Privacy Policy in the paywall and Settings.**
+      `PaywallFooterBar` and `LegalSettingsSection` use native `Link`
+      controls. Terms opens Apple's Standard EULA and Privacy opens the
+      published policy.
 - [ ] **Link to Manage Subscriptions for active subscribers.** We have
       this in `SubscriptionSettingsSection` — opens
       `https://apps.apple.com/account/subscriptions`.
@@ -301,8 +315,16 @@ addition to the normal app review. Make sure all of these are in place
       the app version submission.** A first IAP cannot be reviewed as an
       independent submission.
 - [ ] **Terms and Privacy URLs return HTTP 200.** For this release they are
-      `https://storage-cleaner-a0c0f.web.app/terms` and
-      `https://storage-cleaner-a0c0f.web.app/privacy`.
+      `https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`
+      and `https://storagecleaner.horizam.com/privacy`.
+- [ ] **Privacy Policy URL metadata is populated** with
+      `https://storagecleaner.horizam.com/privacy`.
+- [ ] **Every localized App Description ends with the Standard EULA link**
+      shown in section 2.1.
+- [ ] **The media-library prompt is verified on a fresh TCC state.** Run
+      `tccutil reset MediaLibrary com.storagecleaner.developer`, trigger a
+      scan that includes media, and confirm the prompt explains large and
+      duplicate videos with the screen-recording example.
 
 ---
 
@@ -339,9 +361,14 @@ Review path:
 4. The Pro screen shows each product's localized title, price, and billing
    period, plus renewal/cancellation terms and working Terms of Use and
    Privacy Policy links.
+5. Terms of Use opens Apple's Standard EULA and Privacy Policy opens
+   https://storagecleaner.horizam.com/privacy. Both are also available
+   in Settings → Legal without starting a purchase.
 
 The first monthly, yearly, and lifetime in-app purchases are included with
-this app version submission. No external payment method is used.
+this app version submission. No external payment method is used. The media
+library purpose string explains that access is used to find large and duplicate
+videos, such as old screen recordings, for on-device review before cleanup.
 ```
 
 After launch, monitor:

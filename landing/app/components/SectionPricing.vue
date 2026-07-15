@@ -9,6 +9,7 @@ const tiers = [
     cta: 'Download',
     href: '#download',
     primary: false,
+    badge: '',
     features: [
       'Unlimited read-only scans',
       'All 15+ storage domains',
@@ -26,6 +27,7 @@ const tiers = [
     cta: 'Start monthly',
     href: '#download',
     primary: false,
+    badge: '',
     features: [
       'Everything in Free',
       'One-click Quick Clean',
@@ -63,6 +65,7 @@ const tiers = [
     cta: 'Buy lifetime',
     href: '#download',
     primary: false,
+    badge: '',
     features: [
       'Everything in Yearly',
       'All future macOS major-version updates',

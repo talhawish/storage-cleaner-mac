@@ -275,9 +275,6 @@ private struct PaywallSheet: View {
     let controller: SubscriptionController
     let trigger: PaywallTrigger
 
-    @Environment(\.openURL)
-    private var openURL
-
     @State private var viewModel: PaywallViewModel
 
     init(controller: SubscriptionController, trigger: PaywallTrigger) {
@@ -292,10 +289,6 @@ private struct PaywallSheet: View {
     }
 
     var body: some View {
-        PaywallView(
-            viewModel: viewModel,
-            onTermsTapped: { openURL(AppLinks.terms) },
-            onPrivacyTapped: { openURL(AppLinks.privacy) }
-        )
+        PaywallView(viewModel: viewModel)
     }
 }

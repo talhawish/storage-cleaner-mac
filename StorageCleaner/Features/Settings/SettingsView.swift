@@ -39,13 +39,18 @@ struct SettingsView: View {
                 LabeledContent("Confirmation", value: "Always required")
             }
 
+            Section("Legal") {
+                Link("Terms of Use (EULA)", destination: AppLinks.terms)
+                Link("Privacy Policy", destination: AppLinks.privacy)
+            }
+
             Section("About") {
                 LabeledContent("Version", value: "0.1.0")
                 LabeledContent("Scanner", value: "33 category scanners")
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 340)
+        .frame(width: 520, height: 410)
         .navigationTitle("Settings")
     }
 }

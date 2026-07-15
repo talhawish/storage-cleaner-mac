@@ -51,7 +51,7 @@ const contactEmail = useSiteConfig().email
                 {{ contactEmail }}
               </a>
             </li>
-            <li><NuxtLink to="/terms" class="text-ink-700 hover:text-ink-900">Terms &amp; Conditions</NuxtLink></li>
+            <li><NuxtLink to="/terms" class="text-ink-700 hover:text-ink-900">Terms of Use (EULA)</NuxtLink></li>
             <li><NuxtLink to="/privacy" class="text-ink-700 hover:text-ink-900">Privacy Policy</NuxtLink></li>
           </ul>
         </div>

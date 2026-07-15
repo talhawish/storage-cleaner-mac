@@ -37,7 +37,7 @@ export default defineNuxtConfig({
   },
 
   site: {
-    url: 'https://storage-cleaner-a0c0f.web.app',
+    url: 'https://storagecleaner.horizam.com',
     name: 'Storage Cleaner for Developers',
     description: 'A native macOS app that helps developers understand, scan and safely reclaim storage used by build artifacts, caches, simulators, Docker, and more.',
     defaultLocale: 'en',
@@ -45,10 +45,6 @@ export default defineNuxtConfig({
     email: 'info@horizam.com',
     /** Mac App Store URL. */
     appStoreUrl: 'https://apps.apple.com/app/storage-cleaner-for-developers/id6784308176'
-  },
-
-  ogImage: {
-    enabled: false
   },
 
   fonts: {

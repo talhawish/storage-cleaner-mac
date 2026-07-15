@@ -10,9 +10,6 @@ import SwiftUI
 /// re-claim their entitlement.
 ///
 struct PaywallFooterBar: View {
-    let onTermsTapped: () -> Void
-    let onPrivacyTapped: () -> Void
-
     var body: some View {
         VStack(spacing: 8) {
             Text(SubscriptionDisclosure.autoRenewal)
@@ -39,13 +36,13 @@ struct PaywallFooterBar: View {
 
     private var linkGroup: some View {
         HStack(spacing: 14) {
-            Button("Terms of Use", action: onTermsTapped)
+            Link("Terms of Use", destination: AppLinks.terms)
                 .buttonStyle(.borderless)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("paywall-terms")
             Text("·").foregroundStyle(.tertiary)
-            Button("Privacy Policy", action: onPrivacyTapped)
+            Link("Privacy Policy", destination: AppLinks.privacy)
                 .buttonStyle(.borderless)
                 .font(.caption)
                 .foregroundStyle(.secondary)

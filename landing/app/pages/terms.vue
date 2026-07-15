@@ -1,14 +1,15 @@
 <script setup lang="ts">
 usePageSeo({
-  title: 'Terms & Conditions',
+  title: 'Terms of Use (EULA)',
   description:
-    'The terms governing your use of Storage Cleaner for Developers. Plain English summary plus the full legal text.',
+    'The terms governing your use of Storage Cleaner for Developers, including Apple\u2019s Standard EULA.',
   image: '/og-image-terms.png',
   path: '/terms'
 })
 
 const contactEmail = useSiteConfig().email
-const updated = '2026-01-15'
+const standardEulaUrl = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'
+const updated = '2026-07-16'
 
 const sections = [
   {
@@ -21,6 +22,7 @@ const sections = [
   {
     title: '2. License',
     body: [
+      'Storage Cleaner for Developers is licensed through the Mac App Store under Apple\u2019s Standard End User License Agreement (EULA). If these supplemental terms conflict with the Standard EULA, the Standard EULA controls.',
       'Subject to your compliance with these Terms, you are granted a personal, non-exclusive, non-transferable, revocable license to install and use the App on Mac computers you own or control.',
       'You may not redistribute, resell, decompile, reverse-engineer, or create derivative works of the App, except to the extent expressly permitted by applicable law.'
     ]
@@ -98,7 +100,7 @@ const sections = [
           ← Back to home
         </NuxtLink>
         <p class="eyebrow mt-6">Legal</p>
-        <h1 class="heading-section mt-4 text-balance">Terms &amp; Conditions</h1>
+        <h1 class="heading-section mt-4 text-balance">Terms of Use (EULA)</h1>
         <p class="lede mt-4 max-w-2xl text-pretty">
           Plain-English summary of the rules that govern Storage Cleaner for
           Developers, plus the full legal text. The summary is here to help;
@@ -126,6 +128,13 @@ const sections = [
         <section class="rounded-2xl border border-ink-200 bg-ink-50/40 p-6">
           <h2 class="text-base font-semibold text-ink-900">In plain English</h2>
           <ul class="mt-3 space-y-2 text-sm leading-relaxed text-ink-700">
+            <li>
+              · Your Mac App Store license is governed by
+              <a
+                :href="standardEulaUrl"
+                class="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900"
+              >Apple's Standard EULA</a>.
+            </li>
             <li>· You can use the App on any Mac you own or control.</li>
             <li>· The App is free to scan; Pro is an optional subscription billed by Apple.</li>
             <li>· The App never permanently deletes files. Cleanup always goes to Trash first.</li>

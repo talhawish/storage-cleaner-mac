@@ -351,6 +351,9 @@ Use semantic system colors and materials so both system appearances remain suppo
 Modal headers and their dismissal controls remain pinned while long modal content scrolls beneath them.
 The subscription paywall caps its preferred height for smaller Mac displays, wraps feature metadata, scales
 localized StoreKit prices without truncating them, and keeps purchase terms reachable in one scroll region.
+Its Terms of Use and Privacy Policy are native links, and the same links remain available from Settings even
+when StoreKit products are unavailable. The Terms link uses Apple's Standard EULA; App Store Connect metadata
+must use the identical URL.
 UI tests can add `--use-demo-free-subscription` alongside `--use-demo-scanner` to exercise Pro gating;
 `--show-demo-paywall` opens that sheet immediately for focused layout and accessibility checks.
 `make ui-test` keeps its runner and DerivedData under `/private/tmp` by default so macOS does not

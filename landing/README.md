@@ -68,8 +68,9 @@ export default defineNuxtConfig({
 
 Then `npm run build`. The sitemap, robots, canonical, OG tags, JSON-LD,
 and the four OG cards all pick up the new host on the next build. The
-macOS app reads its own copy of the terms/privacy URLs from
-`StorageCleaner/Core/Models/AppLinks.swift` — keep that in sync manually.
+macOS app reads its legal URLs from `StorageCleaner/Core/Models/AppLinks.swift`.
+Terms points directly to Apple's Standard EULA; Privacy points to this site's
+`/privacy` page. Keep the privacy host in sync manually if the site moves.
 
 ---
 
@@ -158,7 +159,7 @@ export default defineSitemapEventHandler(() => {
 })
 ```
 
-`site.url` from `nuxt.config.ts` (`https://storage-cleaner-a0c0f.web.app`) is
+`site.url` from `nuxt.config.ts` (`https://storagecleaner.horizam.com`) is
 prepended to every relative path, so each entry resolves to its full
 absolute URL. **This file is the single source of truth for the deploy
 URL** — see the box below.
@@ -180,7 +181,7 @@ After `npm run build` you will find:
 User-agent: *
 Allow: /
 
-Sitemap: https://storage-cleaner-a0c0f.web.app/sitemap.xml
+Sitemap: https://storagecleaner.horizam.com/sitemap.xml
 ```
 
 ### Adding or changing a page

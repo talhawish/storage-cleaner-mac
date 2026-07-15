@@ -8,7 +8,7 @@ usePageSeo({
 })
 
 const contactEmail = useSiteConfig().email
-const updated = '2026-01-15'
+const updated = '2026-07-16'
 
 const sections = [
   {
@@ -37,7 +37,8 @@ const sections = [
     title: '3. macOS permissions',
     body: [
       'The App requests the minimum permissions needed to function. These permissions are managed by macOS, not by us:',
-      '· Full Disk Access — required to inventory protected developer folders (Xcode, sim runtimes, etc.).',
+      '· Folder access — used to inventory files only in the home folder or other locations you explicitly select.',
+      '· Media Library — used to identify large and duplicate media files, such as videos and old screen recordings, so you can review them before choosing what to move to Trash. Media analysis stays on your Mac; the App does not read your Apple Music listening history or modify your music library.',
       '· Automation (AppleScript) — used to invoke xcrun simctl runtime delete when you choose to remove an Apple simulator runtime.',
       'No permission is used to access or transmit data off your device.'
     ]

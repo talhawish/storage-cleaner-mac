@@ -32,8 +32,6 @@ import SwiftUI
 /// and VoiceOver scrolling all follow the same predictable path.
 struct PaywallView: View {
     @Bindable var viewModel: PaywallViewModel
-    let onTermsTapped: () -> Void
-    let onPrivacyTapped: () -> Void
     var body: some View {
         AppModal(
             idealWidth: 880,
@@ -50,10 +48,7 @@ struct PaywallView: View {
                         planSection
                         restoreLink
                         trustStrip
-                        PaywallFooterBar(
-                            onTermsTapped: onTermsTapped,
-                            onPrivacyTapped: onPrivacyTapped
-                        )
+                        PaywallFooterBar()
                     }
                 }
                 .scrollIndicators(.automatic)
