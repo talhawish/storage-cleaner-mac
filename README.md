@@ -322,6 +322,10 @@ The live scanner currently inspects these storage candidate types:
   runtimes are removed with `xcrun simctl runtime delete` (re-downloadable); Android images move to the
   Trash (restorable)
 - Junk files: temporary files, logs, crash reports, disposable archives, and old disk images
+- System Junk: actionable orphaned Application Support data, caches, sandbox containers,
+  preferences, saved application state, and old crash reports. Cleanup uses Finder-style Trash
+  semantics, excludes protected app-container and macOS-managed state, and only counts successfully
+  moved entries toward reclaimed storage.
 - Trash: files already moved to Trash but still occupying disk space
 
 Production scanning must keep videos, photos, screenshots, mobile packages, and Trash in review-first mode.
@@ -336,6 +340,15 @@ scanner should be added before offering duplicate cleanup actions.
 All new UI must be usable with VoiceOver and keyboard navigation, remain legible with increased contrast,
 and respect **Reduce Motion**. Animation should explain state changes rather than decorate the interface.
 Use semantic system colors and materials so both system appearances remain supported.
+
+Modal headers and their dismissal controls remain pinned while long modal content scrolls beneath them.
+The subscription paywall caps its preferred height for smaller Mac displays, wraps feature metadata, scales
+localized StoreKit prices without truncating them, and keeps purchase terms reachable in one scroll region.
+UI tests can add `--use-demo-free-subscription` alongside `--use-demo-scanner` to exercise Pro gating;
+`--show-demo-paywall` opens that sheet immediately for focused layout and accessibility checks.
+`make ui-test` keeps its runner and DerivedData under `/private/tmp` by default so macOS does not
+mistake automation infrastructure for a request to access Desktop, Documents, or Downloads. Set
+`UI_TEST_DERIVED_DATA` to override that location, but keep it outside privacy-protected user folders.
 
 Keyboard shortcuts currently available:
 

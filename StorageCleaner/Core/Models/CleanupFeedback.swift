@@ -54,6 +54,9 @@ struct CleanupFeedback {
         let fallback = "Grant Full Disk Access in System Settings, choose your Home folder again, "
             + "then retry."
         guard let error = result.failedURLs.first?.1 else { return fallback }
+        if case CleanupError.containerAuthorizationRequired = error {
+            return "Retry, then approve the macOS request to access protected app data."
+        }
         let description = error.localizedDescription
         guard !description.isEmpty else { return fallback }
         return description + " " + fallback

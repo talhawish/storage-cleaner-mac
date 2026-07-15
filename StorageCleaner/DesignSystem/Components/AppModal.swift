@@ -98,6 +98,7 @@ struct AppModalHeader: View {
                         .lineLimit(2)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             Spacer(minLength: 12)
 
@@ -111,7 +112,7 @@ struct AppModalHeader: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(accessibilityIdentifier ?? "app-modal-header")
     }
 
@@ -150,6 +151,7 @@ struct AppModalHeader: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
         .onHover { isCloseHovering = $0 }
         .accessibilityLabel("Close")
         .help("Close")

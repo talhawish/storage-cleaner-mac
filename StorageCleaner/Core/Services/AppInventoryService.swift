@@ -128,7 +128,7 @@ actor AppInventoryService {
         }
     }
 
-    func revealInFinder(_ item: AppItem) {
+    nonisolated func revealInFinder(_ item: AppItem) {
         NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
 

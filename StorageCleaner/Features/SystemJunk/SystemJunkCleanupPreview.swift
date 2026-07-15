@@ -5,8 +5,8 @@ struct SystemJunkCleanupPreview: View {
 
     var body: some View {
         AppModalSection(
-            title: "Items to delete",
-            subtitle: "Up to 50 are shown",
+            title: "Items to move to Trash",
+            subtitle: "Protected and macOS-managed items are excluded · Up to 50 shown",
             systemImage: "doc.on.doc.fill",
             tint: AppTheme.rose
         ) {
@@ -44,7 +44,7 @@ struct SystemJunkCleanupPreview: View {
                     .font(.callout.weight(.medium))
                     .lineLimit(1)
                 Text(url.standardizedFileURL.path)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
                     .truncationMode(.middle)

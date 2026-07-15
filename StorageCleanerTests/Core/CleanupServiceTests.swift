@@ -93,4 +93,58 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
         XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 4_096)
     }
+
+    func testFinderTrashResultSeparatesAuthorizedAndDeniedItems() async throws {
+        let authorized = temporaryDirectory.appending(path: "authorized", directoryHint: .isDirectory)
+        let denied = temporaryDirectory.appending(path: "denied", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: authorized, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: denied, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 4_096).write(to: authorized.appending(path: "cache.bin"))
+        try Data(repeating: 2, count: 8_192).write(to: denied.appending(path: "cache.bin"))
+        let destination = temporaryDirectory.appending(path: "Trash/authorized", directoryHint: .isDirectory)
+        let mover = StubTrashMover(result: TrashMoveResult(
+            destinationBySource: [authorized.standardizedFileURL: destination],
+            error: CocoaError(.fileWriteNoPermission)
+        ))
+
+        let result = await FileManagerCleanupService(trashMover: mover).delete(urls: [authorized, denied])
+
+        XCTAssertEqual(result.deletedItems.map(\.originalURL), [authorized.standardizedFileURL])
+        XCTAssertEqual(result.deletedURLs, [destination])
+        XCTAssertEqual(result.failedURLs.map(\.0), [denied.standardizedFileURL])
+        XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 4_096)
+    }
+
+    func testProtectedSystemContainerNeverReachesTrashMover() async {
+        let protectedURL = SystemJunkPaths.containers.appending(path: "com.example.protected")
+        let mover = RecordingTrashMover()
+
+        let result = await FileManagerCleanupService(trashMover: mover).delete(urls: [protectedURL])
+
+        XCTAssertTrue(mover.requests.isEmpty)
+        XCTAssertEqual(result.failedURLs.map(\.0), [protectedURL.standardizedFileURL])
+        XCTAssertTrue(result.failedURLs.first?.1 is CleanupError)
+    }
+}
+
+private struct StubTrashMover: TrashMoving {
+    let result: TrashMoveResult
+
+    func moveToTrash(_ urls: [URL]) async -> TrashMoveResult {
+        result
+    }
+}
+
+private final class RecordingTrashMover: TrashMoving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedRequests: [[URL]] = []
+
+    var requests: [[URL]] {
+        lock.withLock { recordedRequests }
+    }
+
+    func moveToTrash(_ urls: [URL]) async -> TrashMoveResult {
+        lock.withLock { recordedRequests.append(urls) }
+        return TrashMoveResult(destinationBySource: [:], error: nil)
+    }
 }

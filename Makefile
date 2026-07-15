@@ -1,5 +1,7 @@
 .PHONY: bootstrap build run test ui-test lint analyze verify clean
 
+UI_TEST_DERIVED_DATA ?= /private/tmp/StorageCleaner-XcodeDerivedData
+
 # The StorageCleaner.xcodeproj is committed and uses Xcode filesystem-synchronized
 # groups: files on disk are picked up automatically, so there is no generate step.
 
@@ -18,7 +20,7 @@ test:
 	swift test
 
 ui-test:
-	xcodebuild test -project StorageCleaner.xcodeproj -scheme StorageCleaner -destination 'platform=macOS' -derivedDataPath .build/XcodeDerivedData
+	xcodebuild test -project StorageCleaner.xcodeproj -scheme StorageCleaner -destination 'platform=macOS' -derivedDataPath '$(UI_TEST_DERIVED_DATA)' -only-testing:StorageCleanerUITests
 
 lint:
 	swiftlint lint --strict --no-cache

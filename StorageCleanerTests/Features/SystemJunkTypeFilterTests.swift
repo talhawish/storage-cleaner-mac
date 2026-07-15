@@ -74,4 +74,22 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertTrue(feedback.message.contains("1 item still needs permission."))
         XCTAssertTrue(feedback.message.contains("Grant Full Disk Access in System Settings"))
     }
+
+    func testCleanupFeedbackExplainsProtectedContainerAuthorization() {
+        let blocked = URL(filePath: "/Users/test/Library/Containers/com.example.orphan")
+        let result = CleanupResult(
+            deletedURLs: [],
+            deletedItems: [],
+            failedURLs: [(
+                blocked,
+                CleanupError.containerAuthorizationRequired(blocked, CocoaError(.fileWriteNoPermission))
+            )],
+            totalBytesReclaimed: 0
+        )
+
+        let feedback = CleanupFeedback.failed(result: result)
+
+        XCTAssertTrue(feedback.message.contains("approve the macOS request to access protected app data"))
+        XCTAssertFalse(feedback.message.contains("choose your Home folder again"))
+    }
 }

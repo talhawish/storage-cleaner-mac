@@ -3,6 +3,10 @@ import XCTest
 final class StorageCleanerUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
+        XCTAssertTrue(
+            FileManager.default.changeCurrentDirectoryPath(URL.temporaryDirectory.path),
+            "UI test runner must use a temporary working directory outside protected user folders."
+        )
     }
 
     @MainActor
@@ -94,15 +98,30 @@ final class StorageCleanerUITests: XCTestCase {
         ]
 
         for (sidebarID, rootIDs) in pages {
+            var found = sidebarID == "overview"
+                ? rootIDs.contains { identifier in
+                    app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)
+                }
+                : false
+
             if sidebarID != "overview" {
                 let row = app.descendants(matching: .any)["sidebar-\(sidebarID)"]
                 XCTAssertTrue(row.waitForExistence(timeout: 4), "Missing sidebar row \(sidebarID)")
                 row.click()
+
+                found = rootIDs.contains { identifier in
+                    app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)
+                }
+
+                // XCTest can consume the first click solely to reveal an off-screen row.
+                if !found {
+                    row.click()
+                    found = rootIDs.contains { identifier in
+                        app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)
+                    }
+                }
             }
 
-            let found = rootIDs.contains { identifier in
-                app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)
-            }
             XCTAssertTrue(
                 found,
                 "Expected one of \(rootIDs) after opening \(sidebarID)"
@@ -194,6 +213,10 @@ final class StorageCleanerUITests: XCTestCase {
 
         let button = app.buttons["system-junk-clean-button"]
         XCTAssertTrue(button.waitForExistence(timeout: 4))
+        if !button.label.contains("Selected") {
+            // Retry after XCTest has scrolled a partially visible checkbox into view.
+            checkbox.click()
+        }
         let label = button.label
         XCTAssertTrue(
             label.contains("Selected"),
@@ -202,11 +225,41 @@ final class StorageCleanerUITests: XCTestCase {
         )
     }
 
+    /// Regression for constrained displays: the paywall used to size itself to its full
+    /// intrinsic content height, which pushed the header and close control off-screen. The
+    /// content also had no scroll container, so the legal footer was difficult to reach.
+    @MainActor
+    func testPaywallKeepsHeaderVisibleAndFooterScrollable() {
+        let app = launchApp(extraArguments: [
+            "--complete-demo-scan-immediately",
+            "--use-demo-free-subscription",
+            "--show-demo-paywall"
+        ])
+
+        let paywall = app.descendants(matching: .any)["paywall-root"]
+        XCTAssertTrue(paywall.waitForExistence(timeout: 4))
+
+        let closeButton = app.buttons["Close"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 2))
+        XCTAssertTrue(closeButton.isHittable, "The pinned paywall close button must remain on-screen.")
+
+        let scrollView = app.descendants(matching: .any)["paywall-scroll-view"]
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 2))
+
+        let termsButton = app.buttons["paywall-terms"]
+        XCTAssertTrue(termsButton.waitForExistence(timeout: 2))
+        for _ in 0..<3 where !termsButton.isHittable {
+            scrollView.swipeUp()
+        }
+        XCTAssertTrue(termsButton.isHittable, "The paywall footer must be reachable by scrolling.")
+    }
+
     @MainActor
     private func launchApp(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--use-demo-scanner"] + extraArguments
         app.launch()
+        app.activate()
         return app
     }
 

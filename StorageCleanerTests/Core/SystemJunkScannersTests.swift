@@ -408,6 +408,69 @@ final class SystemJunkScannersTests: XCTestCase {
     }
 }
 
+extension SystemJunkScannersTests {
+    func testContainerScannerSkipsItemsCleanupCannotDelete() async throws {
+        try makeDirectory(relativeTo: "Containers/com.orphan.protected")
+        let eligibility = SystemJunkCleanupEligibility { _ in false }
+        let scanner = OrphanedAppContainersScanner(
+            collector: collector,
+            catalog: catalog,
+            root: temporaryLibrary.appending(path: "Containers"),
+            groupContainersRoot: temporaryLibrary.appending(path: "Group Containers"),
+            cleanupEligibility: eligibility
+        )
+
+        let result = await scanner.scan()
+
+        XCTAssertNil(result.finding)
+    }
+
+    func testSystemContainerRootsAreAlwaysProtected() {
+        let container = SystemJunkPaths.containers.appending(path: "com.example.orphan")
+        let groupContainer = SystemJunkPaths.groupContainers.appending(path: "group.com.example")
+
+        XCTAssertTrue(SystemJunkProtectionPolicy.protects(container))
+        XCTAssertTrue(SystemJunkProtectionPolicy.protects(groupContainer))
+        XCTAssertFalse(SystemJunkProtectionPolicy.protects(SystemJunkPaths.caches))
+    }
+
+    func testOrphanedDirectoryResolverSkipsItemsCleanupCannotDelete() throws {
+        try makeDirectory(relativeTo: "Application Support/Deletable")
+        try makeDirectory(relativeTo: "Application Support/Protected")
+        let root = temporaryLibrary.appending(path: "Application Support")
+        let eligibility = SystemJunkCleanupEligibility { url in
+            url.lastPathComponent != "Protected"
+        }
+
+        let resolver = OrphanDirectoryResolver(
+            root: root,
+            catalog: catalog,
+            limit: 200,
+            cleanupEligibility: eligibility
+        )
+
+        XCTAssertEqual(resolver.resolveOrphans().map(\.lastPathComponent), ["Deletable"])
+    }
+
+    func testOrphanedPreferencesSkipsItemsCleanupCannotDelete() async throws {
+        try writePlist(named: "com.orphan.deletable.plist", in: "Preferences")
+        try writePlist(named: "com.orphan.protected.plist", in: "Preferences")
+        let eligibility = SystemJunkCleanupEligibility { url in
+            url.lastPathComponent != "com.orphan.protected.plist"
+        }
+        let scanner = OrphanedPreferencesScanner(
+            catalog: catalog,
+            collector: collector,
+            root: temporaryLibrary.appending(path: "Preferences"),
+            cleanupEligibility: eligibility
+        )
+
+        let result = await scanner.scan()
+
+        XCTAssertEqual(result.finding?.filePaths.map(\.lastPathComponent), ["com.orphan.deletable.plist"])
+    }
+}
+
 /// Test catalog whose "installed" set is fixed to whatever fixtures the test injects — independent
 /// of the real `InstalledAppCatalog` so tests are deterministic and isolated from the host machine.
 private struct StubOrphanCatalog: OrphanCatalog {

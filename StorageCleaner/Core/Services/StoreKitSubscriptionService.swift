@@ -17,12 +17,18 @@ import StoreKit
 /// be able to manage their subscription in one tap).
 actor StoreKitSubscriptionService: SubscriptionService {
     private var continuations: [UUID: AsyncStream<SubscriptionEntitlement>.Continuation] = [:]
-    private var current: SubscriptionEntitlement = .free
+    private var terminatedContinuationIDs: Set<UUID> = []
+    private var current: SubscriptionEntitlement
     private var cachedProducts: [String: Product] = [:]
     private var transactionListener: Task<Void, Never>?
     private var didStartListener = false
+    private var entitlementRevision = 0
+    private let entitlementCache: SubscriptionEntitlementCache
 
-    init() {}
+    init(entitlementCache: SubscriptionEntitlementCache = .live) {
+        self.entitlementCache = entitlementCache
+        self.current = entitlementCache.load()
+    }
 
     deinit {
         transactionListener?.cancel()
@@ -72,9 +78,9 @@ actor StoreKitSubscriptionService: SubscriptionService {
     /// StoreKit daemon (e.g. no .storekit config on macOS) cannot
     /// block the actor and prevent product loading.
     private func refreshEntitlementFromCurrentEntitlements() async {
-        let best: SubscriptionEntitlement
+        let startingRevision = entitlementRevision
         do {
-            best = try await withThrowingTaskGroup(of: SubscriptionEntitlement.self) { group in
+            let best = try await withThrowingTaskGroup(of: SubscriptionEntitlement.self) { group in
                 group.addTask {
                     var best: SubscriptionEntitlement = .free
                     for await result in Transaction.currentEntitlements {
@@ -96,10 +102,19 @@ actor StoreKitSubscriptionService: SubscriptionService {
                 group.cancelAll()
                 return result
             }
+            // Actor methods are re-entrant while awaiting StoreKit. A purchase can finish while
+            // this older refresh is still reading the receipt; never let its stale snapshot
+            // overwrite the entitlement that purchase just verified.
+            guard Self.refreshIsCurrent(
+                startingRevision: startingRevision,
+                currentRevision: entitlementRevision
+            ) else { return }
+            setEntitlement(best)
         } catch {
-            best = .free
+            // A timeout is not evidence that a subscription expired. Preserve the last verified
+            // entitlement and let the next transaction update or restore attempt refresh it.
+            return
         }
-        setEntitlement(best)
     }
 
     private struct EntitlementRefreshTimeoutError: Error {}
@@ -113,9 +128,18 @@ actor StoreKitSubscriptionService: SubscriptionService {
         }
     }
 
+    nonisolated static func refreshIsCurrent(
+        startingRevision: Int,
+        currentRevision: Int
+    ) -> Bool {
+        startingRevision == currentRevision
+    }
+
     private func setEntitlement(_ new: SubscriptionEntitlement) {
         guard new != current else { return }
         current = new
+        entitlementRevision += 1
+        entitlementCache.store(new)
         for continuation in continuations.values {
             continuation.yield(new)
         }
@@ -131,18 +155,17 @@ actor StoreKitSubscriptionService: SubscriptionService {
     nonisolated func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
         AsyncStream { continuation in
             let id = UUID()
-            // Seed the stream with the current entitlement so callers
-            // don't have to call `currentEntitlement()` separately.
             Task { [weak self] in
                 guard let self else {
                     continuation.yield(.free)
                     continuation.finish()
                     return
                 }
+                // Register and seed atomically on the actor before starting the StoreKit refresh.
+                // This closes the gap where a purchase could previously land after `current` was
+                // read but before the continuation was registered, leaving one screen on Free.
+                await self.registerAndYield(continuation: continuation, id: id)
                 await self.startIfNeeded()
-                let current = await self.current
-                continuation.yield(current)
-                await self.register(continuation: continuation, id: id)
             }
             continuation.onTermination = { [weak self] _ in
                 guard let self else { return }
@@ -151,15 +174,19 @@ actor StoreKitSubscriptionService: SubscriptionService {
         }
     }
 
-    private func register(
+    private func registerAndYield(
         continuation: AsyncStream<SubscriptionEntitlement>.Continuation,
         id: UUID
     ) {
+        guard terminatedContinuationIDs.remove(id) == nil else { return }
         continuations[id] = continuation
+        continuation.yield(current)
     }
 
     private func unregister(id: UUID) {
-        continuations.removeValue(forKey: id)
+        if continuations.removeValue(forKey: id) == nil {
+            terminatedContinuationIDs.insert(id)
+        }
     }
 
     func loadProducts() async throws -> [SubscriptionPlan] {

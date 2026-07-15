@@ -66,7 +66,7 @@ struct InstalledAppCatalog: Sendable {
         // are already in `bundleIDs` from the search-root walk, so this guard only fires
         // for system frameworks that would otherwise slip through the curated
         // `appleBundleIDs` list (e.g. com.apple.avfoundation, com.apple.audio, etc.).
-        if lower.hasPrefix("com.apple.") {
+        if Self.isAppleManagedIdentifier(lower) {
             return true
         }
 
@@ -75,6 +75,15 @@ struct InstalledAppCatalog: Sendable {
                 || lower.hasPrefix("group." + bundleID)
                 || lower.hasSuffix("." + bundleID)
         }
+    }
+
+    /// Covers app-group and team-prefixed forms in addition to ordinary `com.apple.*` bundle IDs.
+    /// Safety wins over reclaiming a small false-positive directory: macOS-owned Library state is
+    /// never an orphan cleanup candidate.
+    private static func isAppleManagedIdentifier(_ lowercasedName: String) -> Bool {
+        lowercasedName == "com.apple"
+            || lowercasedName.hasPrefix("com.apple.")
+            || lowercasedName.contains(".com.apple.")
     }
 
     // MARK: - Collection

@@ -148,7 +148,7 @@ struct AppsView: View {
                     ForEach(filteredApps) { app in
                         AppRowView(
                             app: app,
-                            onReveal: { Task { await inventoryService.revealInFinder(app) } },
+                            onReveal: { inventoryService.revealInFinder(app) },
                             onUninstall: { requestUninstall(app) },
                             canUseProActions: canUseProActions
                         )

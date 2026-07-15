@@ -30,7 +30,9 @@ struct AppContainer: Sendable {
                 permissionHandler: DemoPermissionHandler(),
                 cleanupService: DemoCleanupService(),
                 diskSpaceReader: DemoDiskSpaceService(),
-                subscriptionService: DemoSubscriptionService()
+                subscriptionService: DemoSubscriptionService(
+                    entitlement: arguments.contains("--use-demo-free-subscription") ? .free : .lifetime
+                )
             )
         }
 
@@ -237,14 +239,20 @@ private struct DemoCleanupService: CleanupService {
 /// placeholder products — no StoreKit session configuration needed.
 ///
 /// The service starts with `.lifetime` entitlement so all demo cleanup flows
-/// are unblocked out of the box. A UI test that needs to exercise the free
-/// gate can inject a `MockSubscriptionService` (test target) instead.
+/// are unblocked out of the box. UI tests can pass `--use-demo-free-subscription`
+/// to exercise the free-user gate without contacting StoreKit.
 private actor DemoSubscriptionService: SubscriptionService {
-    func currentEntitlement() async -> SubscriptionEntitlement { .lifetime }
+    nonisolated let entitlement: SubscriptionEntitlement
+
+    init(entitlement: SubscriptionEntitlement) {
+        self.entitlement = entitlement
+    }
+
+    func currentEntitlement() async -> SubscriptionEntitlement { entitlement }
 
     nonisolated func entitlementUpdates() -> AsyncStream<SubscriptionEntitlement> {
         AsyncStream { continuation in
-            continuation.yield(.lifetime)
+            continuation.yield(entitlement)
             continuation.finish()
         }
     }
@@ -255,7 +263,7 @@ private actor DemoSubscriptionService: SubscriptionService {
         .purchased(.lifetime)
     }
 
-    func restore() async throws -> SubscriptionEntitlement { .lifetime }
+    func restore() async throws -> SubscriptionEntitlement { entitlement }
 
     @MainActor
     func showManageSubscriptions() {}

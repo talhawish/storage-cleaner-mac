@@ -86,6 +86,55 @@ final class SubscriptionControllerTests: XCTestCase {
     }
 }
 
+final class SubscriptionEntitlementCacheTests: XCTestCase {
+    private var suiteName: String!
+    private var userDefaults: UserDefaults!
+
+    override func setUpWithError() throws {
+        suiteName = "SubscriptionEntitlementCacheTests.\(UUID().uuidString)"
+        userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        userDefaults.removePersistentDomain(forName: suiteName)
+    }
+
+    override func tearDownWithError() throws {
+        userDefaults.removePersistentDomain(forName: suiteName)
+    }
+
+    func testVerifiedProEntitlementSurvivesServiceRecreation() {
+        let cache = SubscriptionEntitlementCache(userDefaults: userDefaults)
+
+        cache.store(.yearly)
+
+        XCTAssertEqual(SubscriptionEntitlementCache(userDefaults: userDefaults).load(), .yearly)
+    }
+
+    func testFreeEntitlementClearsCachedProAccess() {
+        let cache = SubscriptionEntitlementCache(userDefaults: userDefaults)
+        cache.store(.lifetime)
+
+        cache.store(.free)
+
+        XCTAssertEqual(cache.load(), .free)
+    }
+
+    func testInvalidCachedValueFailsClosed() {
+        userDefaults.set("unknown-plan", forKey: "LastVerifiedSubscriptionEntitlement")
+
+        XCTAssertEqual(SubscriptionEntitlementCache(userDefaults: userDefaults).load(), .free)
+    }
+
+    func testStaleRefreshCannotOverwriteNewerPurchase() {
+        XCTAssertFalse(StoreKitSubscriptionService.refreshIsCurrent(
+            startingRevision: 4,
+            currentRevision: 5
+        ))
+        XCTAssertTrue(StoreKitSubscriptionService.refreshIsCurrent(
+            startingRevision: 5,
+            currentRevision: 5
+        ))
+    }
+}
+
 @MainActor
 final class DashboardViewModelSubscriptionGateTests: XCTestCase {
     private var service: MockSubscriptionService!

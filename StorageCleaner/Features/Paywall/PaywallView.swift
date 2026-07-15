@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The paywall sheet. Presented as a ~880×680 modal when the user
+/// The paywall sheet. Presented as a scrollable, header-pinned modal when the user
 /// attempts a gated action (currently: any cleanup) or opens the
 /// Subscription section in Settings.
 ///
@@ -10,9 +10,10 @@ import SwiftUI
 ///
 /// ```
 ///  ┌──────────────────────────────────────────────┐
-///  │ Header (icon, title, close)                   │
+///  │ Pinned header (icon, title, close)            │
 ///  ├──────────────────────────────────────────────┤
-///  │ Aurora hero                                   │
+///  │ Scrollable content                            │
+///  │   Aurora hero                                 │
 ///  │   [PRO eyebrow chip]                          │
 ///  │   [gradient headline]                         │
 ///  │   [subtitle]                                  │
@@ -26,38 +27,40 @@ import SwiftUI
 ///  └──────────────────────────────────────────────┘
 /// ```
 ///
-/// The view is a pure renderer: it never mutates state directly,
-/// always going through `viewModel`. The two callbacks it owns —
-/// `onDismiss` and `onEntitlementUpgraded` — bubble up to the
-/// caller (Dashboard / Settings) which decides what closing the
-/// paywall means.
+/// The fixed header keeps dismissal available at every window height. Everything
+/// below it shares one vertical scroll container so trackpad, mouse-wheel, keyboard,
+/// and VoiceOver scrolling all follow the same predictable path.
 struct PaywallView: View {
     @Bindable var viewModel: PaywallViewModel
     let onTermsTapped: () -> Void
     let onPrivacyTapped: () -> Void
-    @Environment(\.dismiss)
-    private var dismiss
-
     var body: some View {
         AppModal(
             idealWidth: 880,
-            minHeight: 640,
-            idealHeight: 680,
-            maxHeight: 820
+            minHeight: 500,
+            idealHeight: 640,
+            maxHeight: 700
         ) {
             VStack(spacing: 0) {
                 header
                 Divider()
-                heroSection
-                planSection
-                restoreLink
-                trustStrip
-                PaywallFooterBar(
-                    onTermsTapped: onTermsTapped,
-                    onPrivacyTapped: onPrivacyTapped
-                )
+                ScrollView {
+                    VStack(spacing: 0) {
+                        heroSection
+                        planSection
+                        restoreLink
+                        trustStrip
+                        PaywallFooterBar(
+                            onTermsTapped: onTermsTapped,
+                            onPrivacyTapped: onPrivacyTapped
+                        )
+                    }
+                }
+                .scrollIndicators(.automatic)
+                .accessibilityIdentifier("paywall-scroll-view")
             }
         }
+        .accessibilityIdentifier("paywall-root")
         .task {
             await viewModel.loadProducts()
         }
@@ -128,6 +131,10 @@ struct PaywallView: View {
                         PlanCardSkeleton()
                     }
                 }
+            } else if viewModel.plans.isEmpty {
+                PaywallProductUnavailableView {
+                    Task { await viewModel.loadProducts() }
+                }
             } else {
                 HStack(spacing: 12) {
                     ForEach(sortedPlans) { plan in
@@ -190,7 +197,7 @@ struct PaywallView: View {
     // MARK: - Trust strip
 
     private var trustStrip: some View {
-        HStack(spacing: 18) {
+        CenteredFlowLayout(spacing: 18) {
             ForEach(trustItems) { item in
                 HStack(spacing: 6) {
                     Image(systemName: item.systemImage)
@@ -200,9 +207,6 @@ struct PaywallView: View {
                     Text(item.text)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-                if item.id != trustItems.last?.id {
-                    Spacer(minLength: 0)
                 }
             }
         }
@@ -226,327 +230,5 @@ struct PaywallView: View {
             TrustItem(id: "cancel", systemImage: "arrow.uturn.backward", text: "Cancel anytime", tint: AppTheme.accent),
             TrustItem(id: "private", systemImage: "hand.raised.fill", text: "100% on-device", tint: AppTheme.violet)
         ]
-    }
-}
-
-// MARK: - Hero
-
-/// The paywall's hero section. Mirrors the design language of the
-/// dashboard's `WelcomeHeroView` and the per-section
-/// `InitialStateView` — aurora background, eyebrow chip, gradient
-/// headline, value-prop highlights — but compressed for the
-/// modal-sized canvas.
-///
-/// All motion honors `accessibilityReduceMotion`: when the user has
-/// reduced motion enabled, the aurora blobs sit at their rest
-/// position and the rotation animation collapses.
-private struct PaywallHero: View {
-    struct Highlight: Identifiable, Equatable {
-        let id: String
-        let icon: String
-        let title: String
-        let tint: Color
-    }
-
-    let eyebrowIcon: String
-    let eyebrowText: String
-    let headline: String
-    let subtitle: String
-    let highlights: [Highlight]
-
-    @Environment(\.accessibilityReduceMotion)
-    private var reduceMotion
-    @State private var didAppear = false
-    @State private var ringRotation = 0.0
-    @State private var blobPhase: Double = 0
-
-    var body: some View {
-        ZStack {
-            backgroundLayer
-            content
-        }
-        .frame(maxWidth: .infinity)
-        .clipShape(Rectangle())
-        .onAppear(perform: startAnimations)
-    }
-
-    // MARK: Background
-
-    private var backgroundLayer: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    AppTheme.accent.opacity(0.10),
-                    AppTheme.cyan.opacity(0.06),
-                    AppTheme.violet.opacity(0.08),
-                    AppTheme.appBackground
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            if !reduceMotion {
-                Circle()
-                    .fill(AppTheme.accent.opacity(0.35))
-                    .frame(width: 240, height: 240)
-                    .blur(radius: 90)
-                    .offset(
-                        x: didAppear ? cos(blobPhase) * 60 : 0,
-                        y: didAppear ? sin(blobPhase * 0.7) * 24 : 0
-                    )
-
-                Circle()
-                    .fill(AppTheme.violet.opacity(0.30))
-                    .frame(width: 200, height: 200)
-                    .blur(radius: 90)
-                    .offset(
-                        x: didAppear ? cos(blobPhase * 0.6 + 2.0) * 50 : 0,
-                        y: didAppear ? sin(blobPhase * 0.8 + 1.0) * 30 : 0
-                    )
-            }
-        }
-    }
-
-    // MARK: Content
-
-    private var content: some View {
-        HStack(alignment: .center, spacing: AppTheme.Spacing.extraLarge) {
-            textStack
-            Spacer(minLength: 8)
-            orb
-                .frame(width: 130, height: 130)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 22)
-    }
-
-    private var textStack: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            eyebrow
-            headlineLabel
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-            highlightsRow
-                .padding(.top, 6)
-        }
-        .frame(maxWidth: 520, alignment: .leading)
-    }
-
-    private var eyebrow: some View {
-        HStack(spacing: 6) {
-            Image(systemName: eyebrowIcon)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(AppTheme.accent)
-                .accessibilityHidden(true)
-            Text(eyebrowText)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.accent)
-                .tracking(0.4)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(AppTheme.accent.opacity(0.12), in: Capsule())
-        .overlay {
-            Capsule().stroke(AppTheme.accent.opacity(0.25), lineWidth: 0.5)
-        }
-        .opacity(didAppear ? 1 : 0)
-        .animation(.easeOut(duration: 0.4).delay(0.05), value: didAppear)
-    }
-
-    private var headlineLabel: some View {
-        Text(headline)
-            .font(.system(size: 30, weight: .bold, design: .rounded))
-            .lineSpacing(1)
-            .fixedSize(horizontal: false, vertical: true)
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [
-                        Color.primary,
-                        Color.primary.opacity(0.78)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .opacity(didAppear ? 1 : 0)
-            .animation(.easeOut(duration: 0.5).delay(0.10), value: didAppear)
-    }
-
-    private var highlightsRow: some View {
-        HStack(spacing: 8) {
-            ForEach(highlights) { highlight in
-                HighlightChip(highlight: highlight)
-            }
-        }
-        .opacity(didAppear ? 1 : 0)
-        .animation(.easeOut(duration: 0.5).delay(0.18), value: didAppear)
-    }
-
-    // MARK: Orb
-
-    private var orb: some View {
-        ZStack {
-            Circle()
-                .strokeBorder(
-                    AngularGradient(
-                        colors: [
-                            AppTheme.accent.opacity(0.0),
-                            AppTheme.accent.opacity(0.75),
-                            AppTheme.cyan.opacity(0.65),
-                            AppTheme.violet.opacity(0.65),
-                            AppTheme.accent.opacity(0.0)
-                        ],
-                        center: .center
-                    ),
-                    lineWidth: 1.4
-                )
-                .rotationEffect(.degrees(reduceMotion ? 0 : ringRotation))
-                .blur(radius: 0.4)
-
-            Circle()
-                .fill(.ultraThinMaterial)
-                .frame(width: 92, height: 92)
-                .overlay {
-                    Circle().strokeBorder(AppTheme.accent.opacity(0.30), lineWidth: 1)
-                }
-
-            Image(systemName: "sparkles")
-                .font(.system(size: 38, weight: .light))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(AppTheme.accent)
-        }
-        .shadow(color: AppTheme.accent.opacity(0.35), radius: 24, y: 8)
-    }
-
-    // MARK: Animation
-
-    private func startAnimations() {
-        if reduceMotion {
-            didAppear = true
-            return
-        }
-        withAnimation(.snappy(duration: 0.5).delay(0.05)) {
-            didAppear = true
-        }
-        withAnimation(.linear(duration: 22).repeatForever(autoreverses: false)) {
-            ringRotation = 360
-        }
-        withAnimation(.linear(duration: 28).repeatForever(autoreverses: false)) {
-            blobPhase = .pi * 2
-        }
-    }
-}
-
-/// A single value-prop chip used in the hero's highlight row.
-/// Matches the eyebrow chip's visual rhythm so the two read as a
-/// family: tinted capsule, small icon, short label.
-private struct HighlightChip: View {
-    let highlight: PaywallHero.Highlight
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: highlight.icon)
-                .font(.caption2.weight(.bold))
-                .accessibilityHidden(true)
-            Text(highlight.title)
-                .font(.caption2.weight(.semibold))
-        }
-        .foregroundStyle(highlight.tint)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(highlight.tint.opacity(0.12), in: Capsule())
-        .overlay {
-            Capsule().stroke(highlight.tint.opacity(0.25), lineWidth: 0.5)
-        }
-    }
-}
-
-// MARK: - Banner
-
-/// A short status banner shown above the plan row. Tint + icon +
-/// text. Sized for the new compact layout.
-private struct PaywallBanner: View {
-    let tint: Color
-    let systemImage: String
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(tint)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
-                .fill(tint.opacity(0.10))
-        )
-        .transition(.opacity.combined(with: .move(edge: .top)))
-        .animation(.smooth, value: text)
-    }
-}
-
-// MARK: - Skeleton
-
-/// Loading placeholder for a `PlanCard`. Card-shaped, not pill-
-/// shaped — the old generic pills read as "empty" rather than
-/// "loading", which the previous design got called out for.
-private struct PlanCardSkeleton: View {
-    @State private var phase: CGFloat = -1
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Capsule()
-                .fill(gradient)
-                .frame(width: 60, height: 12)
-            Capsule()
-                .fill(gradient)
-                .frame(width: 90, height: 26)
-            Capsule()
-                .fill(gradient)
-                .frame(width: 60, height: 12)
-            Spacer(minLength: 0)
-            Capsule()
-                .fill(gradient)
-                .frame(height: 30)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 200, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
-                .fill(AppTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius, style: .continuous)
-                .stroke(AppTheme.hairline, lineWidth: 1)
-        )
-        .onAppear {
-            withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
-                phase = 2
-            }
-        }
-    }
-
-    private var gradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                AppTheme.subtleSurface,
-                AppTheme.subtleSurface.opacity(0.7),
-                AppTheme.subtleSurface
-            ],
-            startPoint: UnitPoint(x: phase - 1, y: 0.5),
-            endPoint: UnitPoint(x: phase, y: 0.5)
-        )
     }
 }

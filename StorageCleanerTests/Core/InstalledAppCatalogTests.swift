@@ -40,6 +40,12 @@ final class InstalledAppCatalogTests: XCTestCase {
         }
     }
 
+    func testCatalogAlwaysProtectsStorageCleanerData() {
+        let catalog = InstalledAppCatalog(searchRoots: [])
+
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "com.storagecleaner.developer"))
+    }
+
     func testCatalogDiscoversBundleIDsFromAppBundles() throws {
         let bundleID = "com.example.MyInstalledApp"
         let appName = "MyInstalledApp"
@@ -97,6 +103,8 @@ final class InstalledAppCatalogTests: XCTestCase {
         let catalog = InstalledAppCatalog(searchRoots: [])
 
         XCTAssertTrue(catalog.ownsLibraryEntry(named: "com.apple.someprivateagent"))
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "group.com.apple.someprivateagent"))
+        XCTAssertTrue(catalog.ownsLibraryEntry(named: "TEAMID.com.apple.someprivateagent"))
     }
 
     func testCatalogHandlesMalformedAppBundlesGracefully() throws {

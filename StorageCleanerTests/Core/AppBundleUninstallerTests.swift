@@ -43,6 +43,28 @@ final class AppBundleUninstallerTests: XCTestCase {
         XCTAssertEqual(recorder.adminTrashRequests, [app.standardizedFileURL])
     }
 
+    func testAdministratorAuthorizationRequirementIsPreserved() async throws {
+        let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
+        let permissionError = CocoaError(.fileWriteNoPermission)
+        let authorizationError = AppBundleUninstallerError.authorizationRequired(app.standardizedFileURL)
+        let recorder = AppBundleUninstallerRecorder(
+            trashError: permissionError,
+            userAccessTrashError: permissionError,
+            adminTrashError: authorizationError
+        )
+        let uninstaller = makeUninstaller(recorder: recorder)
+
+        do {
+            try await uninstaller.uninstall(app)
+            XCTFail("Expected administrator-owned app to require Finder authorization.")
+        } catch let error as AppBundleUninstallerError {
+            guard case let .authorizationRequired(url) = error else {
+                return XCTFail("Expected authorizationRequired error, got \(error).")
+            }
+            XCTAssertEqual(url, app.standardizedFileURL)
+        }
+    }
+
     func testUnsupportedLocationIsRejectedBeforeRemoval() async throws {
         let app = URL(fileURLWithPath: "/tmp/Cleaner.app", isDirectory: true)
         let recorder = AppBundleUninstallerRecorder()

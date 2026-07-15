@@ -50,15 +50,14 @@ struct PlanCard: View {
 
     var body: some View {
         cardSurface
-            .frame(maxWidth: .infinity, minHeight: 240, alignment: .topLeading)
+            .frame(minWidth: 190, maxWidth: .infinity, minHeight: 240, alignment: .topLeading)
             .overlay(alignment: .top) {
                 if plan.entitlement == .yearly {
                     bestValueRibbon
                         .offset(y: -12)
                 }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isButton)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("plan-card-\(plan.entitlement.rawValue)")
     }
 
@@ -155,37 +154,26 @@ struct PlanCard: View {
 
     private var priceBlock: some View {
         VStack(alignment: .leading, spacing: 1) {
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(plan.displayPrice)
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .monospacedDigit()
-                    .accessibilityHidden(true)
-                if let period = plan.period, period != .lifetime {
-                    Text(periodSuffix(for: period))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                }
-            }
+            Text(plan.displayPrice)
+                .font(.title)
+                .fontDesign(.rounded)
+                .bold()
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .accessibilityHidden(true)
             Text(priceQualifier)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.tertiary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(priceAccessibilityLabel)
     }
 
     private var priceQualifier: String {
         plan.billingDescription
-    }
-
-    private func periodSuffix(for period: SubscriptionPlan.BillingPeriod) -> String {
-        switch period {
-        case .monthly: return "/mo"
-        case .yearly: return "/yr"
-        case .lifetime: return ""
-        }
     }
 
     private var priceAccessibilityLabel: String {

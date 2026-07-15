@@ -100,4 +100,5 @@ struct DeleteAppConfirmationSheet: View {
         }
         return description
     }
+
 }

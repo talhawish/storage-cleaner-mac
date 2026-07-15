@@ -39,11 +39,8 @@ struct PostScanPaywallCard: View {
         )
         .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: isHovering)
         .onHover { isHovering = $0 }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("post-scan-paywall-card")
-        .accessibilityLabel("You can reclaim \(StorageFormatting.bytes(reclaimableBytes)). One tap to clean with Pro.")
-        .accessibilityHint("Opens the subscription page to unlock cleanup")
-        .accessibilityAddTraits(.isButton)
     }
 
     private var graphicTile: some View {

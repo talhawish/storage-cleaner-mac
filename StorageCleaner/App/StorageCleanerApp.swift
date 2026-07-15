@@ -23,6 +23,9 @@ struct StorageCleanerApp: App {
             : PersistenceController.shared
         let historyStore = SwiftDataScanHistoryStore(context: modelContainer.mainContext)
         let controller = SubscriptionController(service: container.subscriptionService)
+        if usesEphemeralStore, arguments.contains("--show-demo-paywall") {
+            controller.presentPaywall(trigger: .manualOpen)
+        }
 
         self.modelContainer = modelContainer
         _subscriptionController = State(initialValue: controller)

@@ -3,6 +3,8 @@ import Foundation
 enum CleanupError: Error, LocalizedError {
     case fileNotFound(URL)
     case deletionFailed(URL, Error)
+    case containerAuthorizationRequired(URL, Error)
+    case protectedSystemItem(URL)
     case nothingToDelete
 
     var errorDescription: String? {
@@ -11,6 +13,10 @@ enum CleanupError: Error, LocalizedError {
             "File not found: \(url.lastPathComponent)"
         case let .deletionFailed(url, error):
             "Failed to delete \(url.lastPathComponent): \(error.localizedDescription)"
+        case let .containerAuthorizationRequired(url, _):
+            "macOS did not authorize access to \(url.lastPathComponent)."
+        case let .protectedSystemItem(url):
+            "\(url.lastPathComponent) is protected by macOS and was left untouched."
         case .nothingToDelete:
             "No files selected for deletion"
         }
@@ -42,6 +48,11 @@ protocol CleanupService: Sendable {
 
 struct FileManagerCleanupService: CleanupService {
     private static var trashPrefix: String { UserHomeDirectory.path + "/.Trash/" }
+    private let trashMover: any TrashMoving
+
+    init(trashMover: any TrashMoving = WorkspaceTrashMover()) {
+        self.trashMover = trashMover
+    }
 
     func delete(urls: [URL]) async -> CleanupResult {
         let deletionURLs = Self.normalizedDeletionURLs(urls)
@@ -49,82 +60,144 @@ struct FileManagerCleanupService: CleanupService {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
-        return await withTaskGroup(of: CleanupResult.self) { group in
-            for url in deletionURLs {
+        let prepared = await Self.prepare(deletionURLs)
+        let alreadyInTrash = prepared.items.filter(\.isAlreadyInTrash)
+        let toRecycle = prepared.items.filter { !$0.isAlreadyInTrash }
+        let permanentResult = await Self.removeFromTrash(alreadyInTrash)
+        let recycleResult = await recycle(toRecycle)
+
+        let deletedItems = permanentResult.deletedItems + recycleResult.deletedItems
+        return CleanupResult(
+            deletedURLs: permanentResult.deletedURLs + recycleResult.deletedURLs,
+            deletedItems: deletedItems,
+            failedURLs: prepared.failures + permanentResult.failedURLs + recycleResult.failedURLs,
+            totalBytesReclaimed: deletedItems.reduce(0) { $0 + $1.bytesReclaimed }
+        )
+    }
+
+    private func recycle(_ items: [PreparedDeletion]) async -> CleanupResult {
+        guard !items.isEmpty, !Task.isCancelled else {
+            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+        }
+
+        let moveResult = await trashMover.moveToTrash(items.map(\.url))
+        let destinations = Dictionary(
+            uniqueKeysWithValues: moveResult.destinationBySource.map {
+                ($0.key.standardizedFileURL, $0.value)
+            }
+        )
+        let fallbackError = moveResult.error ?? CocoaError(.fileWriteUnknown)
+        let deletedItems = items.compactMap { item -> DeletedItem? in
+            guard destinations[item.url] != nil else { return nil }
+            return DeletedItem(originalURL: item.url, bytesReclaimed: item.bytes)
+        }
+        let failed = items.compactMap { item -> (URL, Error)? in
+            guard destinations[item.url] == nil else { return nil }
+            let error: Error = Self.isAppContainer(item.url)
+                ? CleanupError.containerAuthorizationRequired(item.url, fallbackError)
+                : fallbackError
+            return (item.url, error)
+        }
+
+        return CleanupResult(
+            deletedURLs: items.compactMap { destinations[$0.url] },
+            deletedItems: deletedItems,
+            failedURLs: failed,
+            totalBytesReclaimed: deletedItems.reduce(0) { $0 + $1.bytesReclaimed }
+        )
+    }
+
+    private static func prepare(_ urls: [URL]) async -> (items: [PreparedDeletion], failures: [(URL, Error)]) {
+        await withTaskGroup(of: PreparedDeletionResult.self) { group in
+            for url in urls {
                 group.addTask(priority: .userInitiated) {
-                    Self.deleteSynchronously(url: url)
+                    prepareSynchronously(url)
                 }
             }
 
-            var trashed: [URL] = []
-            var deletedItems: [DeletedItem] = []
-            var failed: [(URL, Error)] = []
+            var items: [PreparedDeletion] = []
+            var failures: [(URL, Error)] = []
             for await result in group {
-                trashed.append(contentsOf: result.deletedURLs)
+                switch result {
+                case let .ready(item): items.append(item)
+                case let .failed(url, error): failures.append((url, error))
+                case .cancelled: break
+                }
+            }
+            return (items.sorted { $0.url.path < $1.url.path }, failures)
+        }
+    }
+
+    private static func prepareSynchronously(_ url: URL) -> PreparedDeletionResult {
+        let fileManager = FileManager.default
+        guard !Task.isCancelled else { return .cancelled }
+
+        guard !SystemJunkProtectionPolicy.protects(url) else {
+            return .failed(url, CleanupError.protectedSystemItem(url))
+        }
+
+        guard fileManager.fileExists(atPath: url.path) else {
+            return .failed(url, CleanupError.fileNotFound(url))
+        }
+
+        guard let size = sizeOfItem(at: url, fileManager: fileManager) else {
+            return .cancelled
+        }
+        guard !Task.isCancelled else { return .cancelled }
+
+        return .ready(PreparedDeletion(
+            url: url.standardizedFileURL,
+            bytes: size,
+            isAlreadyInTrash: url.path.hasPrefix(Self.trashPrefix)
+        ))
+    }
+
+    private static func removeFromTrash(_ items: [PreparedDeletion]) async -> CleanupResult {
+        await withTaskGroup(of: CleanupResult.self) { group in
+            for item in items {
+                group.addTask(priority: .userInitiated) {
+                    do {
+                        try FileManager.default.removeItem(at: item.url)
+                        let deleted = DeletedItem(originalURL: item.url, bytesReclaimed: item.bytes)
+                        return CleanupResult(
+                            deletedURLs: [item.url],
+                            deletedItems: [deleted],
+                            failedURLs: [],
+                            totalBytesReclaimed: item.bytes
+                        )
+                    } catch {
+                        return CleanupResult(
+                            deletedURLs: [],
+                            deletedItems: [],
+                            failedURLs: [(item.url, error)],
+                            totalBytesReclaimed: 0
+                        )
+                    }
+                }
+            }
+
+            var deletedURLs: [URL] = []
+            var deletedItems: [DeletedItem] = []
+            var failedURLs: [(URL, Error)] = []
+            for await result in group {
+                deletedURLs.append(contentsOf: result.deletedURLs)
                 deletedItems.append(contentsOf: result.deletedItems)
-                failed.append(contentsOf: result.failedURLs)
+                failedURLs.append(contentsOf: result.failedURLs)
             }
             return CleanupResult(
-                deletedURLs: trashed,
+                deletedURLs: deletedURLs,
                 deletedItems: deletedItems,
-                failedURLs: failed,
+                failedURLs: failedURLs,
                 totalBytesReclaimed: deletedItems.reduce(0) { $0 + $1.bytesReclaimed }
             )
         }
     }
 
-    private static func deleteSynchronously(url: URL) -> CleanupResult {
-        let fileManager = FileManager.default
-        var trashed: [URL] = []
-        var deletedItems: [DeletedItem] = []
-        var failed: [(URL, Error)] = []
-        var totalBytes: Int64 = 0
-
-        guard !Task.isCancelled else {
-            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+    private static func isAppContainer(_ url: URL) -> Bool {
+        [SystemJunkPaths.containers, SystemJunkPaths.groupContainers].contains { root in
+            url.standardizedFileURL == root.standardizedFileURL
+                || url.standardizedFileURL.isDescendant(of: root.standardizedFileURL)
         }
-
-        guard fileManager.fileExists(atPath: url.path) else {
-            return CleanupResult(
-                deletedURLs: [],
-                deletedItems: [],
-                failedURLs: [(url, CleanupError.fileNotFound(url))],
-                totalBytesReclaimed: 0
-            )
-        }
-
-        guard let size = sizeOfItem(at: url, fileManager: fileManager) else {
-            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
-        }
-        guard !Task.isCancelled else {
-            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
-        }
-
-        if url.path.hasPrefix(Self.trashPrefix) {
-            do {
-                try fileManager.removeItem(at: url)
-            } catch {
-                failed.append((url, error))
-            }
-        } else {
-            do {
-                var resultingURL: NSURL?
-                try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
-                trashed.append(resultingURL as? URL ?? url)
-            } catch {
-                failed.append((url, error))
-            }
-        }
-        if failed.isEmpty {
-            deletedItems.append(DeletedItem(originalURL: url, bytesReclaimed: size))
-            totalBytes += size
-        }
-        return CleanupResult(
-            deletedURLs: trashed,
-            deletedItems: deletedItems,
-            failedURLs: failed,
-            totalBytesReclaimed: totalBytes
-        )
     }
 
     /// Deleting both a directory and one of its descendants concurrently races the filesystem:
@@ -178,6 +251,18 @@ struct FileManagerCleanupService: CleanupService {
         }
         return total
     }
+}
+
+private struct PreparedDeletion: Sendable {
+    let url: URL
+    let bytes: Int64
+    let isAlreadyInTrash: Bool
+}
+
+private enum PreparedDeletionResult: Sendable {
+    case ready(PreparedDeletion)
+    case failed(URL, any Error)
+    case cancelled
 }
 
 private extension URL {

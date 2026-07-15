@@ -80,6 +80,7 @@ enum SystemJunkPaths {
     /// inside an installer payload. Always considered "installed" so their Library entries are
     /// never orphaned even when no `.app` is on disk.
     static let alwaysInstalledBundleIDs: Set<String> = [
+        "com.storagecleaner.developer",
         "com.apple.dt.Xcode",
         "com.apple.dt.Instruments",
         "com.apple.dt.IBXcode",
