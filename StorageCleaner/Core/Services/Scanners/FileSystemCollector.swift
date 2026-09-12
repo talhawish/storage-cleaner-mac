@@ -117,22 +117,27 @@ struct FileSystemCollector: Sendable {
             return
         }
 
-        for case let url as URL in enumerator {
+        while true {
             guard !Task.isCancelled else { return }
             guard policy.prioritizeLargest || candidates.count < policy.limit else { return }
-            let values = try? url.resourceValues(forKeys: Self.sizeKeys)
-            guard values?.isRegularFile == true else { continue }
-            inspectedItemCount += 1
+            let hasItem = autoreleasepool {
+                guard let url = enumerator.nextObject() as? URL else { return false }
+                let values = try? url.resourceValues(forKeys: Self.sizeKeys)
+                guard values?.isRegularFile == true else { return true }
+                inspectedItemCount += 1
 
-            let record = FileRecord(url: url, bytes: allocatedSize(from: values))
-            guard matcher(record) else { continue }
+                let record = FileRecord(url: url, bytes: allocatedSize(from: values))
+                guard matcher(record) else { return true }
 
-            let candidate = FileCandidate(url: record.url, bytes: record.bytes)
-            if policy.prioritizeLargest {
-                candidates.retainLargest(candidate, limit: policy.limit)
-            } else {
-                candidates.append(candidate)
+                let candidate = FileCandidate(url: record.url, bytes: record.bytes)
+                if policy.prioritizeLargest {
+                    candidates.retainLargest(candidate, limit: policy.limit)
+                } else {
+                    candidates.append(candidate)
+                }
+                return true
             }
+            guard hasItem else { return }
         }
     }
 
@@ -156,23 +161,27 @@ struct FileSystemCollector: Sendable {
 
         let rootDepth = root.pathComponents.count
 
-        for case let url as URL in enumerator {
+        while true {
             guard !Task.isCancelled else { return }
             guard candidates.count < policy.limit else { return }
+            let hasItem = autoreleasepool {
+                guard let url = enumerator.nextObject() as? URL else { return false }
+                let depth = url.pathComponents.count - rootDepth
+                if depth > policy.maxDepth {
+                    enumerator.skipDescendants()
+                    return true
+                }
 
-            let depth = url.pathComponents.count - rootDepth
-            if depth > policy.maxDepth {
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+                guard values?.isDirectory == true else { return true }
+                inspectedItemCount += 1
+
+                guard matcher(url) else { return true }
+                candidates.append(FileCandidate(url: url, bytes: sizeOfItem(at: url)))
                 enumerator.skipDescendants()
-                continue
+                return true
             }
-
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
-            guard values?.isDirectory == true else { continue }
-            inspectedItemCount += 1
-
-            guard matcher(url) else { continue }
-            candidates.append(FileCandidate(url: url, bytes: sizeOfItem(at: url)))
-            enumerator.skipDescendants()
+            guard hasItem else { return }
         }
     }
 
@@ -186,26 +195,7 @@ struct FileSystemCollector: Sendable {
     }
 
     private func directorySize(at url: URL) -> Int64 {
-        let fileManager = FileManager.default
-        var total: Int64 = 0
-
-        guard let enumerator = fileManager.enumerator(
-            at: url,
-            includingPropertiesForKeys: Array(Self.sizeKeys),
-            options: [.skipsHiddenFiles]
-        ) else {
-            return total
-        }
-
-        for case let childURL as URL in enumerator {
-            guard !Task.isCancelled else { return total }
-
-            let values = try? childURL.resourceValues(forKeys: Self.sizeKeys)
-            guard values?.isRegularFile == true else { continue }
-            total += allocatedSize(from: values)
-        }
-
-        return total
+        FileSystemItemSizer.allocatedSize(of: url, options: [.skipsHiddenFiles])
     }
 
     private func allocatedSize(from values: URLResourceValues?) -> Int64 {

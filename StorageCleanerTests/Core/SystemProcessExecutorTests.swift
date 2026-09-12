@@ -30,4 +30,25 @@ final class SystemProcessExecutorTests: XCTestCase {
         XCTAssertEqual(result.standardOutput.count, bytesPerStream)
         XCTAssertEqual(result.standardError.count, bytesPerStream)
     }
+
+    func testRunCapsRetainedOutputFromNoisyProcess() async throws {
+        let executor = SystemProcessExecutor()
+        let chunkCount = SystemProcessExecutor.maximumCapturedBytesPerStream / 1_024 + 128
+        let script = """
+        chunk=$(printf '%*s' 1024 '' | tr ' ' x)
+        i=0
+        while [ $i -lt \(chunkCount) ]; do
+          printf "%s" "$chunk"
+          i=$((i + 1))
+        done
+        """
+
+        let result = try await executor.run(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", script]
+        )
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(result.standardOutput.count, SystemProcessExecutor.maximumCapturedBytesPerStream)
+    }
 }

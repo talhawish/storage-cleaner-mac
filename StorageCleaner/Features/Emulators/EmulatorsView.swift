@@ -30,6 +30,8 @@ struct EmulatorsView: View {
     }
 
     var body: some View {
+        @Bindable var viewModel = viewModel
+
         Group {
             switch viewModel.state {
             case .loading:
@@ -55,24 +57,17 @@ struct EmulatorsView: View {
         .toolbar { toolbarContent }
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.cancel() }
-        .sheet(isPresented: Binding(
-            get: { viewModel.showConfirmation },
-            set: { viewModel.showConfirmation = $0 }
-        )) {
+        .sheet(isPresented: $viewModel.showConfirmation) {
             EmulatorDeleteConfirmationSheet(
                 images: viewModel.selectedImages,
-                onConfirm: {
-                    let toRemove = viewModel.selectedImages
-                    viewModel.selectedIDs.removeAll()
-                    viewModel.showConfirmation = false
-                    Task {
-                        let result = await viewModel.delete(toRemove)
-                        await onCleanupComplete(result, toRemove)
-                        viewModel.start()
-                    }
-                },
+                onConfirm: performDeletion,
                 onCancel: { viewModel.showConfirmation = false }
             )
+        }
+        .alert("Some Items Couldn’t Be Removed", isPresented: $viewModel.showCleanupFailure) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.cleanupFailureMessage ?? "The selected items could not be removed.")
         }
     }
 
@@ -88,6 +83,7 @@ struct EmulatorsView: View {
                 .help("Remove \(viewModel.selectedIDs.count) selected OS images")
                 .accessibilityHint("Asks for confirmation, then removes the selected OS images. "
                     + "Apple runtimes can be re-downloaded; other items move to the Trash")
+                .disabled(viewModel.isDeleting)
             }
         }
 
@@ -99,6 +95,7 @@ struct EmulatorsView: View {
             }
             .keyboardShortcut("r", modifiers: [.command])
             .help("Look for installed OS images again")
+            .disabled(viewModel.isDeleting)
         }
     }
 
@@ -179,6 +176,14 @@ struct EmulatorsView: View {
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
             }
+
+            if viewModel.isDeleting {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Removing…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
@@ -254,5 +259,17 @@ struct EmulatorsView: View {
             return
         }
         viewModel.showConfirmation = true
+    }
+
+    private func performDeletion() {
+        let toRemove = viewModel.selectedImages
+        viewModel.showConfirmation = false
+        Task {
+            let result = await viewModel.delete(toRemove)
+            await onCleanupComplete(result, toRemove)
+            if !result.removedIDs.isEmpty {
+                viewModel.refreshAfterRemoval()
+            }
+        }
     }
 }

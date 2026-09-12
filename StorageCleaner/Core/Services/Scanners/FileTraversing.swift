@@ -131,19 +131,23 @@ actor DirectorySnapshotCache {
             return DirectorySnapshot(root: root, records: [], inspectedItemCount: 0, truncated: false)
         }
 
-        for case let url as URL in enumerator {
-            guard !Task.isCancelled else { break }
+        while !Task.isCancelled {
             guard records.count < maxRecordsPerRoot else {
                 truncated = true
                 break
             }
-            let values = try? url.resourceValues(forKeys: sizeKeys)
-            guard values?.isRegularFile == true else { continue }
-            inspectedItemCount += 1
-            records.append(FileRecord(
-                url: url,
-                bytes: Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
-            ))
+            let hasItem = autoreleasepool {
+                guard let url = enumerator.nextObject() as? URL else { return false }
+                let values = try? url.resourceValues(forKeys: sizeKeys)
+                guard values?.isRegularFile == true else { return true }
+                inspectedItemCount += 1
+                records.append(FileRecord(
+                    url: url,
+                    bytes: Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+                ))
+                return true
+            }
+            guard hasItem else { break }
         }
 
         return DirectorySnapshot(

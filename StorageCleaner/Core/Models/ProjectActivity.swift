@@ -76,6 +76,11 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
     let name: String
     let path: URL
     let technology: ProjectTechnology
+    let rootTechnologies: Set<ProjectTechnology>
+    /// Frameworks declared directly by the root manifest. The public
+    /// `frameworks` view also includes nested workspace components.
+    let directFrameworks: Set<ProjectFramework>
+    let components: [ProjectComponentInfo]
     let lastModifiedDate: Date
     let totalSize: Int64
     let childProjectCount: Int
@@ -92,6 +97,9 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         name: String,
         path: URL,
         technology: ProjectTechnology,
+        technologies: Set<ProjectTechnology> = [],
+        frameworks: Set<ProjectFramework> = [],
+        components: [ProjectComponentInfo] = [],
         lastModifiedDate: Date,
         totalSize: Int64,
         childProjectCount: Int,
@@ -104,12 +112,19 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         self.name = name
         self.path = path
         self.technology = technology
+        self.rootTechnologies = technologies.union([technology])
+        self.directFrameworks = frameworks
+        self.components = components
         self.lastModifiedDate = lastModifiedDate
         self.totalSize = totalSize
-        self.childProjectCount = childProjectCount
+        self.childProjectCount = components.isEmpty ? childProjectCount : components.count
         self.dependencySize = dependencySize
         self.iconURL = iconURL
-        self.iconFallback = iconFallback ?? ProjectIconFallback(technology: technology)
+        let allFrameworks = components.reduce(into: frameworks) { result, component in
+            result.formUnion(component.frameworks)
+        }
+        self.iconFallback = iconFallback
+            ?? ProjectIconFallback(frameworks: allFrameworks, technology: technology)
         self.gitStatus = gitStatus
     }
 
@@ -123,13 +138,53 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         .from(daysSinceLastModified: daysSinceLastModified)
     }
 
+    /// All frameworks represented by the root and its nested components.
+    var frameworks: Set<ProjectFramework> {
+        components.reduce(into: directFrameworks) { result, component in
+            result.formUnion(component.frameworks)
+        }
+    }
+
+    /// Every stack whose regenerable dependencies live under this root.
+    var technologies: Set<ProjectTechnology> {
+        components.reduce(into: rootTechnologies) { result, component in
+            result.formUnion(component.technologies)
+        }
+    }
+
+    var dependencyScopes: [ProjectDependencyScope] {
+        [ProjectDependencyScope(root: path, technologies: rootTechnologies)]
+            + components.map {
+                ProjectDependencyScope(root: $0.path, technologies: $0.technologies)
+            }
+    }
+
+    /// Framework occurrence counts treat each nested project as its own
+    /// project while root storage remains a single allocation.
+    var frameworkProjectCounts: [ProjectFramework: Int] {
+        var counts = directFrameworks.reduce(into: [ProjectFramework: Int]()) { result, framework in
+            result[framework, default: 0] += 1
+        }
+        for component in components {
+            for framework in component.frameworks {
+                counts[framework, default: 0] += 1
+            }
+        }
+        return counts
+    }
+
+    var frameworkSummary: String {
+        frameworks.map(\.rawValue).sorted().joined(separator: " · ")
+    }
+
     var lastModifiedRelative: String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         return formatter.localizedString(for: lastModifiedDate, relativeTo: .now)
     }
 
-    /// Bytes of hand-written source, i.e. total minus regenerable dependencies.
+    /// Project data kept during hibernation: source, repository metadata, and
+    /// other files that are not known regenerable dependencies.
     var projectSize: Int64 {
         max(0, totalSize - dependencySize)
     }
@@ -140,19 +195,20 @@ struct ProjectInfo: Identifiable, Hashable, Sendable {
         daysSinceLastModified >= threshold.days && dependencySize > 0
     }
 
-    /// A copy of this project as it stands once its dependencies have been
-    /// reclaimed: only hand-written source remains. Identity is preserved so the
-    /// UI can update the project in place without a rescan.
-    var withDependenciesReclaimed: ProjectInfo {
-        ProjectInfo(
+    func withDependencySize(_ newDependencySize: Int64) -> ProjectInfo {
+        let normalizedDependencySize = max(0, newDependencySize)
+        return ProjectInfo(
             id: id,
             name: name,
             path: path,
             technology: technology,
+            technologies: rootTechnologies,
+            frameworks: directFrameworks,
+            components: components,
             lastModifiedDate: lastModifiedDate,
-            totalSize: projectSize,
+            totalSize: projectSize + normalizedDependencySize,
             childProjectCount: childProjectCount,
-            dependencySize: 0,
+            dependencySize: normalizedDependencySize,
             iconURL: iconURL,
             iconFallback: iconFallback,
             gitStatus: gitStatus
@@ -181,6 +237,31 @@ struct ProjectActivitySnapshot: Sendable {
 
     var projectsByActivity: [ProjectActivityStatus: [ProjectInfo]] {
         Dictionary(grouping: projects) { $0.activityStatus }
+    }
+
+    var projectCountsByFramework: [ProjectFramework: Int] {
+        projects.reduce(into: [:]) { counts, project in
+            for (framework, projectCount) in project.frameworkProjectCounts {
+                counts[framework, default: 0] += projectCount
+            }
+        }
+    }
+
+    var frameworkBreakdown: [ProjectFrameworkCount] {
+        projectCountsByFramework
+            .map { ProjectFrameworkCount(framework: $0.key, count: $0.value) }
+            .sorted { lhs, rhs in
+                lhs.count == rhs.count
+                    ? lhs.framework.rawValue < rhs.framework.rawValue
+                    : lhs.count > rhs.count
+            }
+    }
+
+    func technologyDetail(for technology: ProjectTechnology) -> ProjectTechnologyDetail {
+        ProjectTechnologyDetail(
+            technology: technology,
+            projects: (projectsByTechnology[technology] ?? []).sorted { $0.totalSize > $1.totalSize }
+        )
     }
 
     /// Projects untouched for at least the threshold that still carry

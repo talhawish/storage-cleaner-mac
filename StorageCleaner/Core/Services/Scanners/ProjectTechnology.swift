@@ -70,17 +70,22 @@ enum ProjectTechnology: String, CaseIterable, Identifiable, Hashable, Sendable {
     /// activity (a dependency install should not make a project look "active").
     var dependencyDirectoryNames: Set<String> {
         switch self {
-        case .flutter: [".dart_tool", "build", ".pub-cache"]
-        case .reactNative: ["Pods", "build", ".gradle"]
+        case .flutter: [".dart_tool", "build", ".pub-cache", "Pods", ".gradle", ".cxx"]
+        case .reactNative: ["node_modules", "Pods", "build", ".gradle", ".cxx", ".expo", ".metro-cache"]
         case .android: ["build", ".gradle", ".cxx"]
-        case .swift: [".build", "DerivedData", "Pods", ".swiftpm"]
+        case .swift: [".build", "DerivedData", "Pods", ".swiftpm", "Carthage"]
         case .dotNet: ["bin", "obj", "packages"]
         case .rust: ["target"]
         case .golang: ["vendor"]
         case .php: ["vendor"]
-        case .python: ["venv", ".venv", "env", "__pycache__", ".tox", "dist", "build", ".eggs"]
-        case .ruby: ["vendor", ".bundle"]
-        case .nodeJS: ["node_modules", ".next", ".nuxt", ".turbo", "dist", "build", ".cache"]
+        case .python: [
+            "venv", ".venv", "env", "__pycache__", ".tox", "dist", "build", ".eggs",
+            ".mypy_cache", ".pytest_cache", ".ruff_cache"
+        ]
+        case .ruby: ["bundle", ".bundle"]
+        case .nodeJS: [
+            "node_modules", ".next", ".nuxt", ".output", ".turbo", ".quasar", "dist", "build", ".cache"
+        ]
         case .kotlin: ["build", ".gradle"]
         case .java: ["build", ".gradle", "target"]
         }
@@ -96,12 +101,14 @@ enum ProjectIconFallback: String, CaseIterable, Identifiable, Hashable, Sendable
     case xcode = "Xcode"
     case androidStudio = "Android Studio"
     case laravel = "Laravel"
+    case symfony = "Symfony"
     case php = "PHP"
     case nextJS = "Next.js"
     case nuxt = "Nuxt"
     case nodeJS = "Node.js"
     case django = "Django"
     case python = "Python"
+    case rubyOnRails = "Ruby on Rails"
     case golang = "Go"
     case rust = "Rust"
     case dotNet = ".NET"
@@ -115,6 +122,12 @@ enum ProjectIconFallback: String, CaseIterable, Identifiable, Hashable, Sendable
         self = Self.byTechnology[technology, default: .nodeJS]
     }
 
+    init(frameworks: Set<ProjectFramework>, technology: ProjectTechnology) {
+        let framework = ProjectFramework.primary(in: frameworks)
+        self = framework.flatMap { Self.byFramework[$0] }
+            ?? Self.byTechnology[technology, default: .nodeJS]
+    }
+
     var symbolName: String {
         switch self {
         case .flutter: "f.square.fill"
@@ -122,12 +135,14 @@ enum ProjectIconFallback: String, CaseIterable, Identifiable, Hashable, Sendable
         case .xcode: "hammer.fill"
         case .androidStudio: "a.square.fill"
         case .laravel: "l.square.fill"
+        case .symfony: "s.square.fill"
         case .php: "p.circle.fill"
         case .nextJS: "n.circle"
         case .nuxt: "n.square"
         case .nodeJS: "n.square.fill"
         case .django: "d.square.fill"
         case .python: "p.square.fill"
+        case .rubyOnRails: "tram.fill"
         case .golang: "g.square.fill"
         case .rust: "r.square.fill"
         case .dotNet: "number.square.fill"
@@ -144,12 +159,14 @@ enum ProjectIconFallback: String, CaseIterable, Identifiable, Hashable, Sendable
         case .xcode: "147EFB"
         case .androidStudio: "3DDC84"
         case .laravel: "FF2D20"
+        case .symfony: "5C5C5C"
         case .php: "777BB4"
         case .nextJS: "111111"
         case .nuxt: "00DC82"
         case .nodeJS: "68A063"
         case .django: "092E20"
         case .python: "3776AB"
+        case .rubyOnRails: "D30001"
         case .golang: "00ADD8"
         case .rust: "CE412B"
         case .dotNet: "512BD4"
@@ -159,33 +176,14 @@ enum ProjectIconFallback: String, CaseIterable, Identifiable, Hashable, Sendable
         }
     }
 
-    static func detect(
-        at directory: URL,
-        technology: ProjectTechnology,
-        fileManager: FileManager = .default
-    ) -> ProjectIconFallback {
-        switch technology {
-        case .nodeJS:
-            if ProjectDependencyRules.packageJSONContains("next", at: directory, fileManager: fileManager) {
-                return .nextJS
-            }
-            if ProjectDependencyRules.packageJSONContains("nuxt", at: directory, fileManager: fileManager) {
-                return .nuxt
-            }
-        case .php:
-            if ProjectDependencyRules.composerJSONContains("laravel/framework", at: directory, fileManager: fileManager)
-                || fileManager.fileExists(atPath: directory.appending(path: "artisan").path) {
-                return .laravel
-            }
-        case .python:
-            if ProjectDependencyRules.pythonProjectContains("django", at: directory, fileManager: fileManager) {
-                return .django
-            }
-        default:
-            break
-        }
-        return ProjectIconFallback(technology: technology)
-    }
+    private static let byFramework: [ProjectFramework: ProjectIconFallback] = [
+        .nextJS: .nextJS,
+        .nuxt: .nuxt,
+        .laravel: .laravel,
+        .symfony: .symfony,
+        .django: .django,
+        .rubyOnRails: .rubyOnRails
+    ]
 
     private static let byTechnology: [ProjectTechnology: ProjectIconFallback] = [
         .flutter: .flutter,
@@ -335,5 +333,39 @@ enum ProjectDetector {
         return rules.first { rule in
             rule.markers.contains { $0.matches(in: directory, contents: contents, fileManager: fileManager) }
         }?.technology
+    }
+
+    /// Detect every independently useful stack rooted in the same directory.
+    /// Priority-only wrappers are collapsed so Flutter does not also appear as
+    /// Android and React Native does not also appear as plain Node.js.
+    static func detectAll(
+        at directory: URL,
+        fileManager: FileManager = .default
+    ) -> Set<ProjectTechnology> {
+        let entries = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
+        guard !entries.isEmpty else { return [] }
+        let contents = Set(entries)
+        var technologies = Set(rules.compactMap { rule in
+            rule.markers.contains {
+                $0.matches(in: directory, contents: contents, fileManager: fileManager)
+            } ? rule.technology : nil
+        })
+
+        if technologies.contains(.flutter) {
+            technologies.remove(.android)
+        }
+        if technologies.contains(.reactNative) {
+            technologies.remove(.nodeJS)
+        }
+        if technologies.contains(.android) {
+            technologies.subtract([.kotlin, .java])
+        } else if technologies.contains(.kotlin) {
+            technologies.remove(.java)
+        }
+        return technologies
+    }
+
+    static func primaryTechnology(in technologies: Set<ProjectTechnology>) -> ProjectTechnology? {
+        rules.first { technologies.contains($0.technology) }?.technology
     }
 }

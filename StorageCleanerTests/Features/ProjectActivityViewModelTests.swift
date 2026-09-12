@@ -83,7 +83,10 @@ final class ProjectActivityViewModelTests: XCTestCase {
         let inactiveNames = Set(viewModel.inactiveProjects.map(\.name))
         XCTAssertEqual(inactiveNames, ["dormant-python", "inactive-rust", "abandoned-swift"])
         // Hibernatable size is the sum of those projects' dependency bytes.
-        XCTAssertEqual(viewModel.hibernatableSize, 2_000 + 4_000 + 8_000)
+        let expected = dependencyAllocatedSize(project: "dormant-python", directory: "venv")
+            + dependencyAllocatedSize(project: "inactive-rust", directory: "target")
+            + dependencyAllocatedSize(project: "abandoned-swift", directory: ".build")
+        XCTAssertEqual(viewModel.hibernatableSize, expected)
     }
 
     func testInactivityThresholdControlsCandidates() async {
@@ -103,7 +106,9 @@ final class ProjectActivityViewModelTests: XCTestCase {
             Set(viewModel.inactiveProjects.map(\.name)),
             ["inactive-rust", "abandoned-swift"]
         )
-        XCTAssertEqual(viewModel.hibernatableSize, 4_000 + 8_000)
+        let expected = dependencyAllocatedSize(project: "inactive-rust", directory: "target")
+            + dependencyAllocatedSize(project: "abandoned-swift", directory: ".build")
+        XCTAssertEqual(viewModel.hibernatableSize, expected)
 
         // Six months keeps only the 200-day and 500-day projects.
         viewModel.inactivityThreshold = .sixMonths
@@ -164,11 +169,13 @@ final class ProjectActivityViewModelTests: XCTestCase {
     func testHibernateReclaimsDependenciesButKeepsProject() async throws {
         await viewModel.performScan()
         let target = try XCTUnwrap(viewModel.snapshot?.projects.first { $0.name == "abandoned-swift" })
+        let expectedReclaimable = target.dependencySize
 
         let outcome = await viewModel.hibernate(target)
 
         XCTAssertTrue(outcome.succeeded)
-        XCTAssertEqual(outcome.reclaimedBytes, 8_000)
+        XCTAssertEqual(outcome.reclaimedBytes, expectedReclaimable)
+        XCTAssertEqual(outcome.remainingDependencyBytes, 0)
         // The project stays in the list, now with its dependencies reclaimed.
         XCTAssertEqual(viewModel.snapshot?.projects.count, 4)
         let updated = try XCTUnwrap(viewModel.snapshot?.projects.first { $0.name == "abandoned-swift" })
@@ -288,6 +295,14 @@ final class ProjectActivityViewModelTests: XCTestCase {
         // Activity follows the source marker, so age only that file.
         let age = Date(timeIntervalSinceNow: -Double(days) * 86_400)
         try FileManager.default.setAttributes([.modificationDate: age], ofItemAtPath: markerURL.path)
+    }
+
+    private func dependencyAllocatedSize(project: String, directory: String) -> Int64 {
+        StorageFormatting.itemSize(
+            at: projectsRoot
+                .appending(path: project, directoryHint: .isDirectory)
+                .appending(path: directory, directoryHint: .isDirectory)
+        )
     }
 
     private func waitForScanToFinish(

@@ -5,7 +5,7 @@ const { appStoreUrl } = useSiteConfig()
 <template>
   <section class="py-24 sm:py-32">
     <div class="container-page">
-      <div class="relative overflow-hidden rounded-3xl border border-ink-200 bg-gradient-to-br from-ink-50 to-white p-10 sm:p-14">
+      <div class="relative overflow-hidden rounded-3xl border border-ink-200 bg-gradient-to-br from-ink-50 to-white p-6 sm:p-14">
         <div
           class="absolute inset-0 grid-lines opacity-60"
           aria-hidden="true"
@@ -24,14 +24,15 @@ const { appStoreUrl } = useSiteConfig()
               Free forever, no account, no telemetry — the way Mac apps should be.
             </p>
             <div class="mt-8 flex justify-start">
-              <a :href="appStoreUrl" target="_blank" rel="noopener noreferrer" class="btn-primary shrink-0 px-6 py-3 text-[15px]">
+              <a :href="appStoreUrl" target="_blank" rel="noopener noreferrer" class="btn-primary w-full px-4 py-3 text-[15px] sm:w-auto sm:px-6">
                 <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" aria-hidden="true">
                   <path
                     fill="currentColor"
                     d="M17.05 12.04c-.03-2.74 2.24-4.06 2.34-4.12-1.27-1.86-3.26-2.12-3.97-2.15-1.69-.17-3.3 1-4.16 1-.86 0-2.18-.97-3.59-.94-1.85.03-3.55 1.08-4.5 2.73-1.92 3.32-.49 8.23 1.38 10.92.91 1.32 2 2.81 3.41 2.76 1.37-.06 1.89-.89 3.54-.89 1.65 0 2.12.89 3.57.86 1.47-.03 2.41-1.34 3.31-2.67 1.05-1.53 1.48-3.02 1.5-3.1-.03-.01-2.88-1.11-2.91-4.4ZM14.32 4.06c.74-.91 1.25-2.17 1.11-3.43-1.07.05-2.38.72-3.16 1.62-.69.8-1.31 2.09-1.15 3.32 1.2.09 2.43-.61 3.2-1.51Z"
                   />
                 </svg>
-                <span>Download from the Mac App Store</span>
+                <span class="sm:hidden">Mac App Store</span>
+                <span class="hidden sm:inline">Download from the Mac App Store</span>
               </a>
             </div>
             <p class="mt-5 text-xs text-ink-500">

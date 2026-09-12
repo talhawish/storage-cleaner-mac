@@ -270,7 +270,7 @@ struct ProjectDetailView: View {
                     tint: AppTheme.orange
                 )
                 AppModalStat(
-                    title: "Source",
+                    title: "Project Data",
                     value: StorageFormatting.bytes(project.projectSize),
                     systemImage: "chevron.left.forwardslash.chevron.right",
                     tint: AppTheme.mint
@@ -414,67 +414,6 @@ private struct ProjectActivityBanner: View {
                 )
         }
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// Technology card — shows the detected technology icon, name, marker files
-/// and any nested projects.
-private struct ProjectTechnologyInfo: View {
-    let project: ProjectInfo
-    let permissionHandler: (any StoragePermissionHandling)?
-
-    var body: some View {
-        AppModalSection(
-            title: "Technology",
-            subtitle: "Detection rules used to identify this project",
-            systemImage: project.iconFallback.symbolName,
-            tint: Color(hex: project.iconFallback.color)
-        ) {
-            AppModalCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        ProjectIconView(
-                            iconURL: project.iconURL,
-                            technology: project.technology,
-                            fallback: project.iconFallback,
-                            permissionHandler: permissionHandler,
-                            size: 36,
-                            cornerRadius: AppTheme.Radius.chip
-                        )
-                        .accessibilityHidden(true)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(project.iconFallback.rawValue)
-                                .font(.headline)
-                            if project.iconFallback.rawValue != project.technology.rawValue {
-                                Text(project.technology.rawValue)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if project.childProjectCount > 0 {
-                                Text("Contains ^[\(project.childProjectCount) nested project](inflect: true)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                    }
-
-                    if !project.technology.markerFiles.isEmpty {
-                        Divider()
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Marker files")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                                .textCase(.uppercase)
-                            Text(project.technology.markerFiles.joined(separator: ", "))
-                                .font(.callout.monospaced())
-                                .textSelection(.enabled)
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

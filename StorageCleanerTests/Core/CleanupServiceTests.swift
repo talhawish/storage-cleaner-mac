@@ -115,6 +115,45 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 4_096)
     }
 
+    func testDeleteUsesScanSizeForDirectoryInsteadOfWalkingItAgain() async throws {
+        let directory = temporaryDirectory.appending(path: "measured-cache", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 4_096).write(to: directory.appending(path: "cache.bin"))
+
+        let destination = temporaryDirectory.appending(path: "Trash/measured-cache")
+        let mover = StubTrashMover(result: TrashMoveResult(
+            destinationBySource: [directory.standardizedFileURL: destination],
+            error: nil
+        ))
+
+        let result = await FileManagerCleanupService(trashMover: mover).delete(
+            urls: [directory],
+            precomputedBytes: [directory: 123]
+        )
+
+        XCTAssertEqual(result.deletedCount, 1)
+        XCTAssertEqual(result.totalBytesReclaimed, 123)
+    }
+
+    func testLargeCleanupIsSentToTrashInBoundedBatches() async throws {
+        let files = try (0..<205).map { index in
+            let file = temporaryDirectory.appending(path: "item-\(index).tmp")
+            try Data(repeating: 1, count: 1).write(to: file)
+            return file
+        }
+        let mover = BatchRecordingTrashMover()
+
+        let result = await FileManagerCleanupService(trashMover: mover).delete(
+            urls: files,
+            precomputedBytes: Dictionary(uniqueKeysWithValues: files.map { ($0, Int64(1)) })
+        )
+
+        XCTAssertEqual(result.deletedCount, files.count)
+        XCTAssertEqual(mover.requests.count, 3)
+        XCTAssertEqual(mover.requests.flatMap { $0 }.count, files.count)
+        XCTAssertTrue(mover.requests.allSatisfy { $0.count <= 100 })
+    }
+
     func testProtectedSystemContainerNeverReachesTrashMover() async {
         let protectedURL = SystemJunkPaths.containers.appending(path: "com.example.protected")
         let mover = RecordingTrashMover()
@@ -146,5 +185,26 @@ private final class RecordingTrashMover: TrashMoving, @unchecked Sendable {
     func moveToTrash(_ urls: [URL]) async -> TrashMoveResult {
         lock.withLock { recordedRequests.append(urls) }
         return TrashMoveResult(destinationBySource: [:], error: nil)
+    }
+}
+
+private final class BatchRecordingTrashMover: TrashMoving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedRequests: [[URL]] = []
+
+    var requests: [[URL]] {
+        lock.withLock { recordedRequests }
+    }
+
+    func moveToTrash(_ urls: [URL]) async -> TrashMoveResult {
+        lock.withLock { recordedRequests.append(urls) }
+        return TrashMoveResult(
+            destinationBySource: Dictionary(
+                uniqueKeysWithValues: urls.map { url in
+                    (url, URL(filePath: "/tmp/Trash/\(url.lastPathComponent)"))
+                }
+            ),
+            error: nil
+        )
     }
 }

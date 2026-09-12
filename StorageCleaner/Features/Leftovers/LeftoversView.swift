@@ -12,7 +12,7 @@ struct LeftoversView: View {
 
     @State private var typeFilter: LeftoverTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
     @State private var allRecords: [FindingFileRecord] = []
     @State private var isLoadingRecords = false
 
@@ -82,27 +82,12 @@ struct LeftoversView: View {
                 .help("Scan for leftover installers again")
             }
         }
-        .sheet(isPresented: $showDeleteConfirmation) {
-            ConfirmationModal(
-                variant: .destructive,
-                title: "Move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") to Trash?",
-                message: "This will move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") "
-                    + "(\(StorageFormatting.bytes(totalSelectedBytes))) to Trash.",
-                iconSystemName: "trash.fill",
-                showsCloseButton: true,
-                confirm: AppModalActionBar.Action(
-                    title: "Move to Trash",
-                    systemImage: "trash.fill",
-                    isProminent: true,
-                    isDestructive: true,
-                    isDefault: true,
-                    action: {
-                        let urls = Array(selectedURLs)
-                        selectedURLs.removeAll()
-                        onDelete(urls)
-                    }
-                ),
-                cancel: AppModalActionBar.CancelAction(title: "Cancel")
+        .sheet(item: $cleanupRequest) { request in
+            DeleteConfirmationSheet(
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                onDelete: { performDelete(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
     }
@@ -204,7 +189,16 @@ struct LeftoversView: View {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        cleanupRequest = FileCleanupRequest(
+            urls: selectedURLs,
+            totalBytes: totalSelectedBytes
+        )
+    }
+
+    private func performDelete(_ request: FileCleanupRequest) {
+        cleanupRequest = nil
+        selectedURLs.subtract(request.urls)
+        onDelete(request.urls)
     }
 
     private func loadRecords() async {

@@ -127,6 +127,10 @@ private extension AppShellView {
                             )
                         case .section(.simulatorsEmulators):
                             EmulatorsView(
+                                viewModel: EmulatorsViewModel(
+                                    service: viewModel.emulatorService,
+                                    permissionHandler: viewModel.permissionHandler
+                                ),
                                 canUseProActions: viewModel.canCleanup,
                                 onRequirePro: { _ = viewModel.gateFileAction() },
                                 onCleanupComplete: { result, images in

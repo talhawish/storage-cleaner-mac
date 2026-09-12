@@ -45,8 +45,11 @@ final class EmulatorsViewModel {
 
     private(set) var images: [EmulatorImage] = []
     private(set) var state: State = .loading
+    private(set) var isDeleting = false
+    private(set) var cleanupFailureMessage: String?
     var selectedIDs: Set<String> = []
     var showConfirmation = false
+    var showCleanupFailure = false
 
     private var loadTask: Task<Void, Never>?
     /// Wall-clock at which the current load started. Used to keep the loading state visible
@@ -125,15 +128,34 @@ final class EmulatorsViewModel {
         NSWorkspace.shared.open(url)
     }
 
-    /// Removes the supplied images using the injected service. Returns the service's
-    /// `EmulatorCleanupResult` so the caller can surface failures. Checks the
+    /// Removes the supplied images while the home-folder security scope is active. Successful
+    /// removals disappear immediately; failed items remain selected so the user can retry them.
+    /// Returns the service's `EmulatorCleanupResult` for audit reconciliation. Checks the
     /// `canDelete` gate before proceeding — Free users get an empty result
     /// and the caller should show no UI change.
     func delete(_ toRemove: [EmulatorImage]) async -> EmulatorCleanupResult {
-        guard canDelete() else {
+        guard canDelete(), !isDeleting, !toRemove.isEmpty else {
             return EmulatorCleanupResult(removedIDs: [], totalBytesReclaimed: 0, failures: [])
         }
-        return await service.remove(toRemove)
+
+        isDeleting = true
+        cleanupFailureMessage = nil
+        defer { isDeleting = false }
+
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
+        let result = await service.remove(toRemove)
+        let removedIDs = Set(result.removedIDs)
+        images.removeAll { removedIDs.contains($0.id) }
+        selectedIDs.subtract(removedIDs)
+        state = images.isEmpty ? .empty : .loaded
+
+        if !result.failures.isEmpty {
+            cleanupFailureMessage = Self.failureMessage(for: result.failures, in: toRemove)
+            showCleanupFailure = true
+        }
+
+        return result
     }
 
     /// Cancels any in-flight discovery. Called when the view disappears; the next appearance
@@ -146,11 +168,14 @@ final class EmulatorsViewModel {
     /// Rescans after a successful (or partial) removal. The caller is expected to have already
     /// removed the items; this just refreshes the inventory.
     func refreshAfterRemoval() {
-        start()
+        loadTask?.cancel()
+        loadTask = Task { [weak self] in
+            await self?.load(minimumLoadingDuration: nil)
+        }
     }
 
     func toggle(_ image: EmulatorImage) {
-        guard image.isRemovable else { return }
+        guard image.isRemovable, !isDeleting else { return }
         if selectedIDs.contains(image.id) {
             selectedIDs.remove(image.id)
         } else {
@@ -159,6 +184,7 @@ final class EmulatorsViewModel {
     }
 
     func toggleAll(in images: [EmulatorImage]) {
+        guard !isDeleting else { return }
         let removable = images.filter(\.isRemovable).map(\.id)
         if removable.allSatisfy(selectedIDs.contains) {
             removable.forEach { selectedIDs.remove($0) }
@@ -169,7 +195,7 @@ final class EmulatorsViewModel {
 
     // MARK: - Private
 
-    private func load() async {
+    private func load(minimumLoadingDuration: TimeInterval? = 0.4) async {
         // The Emulators view reads from `~/Library/Developer/Xcode/iOS DeviceSupport/`,
         // `~/Library/Developer/CoreSimulator/Devices/`, and `~/Library/Android/sdk/system-images/`.
         // In a sandboxed build none of these are reachable without an active security-scoped
@@ -198,11 +224,10 @@ final class EmulatorsViewModel {
         // Even on a fast Mac the load completes in a few ms; the loading affordance is
         // the only feedback the user gets that something happened. Hold the loading
         // state visible long enough to be perceived.
-        if let started = loadStartedAt {
+        if let minimumLoadingDuration, let started = loadStartedAt {
             let elapsed = Date().timeIntervalSince(started)
-            let minVisible: TimeInterval = 0.4
-            if elapsed < minVisible {
-                let remaining = minVisible - elapsed
+            if elapsed < minimumLoadingDuration {
+                let remaining = minimumLoadingDuration - elapsed
                 try? await Task.sleep(for: .seconds(remaining))
                 guard !Task.isCancelled else { return }
             }
@@ -224,5 +249,19 @@ final class EmulatorsViewModel {
         if forceLoaded {
             state = newImages.isEmpty ? .empty : .loaded
         }
+    }
+
+    private static func failureMessage(
+        for failures: [EmulatorCleanupResult.Failure],
+        in requestedImages: [EmulatorImage]
+    ) -> String {
+        let titlesByID = Dictionary(uniqueKeysWithValues: requestedImages.map { ($0.id, $0.title) })
+        let details = failures.prefix(3).map { failure in
+            let title = titlesByID[failure.id] ?? "Unknown item"
+            return "\(title): \(failure.message)"
+        }
+        let remainingCount = failures.count - details.count
+        let remaining = remainingCount > 0 ? "\n…and \(remainingCount) more." : ""
+        return details.joined(separator: "\n") + remaining
     }
 }

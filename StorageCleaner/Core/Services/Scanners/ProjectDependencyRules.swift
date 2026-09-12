@@ -1,22 +1,29 @@
 import Foundation
 
 enum ProjectDependencyRules {
-    /// `true` if `directory/package.json` exists and its contents contain `dependency` as a
-    /// substring. Reading the whole file keeps the marker simple; detection runs once per
-    /// project root so the cost is bounded. Linear scan is intentional — avoiding a JSON
-    /// dependency keeps this file Foundation-only.
+    /// `true` when a package is declared in a package.json dependency section.
+    /// Parsing keys avoids false positives from project names, scripts, and descriptions.
     static func packageJSONContains(
         _ dependency: String,
         at directory: URL,
         fileManager: FileManager = .default
     ) -> Bool {
-        let packageJSON = directory.appending(path: "package.json")
-        guard fileManager.fileExists(atPath: packageJSON.path),
-              let data = fileManager.contents(atPath: packageJSON.path),
-              let text = String(data: data, encoding: .utf8) else {
-            return false
+        packageJSONDependencies(at: directory, fileManager: fileManager).contains(dependency)
+    }
+
+    static func packageJSONDependencies(
+        at directory: URL,
+        fileManager: FileManager = .default
+    ) -> Set<String> {
+        guard let data = fileManager.contents(atPath: directory.appending(path: "package.json").path),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return []
         }
-        return text.contains(dependency)
+        return ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
+            .reduce(into: Set<String>()) { packages, section in
+                guard let dependencies = object[section] as? [String: Any] else { return }
+                packages.formUnion(dependencies.keys)
+            }
     }
 
     static func isComposerProject(at directory: URL, fileManager: FileManager = .default) -> Bool {
@@ -24,28 +31,36 @@ enum ProjectDependencyRules {
             || isComposerVendorDirectory(directory.appending(path: "vendor", directoryHint: .isDirectory))
     }
 
-    static func composerJSONContains(
-        _ needle: String,
+    static func composerJSONDependencies(
         at directory: URL,
         fileManager: FileManager = .default
-    ) -> Bool {
-        textFileContains(needle, at: directory.appending(path: "composer.json"), fileManager: fileManager)
+    ) -> Set<String> {
+        guard let data = fileManager.contents(atPath: directory.appending(path: "composer.json").path),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return []
+        }
+        return ["require", "require-dev"].reduce(into: Set<String>()) { packages, section in
+            guard let dependencies = object[section] as? [String: Any] else { return }
+            packages.formUnion(dependencies.keys)
+        }
     }
 
-    static func pythonProjectContains(
-        _ needle: String,
+    static func rubyProjectContainsRails(
         at directory: URL,
         fileManager: FileManager = .default
     ) -> Bool {
-        [
-            "pyproject.toml",
-            "requirements.txt",
-            "Pipfile",
-            "setup.py",
-            "setup.cfg",
-            "environment.yml"
-        ].contains { name in
-            textFileContains(needle, at: directory.appending(path: name), fileManager: fileManager)
+        ["Gemfile", "Gemfile.lock"].contains { name in
+            guard let data = fileManager.contents(atPath: directory.appending(path: name).path),
+                  let text = String(data: data, encoding: .utf8) else {
+                return false
+            }
+            return text.range(
+                of: #"(?m)^\s*gem\s+['\"]rails['\"]"#,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil || text.range(
+                of: #"(?m)^\s{4}rails\s+\("#,
+                options: .regularExpression
+            ) != nil
         }
     }
 
@@ -67,46 +82,36 @@ enum ProjectDependencyRules {
             return isComposerVendorDirectory(directory, fileManager: fileManager)
         }
 
+        if technology == .ruby {
+            let components = relativePathComponents(of: directory, under: projectRoot)
+            return components == [".bundle"]
+                || components.suffix(2).elementsEqual(["vendor", "bundle"])
+        }
+
         return technology.dependencyDirectoryNames.contains(directory.lastPathComponent)
     }
 
-    static func isDependencyFile(
-        _ file: URL,
-        for technology: ProjectTechnology,
+    static func isDependencyDirectory(
+        _ directory: URL,
+        for technologies: Set<ProjectTechnology>,
         projectRoot: URL,
         fileManager: FileManager = .default
     ) -> Bool {
-        let rootComponents = projectRoot.standardizedFileURL.pathComponents
-        let fileComponents = file.standardizedFileURL.pathComponents
-        guard fileComponents.starts(with: rootComponents) else { return false }
-
-        let relativeComponents = Array(fileComponents.dropFirst(rootComponents.count))
-        if technology == .php {
-            return relativeComponents.indices.contains { index in
-                guard relativeComponents[index] == "vendor" else { return false }
-                let vendorURL = URL(
-                    fileURLWithPath: NSString.path(
-                        withComponents: rootComponents + Array(relativeComponents.prefix(index + 1))
-                    ),
-                    isDirectory: true
-                )
-                return isComposerVendorDirectory(vendorURL, fileManager: fileManager)
-            }
+        technologies.contains { technology in
+            isDependencyDirectory(
+                directory,
+                for: technology,
+                projectRoot: projectRoot,
+                fileManager: fileManager
+            )
         }
-
-        return relativeComponents.contains(where: technology.dependencyDirectoryNames.contains)
     }
 
-    private static func textFileContains(
-        _ needle: String,
-        at url: URL,
-        fileManager: FileManager
-    ) -> Bool {
-        guard fileManager.fileExists(atPath: url.path),
-              let data = fileManager.contents(atPath: url.path),
-              let text = String(data: data, encoding: .utf8) else {
-            return false
-        }
-        return text.range(of: needle, options: [.caseInsensitive]) != nil
+    private static func relativePathComponents(of url: URL, under root: URL) -> [String] {
+        let rootComponents = root.standardizedFileURL.pathComponents
+        let components = url.standardizedFileURL.pathComponents
+        guard components.starts(with: rootComponents) else { return [] }
+        return Array(components.dropFirst(rootComponents.count))
     }
+
 }

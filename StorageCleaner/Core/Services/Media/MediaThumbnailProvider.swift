@@ -1,10 +1,11 @@
 import AppKit
 import Foundation
+import ImageIO
 import QuickLookThumbnailing
 
 /// Produces square thumbnails for the media grid and list rows. The provider is a
-/// shared actor with its own in-memory `NSCache`, so a view scrolling through a
-/// large grid only generates each thumbnail once for the lifetime of the process.
+/// shared actor with a bounded in-memory `NSCache`, so recently visible files
+/// are reused without retaining every thumbnail for the process lifetime.
 ///
 /// The fallback chain is:
 /// 1. **QuickLook** for any file the system can render a thumbnail for (most
@@ -19,7 +20,18 @@ import QuickLookThumbnailing
 actor MediaThumbnailProvider {
     static let shared = MediaThumbnailProvider()
 
+    /// A grid can encounter thousands of files. `NSCache` has no useful
+    /// default upper bound, so explicitly cap decoded bitmap memory instead of
+    /// allowing scrolling to retain every thumbnail for the process lifetime.
+    static let maximumCachedImageCount = 512
+    static let maximumCacheCost = 128 * 1_024 * 1_024
+
     private let cache = NSCache<NSString, NSImage>()
+
+    init() {
+        cache.countLimit = Self.maximumCachedImageCount
+        cache.totalCostLimit = Self.maximumCacheCost
+    }
 
     func thumbnail(
         for url: URL,
@@ -43,7 +55,7 @@ actor MediaThumbnailProvider {
             return nil
         }
 
-        cache.setObject(image, forKey: key)
+        cache.setObject(image, forKey: key, cost: Self.bitmapCost(pixelSize: pixelSize))
         return image
     }
 
@@ -67,7 +79,8 @@ actor MediaThumbnailProvider {
         if let image = await quickLookThumbnail(for: url, sideLength: sideLength, scale: scale) {
             return image
         }
-        if let image = await nativeImageThumbnail(for: url) {
+        let pixelSize = max(1, Int((sideLength * scale).rounded(.up)))
+        if let image = await nativeImageThumbnail(for: url, maximumPixelSize: pixelSize) {
             return image
         }
         if MediaFileType.classify(url: url).isSVG {
@@ -103,10 +116,31 @@ actor MediaThumbnailProvider {
         }
     }
 
-    private func nativeImageThumbnail(for url: URL) async -> NSImage? {
+    private func nativeImageThumbnail(for url: URL, maximumPixelSize: Int) async -> NSImage? {
         await Task.detached(priority: .utility) {
-            NSImage(contentsOf: url)
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: max(1, maximumPixelSize)
+            ]
+            guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(
+                source,
+                0,
+                options as CFDictionary
+            ) else {
+                return nil
+            }
+            return NSImage(cgImage: thumbnail, size: .zero)
         }.value
+    }
+
+    private static func bitmapCost(pixelSize: Int) -> Int {
+        let (pixels, pixelOverflow) = pixelSize.multipliedReportingOverflow(by: pixelSize)
+        guard !pixelOverflow else { return Int.max }
+        let (bytes, byteOverflow) = pixels.multipliedReportingOverflow(by: 4)
+        return byteOverflow ? Int.max : bytes
     }
 
     private func screenScale() async -> CGFloat {

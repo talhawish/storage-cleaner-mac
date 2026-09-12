@@ -31,29 +31,31 @@ const toneStyles: Record<Tone, { dot: string; bar: string; chip: string }> = {
     <div class="min-w-0 flex-1">
       <div class="flex items-center justify-between gap-3">
         <p class="truncate text-[13px] font-medium text-ink-900">{{ name }}</p>
-        <p class="font-mono text-[12px] tabular-nums text-ink-700">{{ size }}</p>
+        <p class="shrink-0 whitespace-nowrap font-mono text-[12px] tabular-nums text-ink-700">{{ size }}</p>
       </div>
-      <div class="mt-1.5 flex items-center gap-2">
-        <p class="truncate font-mono text-[11px] text-ink-400">{{ path }}</p>
-        <span
-          v-if="count"
-          :class="['ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium', toneStyles[tone].chip]"
-        >
-          {{ count }}
-        </span>
-        <span
-          v-if="safe !== undefined"
-          :class="[
-            'ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
-            safe ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-          ]"
-        >
+      <div class="mt-1.5 flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2">
+        <p class="min-w-0 truncate font-mono text-[11px] text-ink-400">{{ path }}</p>
+        <div class="flex shrink-0 items-center justify-end gap-2 md:ml-auto">
           <span
-            :class="['size-1.5 rounded-full', safe ? 'bg-emerald-500' : 'bg-amber-500']"
-            aria-hidden="true"
-          />
-          {{ safe ? 'Safe' : 'Review' }}
-        </span>
+            v-if="count"
+            :class="['inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium', toneStyles[tone].chip]"
+          >
+            {{ count }}
+          </span>
+          <span
+            v-if="safe !== undefined"
+            :class="[
+              'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium',
+              safe ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+            ]"
+          >
+            <span
+              :class="['size-1.5 rounded-full', safe ? 'bg-emerald-500' : 'bg-amber-500']"
+              aria-hidden="true"
+            />
+            {{ safe ? 'Safe' : 'Review' }}
+          </span>
+        </div>
       </div>
     </div>
   </div>

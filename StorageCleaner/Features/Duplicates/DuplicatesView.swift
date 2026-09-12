@@ -14,7 +14,7 @@ struct DuplicatesView: View {
     @State private var selection = DuplicateSelectionState()
     @State private var filter: DuplicateMediaFilter = .all
     @State private var previewURL: URL?
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
 
     /// Duplicate groups for the active filter, largest reclaim first.
     private var groups: [DuplicateGroup] {
@@ -95,30 +95,14 @@ struct DuplicatesView: View {
                 )
             }
         }
-        .sheet(isPresented: $showDeleteConfirmation) {
-            ConfirmationModal(
-                variant: .destructive,
-                title: "Remove \(selectedURLs.count) duplicate copies?",
-                message: deleteMessage,
-                iconSystemName: "doc.on.doc.fill",
-                showsCloseButton: true,
-                confirm: AppModalActionBar.Action(
-                    title: "Move to Trash",
-                    systemImage: "trash.fill",
-                    isProminent: true,
-                    isDestructive: true,
-                    isDefault: true,
-                    action: performDelete
-                ),
-                cancel: AppModalActionBar.CancelAction(title: "Cancel")
+        .sheet(item: $cleanupRequest) { request in
+            DeleteConfirmationSheet(
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                onDelete: { performDelete(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
-    }
-
-    private var deleteMessage: String {
-        let size = StorageFormatting.bytes(selection.removalBytes(in: groups))
-        return "This moves \(selectedURLs.count) duplicate copies (\(size)) to the Trash. "
-            + "The copy marked “Keep” in each group is left untouched."
     }
 
     // MARK: - Empty states
@@ -151,11 +135,10 @@ struct DuplicatesView: View {
         selection.selectAllRemovable(in: group)
     }
 
-    private func performDelete() {
-        let urls = selectedURLs
-        guard !urls.isEmpty else { return }
+    private func performDelete(_ request: FileCleanupRequest) {
+        cleanupRequest = nil
         selection.reset()
-        onDelete(urls)
+        onDelete(request.urls)
     }
 
     private func requestDeleteConfirmation() {
@@ -163,6 +146,9 @@ struct DuplicatesView: View {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        cleanupRequest = FileCleanupRequest(
+            urls: selectedURLs,
+            totalBytes: selection.removalBytes(in: groups)
+        )
     }
 }

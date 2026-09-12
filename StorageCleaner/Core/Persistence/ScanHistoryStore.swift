@@ -51,16 +51,15 @@ struct ScanDiskSnapshot: Sendable, Equatable {
     }
 }
 
-/// Persists scan results and cleanup audit records so the Cleanup History screen has data and
-/// every destructive action leaves a durable trail (a core safety invariant).
+/// Persists the latest overall scan and durable cleanup audit records so the Cleanup History
+/// screen stays useful without losing the safety trail for destructive actions.
 ///
 /// `@MainActor` because the live implementation writes through SwiftData's main `ModelContext`,
 /// which is the same context `@Query` reads from in `CleanupHistoryView`.
 @MainActor
 protocol ScanHistoryStore: AnyObject {
-    /// Records a completed full scan and its findings, optionally including a
-    /// disk-space snapshot taken when the scan started. The disk snapshot
-    /// feeds the "X free before cleanup" call-out on the Cleanup History row.
+    /// Records a completed full scan and replaces any older overall scans that have no cleanup
+    /// audit attached. Cleanup-bearing records remain durable.
     func recordCompletedScan(_ snapshot: ScanSnapshot, disk: ScanDiskSnapshot)
     /// Records cleanup actions, attaching them to the most recent scan when one exists. The
     /// optional `disk` argument captures the volume's free-bytes *after* the cleanup so the
@@ -90,9 +89,8 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
     @ObservationIgnored private let performSave: (ModelContext) throws -> Void
     private(set) var lastPersistenceError: String?
 
-    /// Newest scans kept on disk. Every full scan persists all findings
-    /// (including file-path arrays), so an uncapped store grows without bound
-    /// over months of use; 50 scans is months of history at typical usage.
+    /// Newest history records kept on disk. This caps durable cleanup sessions while scan-only
+    /// records are independently reduced to the single latest overall scan.
     static let maxStoredScans = 50
 
     /// Serial chain of pending persistence work. Each write awaits the
@@ -109,8 +107,6 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
     }
 
     func recordCompletedScan(_ snapshot: ScanSnapshot, disk: ScanDiskSnapshot) {
-        guard !snapshot.findings.isEmpty else { return }
-
         enqueue { store in
             // Encoding pathBytes/duplicateGroups for a full scan serializes
             // thousands of URLs — do it on a detached task so results landing
@@ -157,7 +153,9 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         snapshot: ScanSnapshot,
         disk: ScanDiskSnapshot
     ) {
+        deleteSupersededScanOnlyRecords()
         let scan = StoredScan(
+            recordKind: .overallScan,
             durationSeconds: snapshot.duration.totalSeconds,
             scannedItemCount: snapshot.scannedItemCount,
             reclaimableBytes: snapshot.reclaimableBytes,
@@ -168,6 +166,15 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
         context.insert(scan)
         enforceRetention()
         save()
+    }
+
+    /// Keeps one scan-only inventory snapshot. Records with cleanup actions are audit history and
+    /// must never be removed merely because a newer overall scan completed.
+    private func deleteSupersededScanOnlyRecords() {
+        let scans = (try? context.fetch(FetchDescriptor<StoredScan>())) ?? []
+        for scan in scans where scan.recordKind == .overallScan && scan.cleanupActions.isEmpty {
+            context.delete(scan)
+        }
     }
 
     private func insertCleanupActions(entries: [CleanupAuditEntry], disk: ScanDiskSnapshot) {
@@ -238,6 +245,7 @@ final class SwiftDataScanHistoryStore: ScanHistoryStore {
 
     private func createCleanupOnlyScan(disk: ScanDiskSnapshot) -> StoredScan {
         let scan = StoredScan(
+            recordKind: .cleanupOnly,
             durationSeconds: 0,
             scannedItemCount: 0,
             reclaimableBytes: 0,

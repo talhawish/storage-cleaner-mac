@@ -180,22 +180,7 @@ actor AppInventoryService {
     /// Used as a fallback when `du` is unavailable and as the deterministic
     /// testable backend for unit tests.
     static func directorySize(at url: URL, fileManager: FileManager) -> Int64 {
-        let resourceKeys: [URLResourceKey] = [.fileAllocatedSizeKey, .fileSizeKey, .isRegularFileKey]
-        guard let enumerator = fileManager.enumerator(
-            at: url,
-            includingPropertiesForKeys: resourceKeys,
-            options: []
-        ) else {
-            return 0
-        }
-
-        var total: Int64 = 0
-        for case let childURL as URL in enumerator {
-            let values = try? childURL.resourceValues(forKeys: Set(resourceKeys))
-            guard values?.isRegularFile == true else { continue }
-            total += Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
-        }
-        return total
+        FileSystemItemSizer.allocatedSize(of: url, fileManager: fileManager)
     }
 
     private func waitUntilMissing(_ path: String) async -> Bool {

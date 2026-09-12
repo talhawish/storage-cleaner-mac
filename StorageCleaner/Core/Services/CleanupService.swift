@@ -44,6 +44,16 @@ struct CleanupResult: Sendable {
 
 protocol CleanupService: Sendable {
     func delete(urls: [URL]) async -> CleanupResult
+    func delete(urls: [URL], precomputedBytes: [URL: Int64]) async -> CleanupResult
+}
+
+extension CleanupService {
+    /// Most test and feature-specific cleanup services only need the URL list. The live file
+    /// manager service also accepts scan-time byte measurements so deleting a large directory
+    /// does not walk the same tree a second time.
+    func delete(urls: [URL], precomputedBytes: [URL: Int64]) async -> CleanupResult {
+        await delete(urls: urls)
+    }
 }
 
 struct FileManagerCleanupService: CleanupService {
@@ -55,12 +65,20 @@ struct FileManagerCleanupService: CleanupService {
     }
 
     func delete(urls: [URL]) async -> CleanupResult {
+        await delete(urls: urls, precomputedBytes: [:])
+    }
+
+    func delete(urls: [URL], precomputedBytes: [URL: Int64]) async -> CleanupResult {
         let deletionURLs = Self.normalizedDeletionURLs(urls)
         guard !deletionURLs.isEmpty else {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
-        let prepared = await Self.prepare(deletionURLs)
+        let normalizedBytes = Dictionary(
+            precomputedBytes.map { ($0.key.standardizedFileURL, $0.value) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let prepared = await Self.prepare(deletionURLs, precomputedBytes: normalizedBytes)
         let alreadyInTrash = prepared.items.filter(\.isAlreadyInTrash)
         let toRecycle = prepared.items.filter { !$0.isAlreadyInTrash }
         let permanentResult = await Self.removeFromTrash(alreadyInTrash)
@@ -80,6 +98,32 @@ struct FileManagerCleanupService: CleanupService {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
+        var deletedURLs: [URL] = []
+        var deletedItems: [DeletedItem] = []
+        var failedURLs: [(URL, Error)] = []
+
+        // NSWorkspace performs one coordinated Finder-style operation for the supplied URLs.
+        // Passing thousands of paths in one request can leave its completion handler pending for
+        // minutes (or indefinitely when one path is problematic). Smaller batches keep the
+        // operation recoverable and let successful batches be reported independently.
+        for start in stride(from: 0, to: items.count, by: Self.trashBatchSize) {
+            guard !Task.isCancelled else { break }
+            let end = min(start + Self.trashBatchSize, items.count)
+            let result = await recycleBatch(Array(items[start..<end]))
+            deletedURLs.append(contentsOf: result.deletedURLs)
+            deletedItems.append(contentsOf: result.deletedItems)
+            failedURLs.append(contentsOf: result.failedURLs)
+        }
+
+        return CleanupResult(
+            deletedURLs: deletedURLs,
+            deletedItems: deletedItems,
+            failedURLs: failedURLs,
+            totalBytesReclaimed: deletedItems.reduce(0) { $0 + $1.bytesReclaimed }
+        )
+    }
+
+    private func recycleBatch(_ items: [PreparedDeletion]) async -> CleanupResult {
         let moveResult = await trashMover.moveToTrash(items.map(\.url))
         let destinations = Dictionary(
             uniqueKeysWithValues: moveResult.destinationBySource.map {
@@ -107,11 +151,16 @@ struct FileManagerCleanupService: CleanupService {
         )
     }
 
-    private static func prepare(_ urls: [URL]) async -> (items: [PreparedDeletion], failures: [(URL, Error)]) {
+    private static let trashBatchSize = 100
+
+    private static func prepare(
+        _ urls: [URL],
+        precomputedBytes: [URL: Int64]
+    ) async -> (items: [PreparedDeletion], failures: [(URL, Error)]) {
         await withTaskGroup(of: PreparedDeletionResult.self) { group in
             for url in urls {
                 group.addTask(priority: .userInitiated) {
-                    prepareSynchronously(url)
+                    prepareSynchronously(url, precomputedBytes: precomputedBytes)
                 }
             }
 
@@ -128,7 +177,10 @@ struct FileManagerCleanupService: CleanupService {
         }
     }
 
-    private static func prepareSynchronously(_ url: URL) -> PreparedDeletionResult {
+    private static func prepareSynchronously(
+        _ url: URL,
+        precomputedBytes: [URL: Int64]
+    ) -> PreparedDeletionResult {
         let fileManager = FileManager.default
         guard !Task.isCancelled else { return .cancelled }
 
@@ -140,7 +192,9 @@ struct FileManagerCleanupService: CleanupService {
             return .failed(url, CleanupError.fileNotFound(url))
         }
 
-        guard let size = sizeOfItem(at: url, fileManager: fileManager) else {
+        let size = precomputedBytes[url.standardizedFileURL]
+            ?? sizeOfItem(at: url, fileManager: fileManager)
+        guard let size else {
             return .cancelled
         }
         guard !Task.isCancelled else { return .cancelled }
@@ -233,23 +287,8 @@ struct FileManagerCleanupService: CleanupService {
     }
 
     private static func directorySize(at url: URL, fileManager: FileManager) -> Int64? {
-        let resourceKeys: [URLResourceKey] = [.fileAllocatedSizeKey, .fileSizeKey, .isRegularFileKey]
-        guard let enumerator = fileManager.enumerator(
-            at: url,
-            includingPropertiesForKeys: resourceKeys,
-            options: []
-        ) else {
-            return 0
-        }
-
-        var total: Int64 = 0
-        for case let childURL as URL in enumerator {
-            guard !Task.isCancelled else { return nil }
-            let values = try? childURL.resourceValues(forKeys: Set(resourceKeys))
-            guard values?.isRegularFile == true else { continue }
-            total += Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
-        }
-        return total
+        let total = FileSystemItemSizer.allocatedSize(of: url, fileManager: fileManager)
+        return Task.isCancelled ? nil : total
     }
 }
 

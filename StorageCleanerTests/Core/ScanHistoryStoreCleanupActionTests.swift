@@ -83,6 +83,7 @@ final class ScanHistoryStoreCleanupActionTests: XCTestCase {
         let scans = try fixture.context.fetch(FetchDescriptor<StoredScan>())
         let scan = try XCTUnwrap(scans.first)
         XCTAssertEqual(scans.count, 1)
+        XCTAssertEqual(scan.recordKind, .cleanupOnly)
         XCTAssertEqual(scan.findings.count, 0)
         XCTAssertEqual(scan.scannedItemCount, 0)
         XCTAssertEqual(scan.cleanedBytes, 1_024)

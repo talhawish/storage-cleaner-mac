@@ -35,6 +35,7 @@ struct StorageCleanerApp: App {
                 permissionHandler: container.permissionHandler,
                 cleanupService: container.cleanupService,
                 dockerService: container.dockerService,
+                emulatorService: container.emulatorService,
                 diskSpaceReader: container.diskSpaceReader,
                 historyStore: historyStore,
                 subscriptionController: controller

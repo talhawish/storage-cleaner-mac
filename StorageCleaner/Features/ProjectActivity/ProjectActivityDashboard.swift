@@ -42,7 +42,7 @@ extension ProjectActivityView {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Inactive projects detected")
                     .font(.headline)
-                Text("You have ^[\(viewModel.inactiveProjects.count) project](inflect: true) untouched for over "
+                Text("You have \(ProjectCountFormatting.projects(viewModel.inactiveProjects.count)) untouched for over "
                     + "\(viewModel.inactivityThreshold.durationPhrase), with "
                     + "\(StorageFormatting.bytes(viewModel.hibernatableSize)) of reclaimable dependencies.")
                     .font(.subheadline)
@@ -80,8 +80,7 @@ extension ProjectActivityView {
                         size: entry.size,
                         count: entry.count,
                         percentage: snapshot.totalSize > 0 ? Double(entry.size) / Double(snapshot.totalSize) : 0,
-                        isSelected: viewModel.selectedTechnology == entry.technology,
-                        onTap: { viewModel.toggleTechnology(entry.technology) }
+                        onTap: { selectTechnology(entry.technology) }
                     )
                 }
             }
@@ -117,7 +116,7 @@ extension ProjectActivityView {
                 Text("Projects")
                     .font(.headline)
                 Spacer()
-                Text("^[\(viewModel.filteredProjects.count) project](inflect: true)")
+                Text(ProjectCountFormatting.projects(viewModel.filteredProjects.count))
                     .foregroundStyle(.secondary)
             }
 

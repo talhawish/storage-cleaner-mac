@@ -80,21 +80,3 @@ struct ProjectCardView: View {
             + "\(StorageFormatting.bytes(project.totalSize)), modified \(project.lastModifiedRelative)"
     }
 }
-
-struct ActivityBadge: View {
-    let status: ProjectActivityStatus
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: status.icon)
-                .font(.system(size: 9))
-                .accessibilityHidden(true)
-            Text(status.label)
-                .font(.caption2.weight(.semibold))
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color(hex: status.color).opacity(0.15), in: Capsule())
-        .foregroundStyle(Color(hex: status.color))
-    }
-}

@@ -7,6 +7,9 @@ struct HibernationOutcome: Identifiable, Sendable {
     let reclaimedBytes: Int64
     /// Number of dependency directories removed.
     let removedDirectoryCount: Int
+    /// Dependency bytes still present after the operation. Non-zero when an
+    /// operation partially succeeds, so the UI can remain accurate.
+    let remainingDependencyBytes: Int64
     let failureReason: String?
 
     var id: UUID { project.id }
@@ -63,7 +66,7 @@ actor ProjectHibernationService {
             return outcome(project, reason: "The project folder no longer exists.")
         }
 
-        let directories = dependencyDirectories(in: project)
+        let directories = ProjectDependencyInventory.directories(for: project, fileManager: fileManager)
         guard !directories.isEmpty else {
             return outcome(project, reason: "No regenerable dependencies were found to reclaim.")
         }
@@ -72,8 +75,15 @@ actor ProjectHibernationService {
         var removed = 0
         var failures: [String] = []
         for directory in directories {
-            guard !Task.isCancelled else { break }
-            let size = directorySize(directory)
+            guard !Task.isCancelled else {
+                failures.append("the remaining dependencies because hibernation was cancelled")
+                break
+            }
+            let size = ProjectDependencyInventory.allocatedSize(of: directory, fileManager: fileManager)
+            guard !Task.isCancelled else {
+                failures.append("the remaining dependencies because hibernation was cancelled")
+                break
+            }
             do {
                 try remove(directory)
                 reclaimed += size
@@ -86,10 +96,17 @@ actor ProjectHibernationService {
         let reason = failures.isEmpty
             ? nil
             : "Couldn't remove \(failures.joined(separator: ", "))."
+        let remainingBytes = ProjectDependencyInventory.directories(
+            for: project,
+            fileManager: fileManager
+        ).reduce(Int64(0)) {
+            $0 + ProjectDependencyInventory.allocatedSize(of: $1, fileManager: fileManager)
+        }
         return HibernationOutcome(
             project: project,
             reclaimedBytes: reclaimed,
             removedDirectoryCount: removed,
+            remainingDependencyBytes: remainingBytes,
             failureReason: reason
         )
     }
@@ -97,7 +114,13 @@ actor ProjectHibernationService {
     // MARK: - Helpers
 
     private func outcome(_ project: ProjectInfo, reason: String) -> HibernationOutcome {
-        HibernationOutcome(project: project, reclaimedBytes: 0, removedDirectoryCount: 0, failureReason: reason)
+        HibernationOutcome(
+            project: project,
+            reclaimedBytes: 0,
+            removedDirectoryCount: 0,
+            remainingDependencyBytes: project.dependencySize,
+            failureReason: reason
+        )
     }
 
     private func remove(_ url: URL) throws {
@@ -110,53 +133,4 @@ actor ProjectHibernationService {
         }
     }
 
-    /// The top-level dependency directories within the project, located by
-    /// walking the tree and matching directory names against the technology's
-    /// known dependency folders. Once a directory matches its descendants are
-    /// skipped, so a nested `node_modules/foo/node_modules` is removed only
-    /// once via its parent.
-    private func dependencyDirectories(in project: ProjectInfo) -> [URL] {
-        guard !project.technology.dependencyDirectoryNames.isEmpty else { return [] }
-
-        // Hidden dependency folders (`.build`, `.gradle`, `.dart_tool`, …) are
-        // common, so hidden files are intentionally not skipped here.
-        guard let enumerator = fileManager.enumerator(
-            at: project.path,
-            includingPropertiesForKeys: [.isDirectoryKey]
-        ) else { return [] }
-
-        var matches: [URL] = []
-        while let url = enumerator.nextObject() as? URL {
-            guard !Task.isCancelled else { break }
-            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
-            if ProjectDependencyRules.isDependencyDirectory(
-                url,
-                for: project.technology,
-                projectRoot: project.path,
-                fileManager: fileManager
-            ) {
-                matches.append(url)
-                enumerator.skipDescendants()
-            }
-        }
-        return matches
-    }
-
-    /// Total size of the files within a directory, used to report reclaimed
-    /// space. Honors cancellation so a large tree never blocks indefinitely.
-    private func directorySize(_ directory: URL) -> Int64 {
-        guard let enumerator = fileManager.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey]
-        ) else { return 0 }
-
-        var total: Int64 = 0
-        while let url = enumerator.nextObject() as? URL {
-            guard !Task.isCancelled else { break }
-            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey]),
-                  values.isDirectory != true else { continue }
-            total += Int64(values.fileSize ?? 0)
-        }
-        return total
-    }
 }

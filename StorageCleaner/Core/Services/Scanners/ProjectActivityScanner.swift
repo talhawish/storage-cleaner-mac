@@ -45,13 +45,13 @@ actor ProjectActivityScanner {
 
     private static func run(paths: [URL], maxDepth: Int, minimumProjectSize: Int64) -> ProjectActivitySnapshot {
         let fileMgr = FileManager.default
-        let start = Date()
+        let start = Date.now
         var projects: [ProjectInfo] = []
         var seen = Set<String>()
 
-        for root in paths {
+        let existingRoots = paths.filter { fileMgr.fileExists(atPath: $0.path) }
+        for root in nonOverlappingSearchRoots(existingRoots) {
             guard !Task.isCancelled else { break }
-            guard fileMgr.fileExists(atPath: root.path) else { continue }
             for project in walk(
                 root,
                 maxDepth: maxDepth,
@@ -68,8 +68,30 @@ actor ProjectActivityScanner {
         return ProjectActivitySnapshot(
             projects: projects.sorted { $0.totalSize > $1.totalSize },
             scannedAt: .now,
-            scanDuration: Date().timeIntervalSince(start)
+            scanDuration: Date.now.timeIntervalSince(start)
         )
+    }
+
+    /// Removes duplicates and descendants of roots already being scanned. The
+    /// default roots include `Documents` and `Documents/GitHub`; scanning both
+    /// would repeat all filesystem work under the latter.
+    static func nonOverlappingSearchRoots(_ paths: [URL]) -> [URL] {
+        var seen = Set<String>()
+        let uniquePaths = paths.compactMap { path -> URL? in
+            let standardized = path.standardizedFileURL
+            return seen.insert(standardized.path).inserted ? standardized : nil
+        }
+        let unique = uniquePaths.sorted { lhs, rhs in
+                lhs.pathComponents.count == rhs.pathComponents.count
+                    ? lhs.path < rhs.path
+                    : lhs.pathComponents.count < rhs.pathComponents.count
+            }
+
+        return unique.reduce(into: []) { roots, candidate in
+            let candidateComponents = candidate.pathComponents
+            guard !roots.contains(where: { candidateComponents.starts(with: $0.pathComponents) }) else { return }
+            roots.append(candidate)
+        }
     }
 
     // MARK: - Traversal
@@ -88,27 +110,33 @@ actor ProjectActivityScanner {
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
 
-        while let item = enumerator?.nextObject() as? URL {
-            guard !Task.isCancelled else { break }
-            if item.pathComponents.count - rootDepth > maxDepth {
-                enumerator?.skipDescendants()
-                continue
+        while !Task.isCancelled {
+            let hasItem = autoreleasepool {
+                guard let item = enumerator?.nextObject() as? URL else { return false }
+                if item.pathComponents.count - rootDepth > maxDepth {
+                    enumerator?.skipDescendants()
+                    return true
+                }
+                guard (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
+                    return true
+                }
+                if ProjectActivityDiscoveryExclusions.shouldSkipProjectDiscovery(at: item, fileManager: fileMgr) {
+                    enumerator?.skipDescendants()
+                    return true
+                }
+                if let tech = ProjectDetector.detect(at: item, fileManager: fileMgr),
+                   let info = build(
+                    at: item,
+                    technology: tech,
+                    minimumProjectSize: minimumProjectSize,
+                    fileMgr: fileMgr
+                   ) {
+                    found.append(info)
+                    enumerator?.skipDescendants()
+                }
+                return true
             }
-            guard (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
-            if ProjectActivityDiscoveryExclusions.shouldSkipProjectDiscovery(at: item, fileManager: fileMgr) {
-                enumerator?.skipDescendants()
-                continue
-            }
-            if let tech = ProjectDetector.detect(at: item, fileManager: fileMgr),
-               let info = build(
-                at: item,
-                technology: tech,
-                minimumProjectSize: minimumProjectSize,
-                fileMgr: fileMgr
-               ) {
-                found.append(info)
-                enumerator?.skipDescendants()
-            }
+            guard hasItem else { break }
         }
         return found
     }
@@ -119,23 +147,40 @@ actor ProjectActivityScanner {
         minimumProjectSize: Int64,
         fileMgr: FileManager
     ) -> ProjectInfo? {
-        let metrics = measure(at: dir, technology: technology, fileMgr: fileMgr)
+        let components = ProjectComponentDiscovery.discover(
+            in: dir,
+            rootTechnology: technology,
+            fileManager: fileMgr
+        )
+        let detectedRootTechnologies = ProjectDetector.detectAll(at: dir, fileManager: fileMgr)
+        let rootTechnologies = detectedRootTechnologies.isEmpty ? [technology] : detectedRootTechnologies
+        let dependencyScopes = [ProjectDependencyScope(root: dir, technologies: rootTechnologies)]
+            + components.map { ProjectDependencyScope(root: $0.path, technologies: $0.technologies) }
+        let metrics = measure(at: dir, dependencyScopes: dependencyScopes, fileMgr: fileMgr)
         guard metrics.totalSize >= minimumProjectSize else { return nil }
         let modDate = metrics.lastModified
             ?? (try? fileMgr.attributesOfItem(atPath: dir.path))?[.modificationDate] as? Date
             ?? .distantPast
-        let nested = countSubs(at: dir, fileMgr: fileMgr)
         let gitStatus = GitStatusDetector.detect(at: dir, fileManager: fileMgr)
+        let directFrameworks = rootTechnologies.reduce(into: Set<ProjectFramework>()) { result, stack in
+            result.formUnion(ProjectFramework.detected(at: dir, technology: stack, fileManager: fileMgr))
+        }
+        let allFrameworks = components.reduce(into: directFrameworks) { result, component in
+            result.formUnion(component.frameworks)
+        }
         return ProjectInfo(
             name: dir.lastPathComponent,
             path: dir,
             technology: technology,
+            technologies: rootTechnologies,
+            frameworks: directFrameworks,
+            components: components,
             lastModifiedDate: modDate,
             totalSize: metrics.totalSize,
-            childProjectCount: nested,
+            childProjectCount: components.count,
             dependencySize: metrics.dependencySize,
             iconURL: metrics.iconURL,
-            iconFallback: ProjectIconFallback.detect(at: dir, technology: technology, fileManager: fileMgr),
+            iconFallback: ProjectIconFallback(frameworks: allFrameworks, technology: technology),
             gitStatus: gitStatus
         )
     }
@@ -161,37 +206,97 @@ actor ProjectActivityScanner {
         }
     }
 
-    private static func measure(at dir: URL, technology: ProjectTechnology, fileMgr: FileManager) -> Metrics {
+    private struct MetricsContext {
+        let rootDepth: Int
+        let dependencyScopes: [ProjectDependencyScope]
+        let enumerator: FileManager.DirectoryEnumerator
+        let fileManager: FileManager
+    }
+
+    private static func measure(
+        at dir: URL,
+        dependencyScopes: [ProjectDependencyScope],
+        fileMgr: FileManager
+    ) -> Metrics {
         var metrics = Metrics()
-        let keys: [URLResourceKey] = [.fileSizeKey, .isDirectoryKey, .contentModificationDateKey]
-        guard let enumerator = fileMgr.enumerator(at: dir, includingPropertiesForKeys: keys) else { return metrics }
+        let keys: Set<URLResourceKey> = [
+            .fileAllocatedSizeKey,
+            .fileSizeKey,
+            .isDirectoryKey,
+            .isRegularFileKey,
+            .contentModificationDateKey
+        ]
+        guard let enumerator = fileMgr.enumerator(
+            at: dir,
+            includingPropertiesForKeys: Array(keys)
+        ) else { return metrics }
 
         let root = dir.pathComponents.count
+        let context = MetricsContext(
+            rootDepth: root,
+            dependencyScopes: dependencyScopes,
+            enumerator: enumerator,
+            fileManager: fileMgr
+        )
         for candidate in ProjectIconLocator.commonIconCandidates(in: dir, fileManager: fileMgr) {
             considerIconCandidate(candidate, rootDepth: root, metrics: &metrics, fileMgr: fileMgr)
         }
 
-        while let item = enumerator.nextObject() as? URL {
-            guard !Task.isCancelled else { break }
-            guard let values = try? item.resourceValues(forKeys: Set(keys)),
-                  values.isDirectory != true else { continue }
-
-            let size = Int64(values.fileSize ?? 0)
-            let comps = item.pathComponents
-            let rel = comps.dropFirst(root)
-
-            if ProjectDependencyRules.isDependencyFile(item, for: technology, projectRoot: dir, fileManager: fileMgr) {
-                metrics.totalSize += size
-                metrics.dependencySize += size
-            } else if !rel.contains(where: { $0.hasPrefix(".") }) {
-                metrics.totalSize += size
-                if let mod = values.contentModificationDate, mod > (metrics.lastModified ?? .distantPast) {
-                    metrics.lastModified = mod
-                }
-                considerIconCandidate(item, rootDepth: root, metrics: &metrics, fileMgr: fileMgr)
+        while !Task.isCancelled {
+            let hasItem = autoreleasepool {
+                guard let item = enumerator.nextObject() as? URL else { return false }
+                guard let values = try? item.resourceValues(forKeys: keys) else { return true }
+                accumulateMetrics(
+                    for: item,
+                    values: values,
+                    metrics: &metrics,
+                    context: context
+                )
+                return true
             }
+            guard hasItem else { break }
         }
         return metrics
+    }
+
+    private static func accumulateMetrics(
+        for item: URL,
+        values: URLResourceValues,
+        metrics: inout Metrics,
+        context: MetricsContext
+    ) {
+        if values.isDirectory == true {
+            guard let scope = ProjectDependencyScope.nearest(containing: item, in: context.dependencyScopes),
+                  ProjectDependencyRules.isDependencyDirectory(
+                    item,
+                    for: scope.technologies,
+                    projectRoot: scope.root,
+                    fileManager: context.fileManager
+                  ) else { return }
+            let size = ProjectDependencyInventory.allocatedSize(of: item, fileManager: context.fileManager)
+            metrics.totalSize += size
+            metrics.dependencySize += size
+            context.enumerator.skipDescendants()
+            return
+        }
+
+        guard values.isRegularFile == true else { return }
+        let size = ProjectDependencyInventory.allocatedSize(from: values)
+        let components = item.pathComponents
+        let relativeComponents = components.dropFirst(context.rootDepth)
+        metrics.totalSize += size
+        guard !relativeComponents.contains(where: { $0.hasPrefix(".") }) else { return }
+
+        if let modifiedAt = values.contentModificationDate,
+           modifiedAt > (metrics.lastModified ?? .distantPast) {
+            metrics.lastModified = modifiedAt
+        }
+        considerIconCandidate(
+            item,
+            rootDepth: context.rootDepth,
+            metrics: &metrics,
+            fileMgr: context.fileManager
+        )
     }
 
     private static func considerIconCandidate(
@@ -205,16 +310,10 @@ actor ProjectActivityScanner {
         let iconScore = ProjectIconLocator.score(fileName: item.lastPathComponent, parentDirectory: parent)
         guard iconScore > 0 else { return }
 
-        let size = ((try? fileMgr.attributesOfItem(atPath: item.path))?[.size] as? NSNumber)?.int64Value ?? 0
+        let size = ProjectDependencyInventory.allocatedSize(of: item, fileManager: fileMgr)
         metrics.considerIcon(at: item, score: iconScore, depth: max(0, comps.count - rootDepth), size: size)
     }
 
-    private static func countSubs(at dir: URL, fileMgr: FileManager) -> Int {
-        (try? fileMgr.contentsOfDirectory(atPath: dir.path))?
-            .filter { !$0.hasPrefix(".") }
-            .compactMap { ProjectDetector.detect(at: dir.appendingPathComponent($0), fileManager: fileMgr) }
-            .count ?? 0
-    }
 }
 
 private enum ProjectActivityDiscoveryExclusions {

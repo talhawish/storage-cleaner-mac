@@ -43,6 +43,15 @@ final class StorageFormattingTests: XCTestCase {
         XCTAssertGreaterThan(metadata.bytes, 0)
     }
 
+    func testItemSizeIncludesHiddenNestedFiles() throws {
+        let hiddenDirectory = root.appendingPathComponent(".toolchain/cache", isDirectory: true)
+        try FileManager.default.createDirectory(at: hiddenDirectory, withIntermediateDirectories: true)
+        let payload = hiddenDirectory.appendingPathComponent("artifact.bin")
+        try Data(count: 4_096).write(to: payload)
+
+        XCTAssertEqual(StorageFormatting.itemSize(at: root), StorageFormatting.fileSize(at: payload))
+    }
+
     func testDetailFileMetadataReadsSimulatorDeviceName() throws {
         let device = root.appendingPathComponent("Devices/UUID", isDirectory: true)
         try FileManager.default.createDirectory(at: device, withIntermediateDirectories: true)

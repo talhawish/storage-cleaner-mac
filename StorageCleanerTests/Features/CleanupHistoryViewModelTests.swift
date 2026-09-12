@@ -78,6 +78,8 @@ final class CleanupHistoryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.totalBytesReclaimed, 0)
         XCTAssertEqual(viewModel.totalItemsReclaimed, 0)
         XCTAssertNil(viewModel.lastCleanupDate)
+        XCTAssertNil(viewModel.latestOverallScan)
+        XCTAssertTrue(viewModel.cleanupSummaries.isEmpty)
     }
 
     func testUpdateAggregatesTotalsAcrossScans() throws {

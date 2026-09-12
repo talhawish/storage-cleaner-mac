@@ -191,12 +191,24 @@ struct EmulatorManagementService: Sendable {
             )
         }
 
+        let inventory = simulatorDeviceInventory(from: decoded.devices)
+        return SimulatorDeviceDiscovery(
+            images: inventory.images,
+            deviceDirectories: inventory.directories,
+            didInspect: true,
+            failureMessage: nil
+        )
+    }
+
+    private func simulatorDeviceInventory(
+        from devicesByRuntime: [String: [SimulatorDeviceJSON]]
+    ) -> (images: [EmulatorImage], directories: Set<String>) {
         let isoFormatter = ISO8601DateFormatter()
         let root = simulatorDevicesRoot()
         var directories = Set<String>()
         var images: [EmulatorImage] = []
 
-        for (runtimeIdentifier, devices) in decoded.devices {
+        for (runtimeIdentifier, devices) in devicesByRuntime {
             for device in devices {
                 let directory = Self.simulatorDeviceDirectory(for: device, root: root)
                 if let directory {
@@ -205,6 +217,8 @@ struct EmulatorManagementService: Sendable {
                 let version = Self.runtimeVersionLabel(from: runtimeIdentifier)
                 let lastUsed = device.lastBootedAt.flatMap(isoFormatter.date(from:))
                 let state = device.state.map { " · \($0)" } ?? ""
+                let availability = device.isAvailable == false ? " · Unavailable" : ""
+                let availabilityError = device.availabilityError.map { " · \($0)" } ?? ""
                 images.append(
                     EmulatorImage(
                         id: device.udid,
@@ -213,21 +227,18 @@ struct EmulatorManagementService: Sendable {
                         versionLabel: version,
                         key: VersionKey.parse(version),
                         bytes: device.dataPathSize ?? directory.map(measure) ?? 0,
-                        detail: "Runtime: \(runtimeIdentifier)\(state)",
+                        detail: "Runtime: \(runtimeIdentifier)\(state)\(availability)\(availabilityError)",
                         removal: .simctlDevice(udid: device.udid),
-                        isRemovable: true,
+                        // simctl refuses to delete a booted device. Keep it visible, but require
+                        // the user to shut it down before presenting it as a cleanup candidate.
+                        isRemovable: !Self.isBooted(device.state),
                         lastUsed: lastUsed
                     )
                 )
             }
         }
 
-        return SimulatorDeviceDiscovery(
-            images: images,
-            deviceDirectories: directories,
-            didInspect: true,
-            failureMessage: nil
-        )
+        return (images, directories)
     }
 
     private func discoverOrphanedSimulatorDeviceFolders(excluding knownDirectories: Set<String>) -> [EmulatorImage] {
@@ -294,43 +305,19 @@ struct EmulatorManagementService: Sendable {
         var failures: [EmulatorCleanupResult.Failure] = []
 
         let xcrun = locateXcrun()
-        for image in images where image.isRemovable {
-            switch image.removal {
-            case let .simctlRuntime(identifier):
-                guard let xcrun else {
-                    failures.append(.init(id: image.id, message: "Xcode command-line tools not found."))
-                    continue
-                }
-                let output = await runCommand(xcrun, ["simctl", "runtime", "delete", identifier])
-                if output.succeeded {
-                    removedIDs.append(image.id)
-                    reclaimed += image.bytes
-                } else {
-                    failures.append(.init(id: image.id, message: Self.firstMeaningfulLine(output.output)))
-                }
-
-            case let .simctlDevice(udid):
-                guard let xcrun else {
-                    failures.append(.init(id: image.id, message: "Xcode command-line tools not found."))
-                    continue
-                }
-                let output = await runCommand(xcrun, ["simctl", "delete", udid])
-                if output.succeeded {
-                    removedIDs.append(image.id)
-                    reclaimed += image.bytes
-                } else {
-                    failures.append(.init(id: image.id, message: Self.firstMeaningfulLine(output.output)))
-                }
-
-            case let .trashDirectory(url):
-                let size = image.bytes > 0 ? image.bytes : measure(url)
-                do {
-                    try trashItem(url)
-                    removedIDs.append(image.id)
-                    reclaimed += size
-                } catch {
-                    failures.append(.init(id: image.id, message: error.localizedDescription))
-                }
+        // Remove device records before runtimes. A selected runtime can be shared by many
+        // devices, and deleting it first can make the subsequent device cleanup fail or leave
+        // stale device records associated with a runtime that no longer exists.
+        let orderedImages = images.sorted {
+            Self.removalPriority(for: $0.removal) < Self.removalPriority(for: $1.removal)
+        }
+        for image in orderedImages where image.isRemovable {
+            let result = await removeSingle(image, using: xcrun)
+            if let failure = result.failure {
+                failures.append(failure)
+            } else if let removedID = result.removedID {
+                removedIDs.append(removedID)
+                reclaimed += result.reclaimedBytes
             }
         }
 
@@ -339,6 +326,77 @@ struct EmulatorManagementService: Sendable {
             totalBytesReclaimed: reclaimed,
             failures: failures
         )
+    }
+
+    private struct SingleRemovalResult {
+        let removedID: String?
+        let reclaimedBytes: Int64
+        let failure: EmulatorCleanupResult.Failure?
+    }
+
+    private func removeSingle(_ image: EmulatorImage, using xcrun: URL?) async -> SingleRemovalResult {
+        switch image.removal {
+        case let .simctlRuntime(identifier):
+            return await removeWithSimctl(
+                image,
+                xcrun: xcrun,
+                arguments: ["simctl", "runtime", "delete", identifier]
+            )
+        case let .simctlDevice(udid):
+            return await removeWithSimctl(
+                image,
+                xcrun: xcrun,
+                arguments: ["simctl", "delete", udid]
+            )
+        case let .trashDirectory(url):
+            let size = image.bytes > 0 ? image.bytes : measure(url)
+            do {
+                try trashItem(url)
+                return SingleRemovalResult(removedID: image.id, reclaimedBytes: size, failure: nil)
+            } catch {
+                return SingleRemovalResult(
+                    removedID: nil,
+                    reclaimedBytes: 0,
+                    failure: .init(id: image.id, message: error.localizedDescription)
+                )
+            }
+        }
+    }
+
+    private func removeWithSimctl(
+        _ image: EmulatorImage,
+        xcrun: URL?,
+        arguments: [String]
+    ) async -> SingleRemovalResult {
+        guard let xcrun else {
+            return SingleRemovalResult(
+                removedID: nil,
+                reclaimedBytes: 0,
+                failure: .init(id: image.id, message: "Xcode command-line tools not found.")
+            )
+        }
+        let output = await runCommand(xcrun, arguments)
+        if output.succeeded {
+            return SingleRemovalResult(removedID: image.id, reclaimedBytes: image.bytes, failure: nil)
+        }
+        return SingleRemovalResult(
+            removedID: nil,
+            reclaimedBytes: 0,
+            failure: .init(id: image.id, message: Self.firstMeaningfulLine(output.output))
+        )
+    }
+
+    private static func removalPriority(for removal: EmulatorRemoval) -> Int {
+        switch removal {
+        case .simctlDevice: 0
+        case .simctlRuntime: 1
+        case .trashDirectory: 2
+        }
+    }
+
+    private static func isBooted(_ state: String?) -> Bool {
+        guard let state else { return false }
+        return state.caseInsensitiveCompare("Booted") == .orderedSame
     }
 }
 
@@ -462,11 +520,26 @@ struct SimulatorDeviceJSON: Decodable, Sendable {
     let name: String
     let udid: String
     let state: String?
+    let isAvailable: Bool
+    let availabilityError: String?
     let dataPath: String?
     let dataPathSize: Int64?
     let lastBootedAt: String?
 
     private enum CodingKeys: String, CodingKey {
-        case name, udid, state, dataPath, dataPathSize, lastBootedAt
+        case name, udid, state, isAvailable, availabilityError
+        case dataPath, dataPathSize, lastBootedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        udid = try container.decode(String.self, forKey: .udid)
+        state = try container.decodeIfPresent(String.self, forKey: .state)
+        isAvailable = try container.decodeIfPresent(Bool.self, forKey: .isAvailable) ?? true
+        availabilityError = try container.decodeIfPresent(String.self, forKey: .availabilityError)
+        dataPath = try container.decodeIfPresent(String.self, forKey: .dataPath)
+        dataPathSize = try container.decodeIfPresent(Int64.self, forKey: .dataPathSize)
+        lastBootedAt = try container.decodeIfPresent(String.self, forKey: .lastBootedAt)
     }
 }

@@ -3,6 +3,9 @@ import SwiftData
 
 @Model
 final class StoredScan {
+    /// Optional for lightweight migration of stores created before history
+    /// distinguished overall scans from cleanup-only audit records.
+    var recordKindRaw: String?
     var date: Date
     var durationSeconds: Double
     var scannedItemCount: Int
@@ -33,6 +36,7 @@ final class StoredScan {
     var cleanupActions: [StoredCleanupAction]
 
     init(
+        recordKind: HistoryRecordKind? = nil,
         date: Date = .now,
         durationSeconds: Double = 0,
         scannedItemCount: Int = 0,
@@ -44,6 +48,7 @@ final class StoredScan {
         findings: [StoredFinding] = [],
         cleanupActions: [StoredCleanupAction] = []
     ) {
+        recordKindRaw = recordKind?.rawValue
         self.date = date
         self.durationSeconds = durationSeconds
         self.scannedItemCount = scannedItemCount
@@ -54,6 +59,19 @@ final class StoredScan {
         self.freeBytesAfter = freeBytesAfter
         self.findings = findings
         self.cleanupActions = cleanupActions
+    }
+
+    var recordKind: HistoryRecordKind {
+        if let recordKindRaw, let storedKind = HistoryRecordKind(rawValue: recordKindRaw) {
+            return storedKind
+        }
+
+        // Legacy cleanup-only records have actions but no scan inventory. All
+        // other legacy records came from a completed overall scan.
+        if findings.isEmpty && !cleanupActions.isEmpty && scannedItemCount == 0 && durationSeconds == 0 {
+            return .cleanupOnly
+        }
+        return .overallScan
     }
 }
 

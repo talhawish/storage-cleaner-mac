@@ -31,14 +31,13 @@ struct OverviewStatCard: View {
     }
 }
 
-/// A tappable row in the "Space by Technology" breakdown. Tapping filters the
-/// project list to that technology.
+/// A tappable row in the "Space by Technology" breakdown. Tapping opens a
+/// focused drill-down for that technology.
 struct TechnologyRow: View {
     let technology: ProjectTechnology
     let size: Int64
     let count: Int
     let percentage: Double
-    let isSelected: Bool
     let onTap: () -> Void
 
     var body: some View {
@@ -64,7 +63,7 @@ struct TechnologyRow: View {
                 }
                 .frame(height: 8)
 
-                Text("^[\(count) project](inflect: true)")
+                Text(ProjectCountFormatting.projects(count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 70, alignment: .trailing)
@@ -72,23 +71,24 @@ struct TechnologyRow: View {
                 Text(StorageFormatting.bytes(size))
                     .font(.caption.monospacedDigit().weight(.medium))
                     .frame(width: 70, alignment: .trailing)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
-            .background(
-                isSelected ? Color(hex: technology.color).opacity(0.12) : .clear,
-                in: RoundedRectangle(cornerRadius: AppTheme.Radius.small, style: .continuous)
-            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint("Shows projects, frameworks, activity, and storage details")
     }
 
     private var accessibilityText: String {
-        "\(technology.rawValue), ^[\(count) project](inflect: true), " + StorageFormatting.bytes(size)
+        "\(technology.rawValue), \(ProjectCountFormatting.projects(count)), " + StorageFormatting.bytes(size)
     }
 }
 
@@ -131,7 +131,9 @@ struct ActivityStatusCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(status.label), ^[\(count) project](inflect: true), \(StorageFormatting.bytes(size))")
+        .accessibilityLabel(
+            "\(status.label), \(ProjectCountFormatting.projects(count)), \(StorageFormatting.bytes(size))"
+        )
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }

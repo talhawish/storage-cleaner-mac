@@ -216,7 +216,7 @@ final class ProjectCompressionServiceTests: XCTestCase {
         let outcome = await service.compress(project)
 
         XCTAssertTrue(outcome.succeeded, "got failure: \(outcome.failureReason ?? "nil")")
-        XCTAssertEqual(outcome.archiveSize, 1_024)
+        XCTAssertEqual(outcome.archiveSize, StorageFormatting.fileSize(at: outcome.zipURL))
         XCTAssertTrue(FileManager.default.fileExists(atPath: outcome.zipURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: project.path.path))
     }
@@ -251,14 +251,14 @@ final class ProjectCompressionServiceTests: XCTestCase {
                 // `Task.sleep` honors cancellation and throws `CancellationError`,
                 // which the service's `try await command.compress(...)` will
                 // propagate as a failure — leaving the original folder intact.
-                try await Task.sleep(nanoseconds: 500_000_000)
+                try await Task.sleep(for: .milliseconds(500))
             },
             verify: { _ in }
         )
         let service = makeService(command: command)
 
         let task = Task { await service.compress(project) }
-        try await Task.sleep(nanoseconds: 10_000_000)
+        try await Task.sleep(for: .milliseconds(10))
         task.cancel()
         let outcome = await task.value
 

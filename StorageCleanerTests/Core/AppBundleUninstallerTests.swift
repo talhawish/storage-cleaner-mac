@@ -84,6 +84,18 @@ final class AppBundleUninstallerTests: XCTestCase {
         XCTAssertTrue(recorder.userAccessTrashRequests.isEmpty)
     }
 
+    func testFinderTrashScriptDelegatesToFinderWithoutShellEscalation() {
+        let app = URL(fileURLWithPath: "/Applications/O'Reilly \"VPN\".app", isDirectory: true)
+
+        let script = AppBundleUninstaller.finderTrashScript(for: app)
+
+        XCTAssertTrue(script.contains("tell application id \"com.apple.finder\""))
+        XCTAssertTrue(script.contains("delete POSIX file targetPath"))
+        XCTAssertFalse(script.contains("do shell script"))
+        XCTAssertFalse(script.contains("administrator privileges"))
+        XCTAssertTrue(script.contains("O'Reilly \\\"VPN\\\".app"))
+    }
+
     func testNonPermissionFailureIsPreserved() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
         let recorder = AppBundleUninstallerRecorder(trashError: CocoaError(.fileNoSuchFile))

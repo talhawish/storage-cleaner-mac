@@ -12,7 +12,7 @@ struct LargeFilesView: View {
     private var largeFileThresholdMB = LargeFileThreshold.defaultMegabytes
     @State private var locationFilter: LargeFileLocationFilter = .all
     @State private var selectedURLs: Set<URL> = []
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
     @State private var previewURL: URL?
     @State private var allLargeFileRecords: [FindingFileRecord] = []
     @State private var isLoadingRecords = false
@@ -89,27 +89,12 @@ struct LargeFilesView: View {
                 .help("Scan large-file locations again")
             }
         }
-        .sheet(isPresented: $showDeleteConfirmation) {
-            ConfirmationModal(
-                variant: .destructive,
-                title: "Move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") to Trash?",
-                message: "This will move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") "
-                    + "(\(StorageFormatting.bytes(totalSelectedBytes))) to Trash.",
-                iconSystemName: "trash.fill",
-                showsCloseButton: true,
-                confirm: AppModalActionBar.Action(
-                    title: "Move to Trash",
-                    systemImage: "trash.fill",
-                    isProminent: true,
-                    isDestructive: true,
-                    isDefault: true,
-                    action: {
-                        let urls = Array(selectedURLs)
-                        selectedURLs.removeAll()
-                        onDelete(urls)
-                    }
-                ),
-                cancel: AppModalActionBar.CancelAction(title: "Cancel")
+        .sheet(item: $cleanupRequest) { request in
+            DeleteConfirmationSheet(
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                onDelete: { performDelete(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
         .sheet(isPresented: Binding(
@@ -249,7 +234,16 @@ struct LargeFilesView: View {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        cleanupRequest = FileCleanupRequest(
+            urls: selectedURLs,
+            totalBytes: totalSelectedBytes
+        )
+    }
+
+    private func performDelete(_ request: FileCleanupRequest) {
+        cleanupRequest = nil
+        selectedURLs.subtract(request.urls)
+        onDelete(request.urls)
     }
 
     private func loadRecords() async {

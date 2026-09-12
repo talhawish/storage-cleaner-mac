@@ -7,6 +7,7 @@ struct ProjectActivityView: View {
 
     @State var viewModel: ProjectActivityViewModel
     @State private var selectedProject: ProjectInfo?
+    @State private var selectedTechnologyDetail: ProjectTechnology?
     @State var showHibernateSheet = false
     @AppStorage("inactivityThreshold")
     private var inactivityThreshold: InactivityThreshold = .oneMonth
@@ -73,6 +74,15 @@ struct ProjectActivityView: View {
                 permissionHandler: permissionHandler
             )
         }
+        .sheet(item: $selectedTechnologyDetail) { technology in
+            if let snapshot = viewModel.snapshot {
+                ProjectTechnologyDetailView(
+                    detail: snapshot.technologyDetail(for: technology),
+                    threshold: inactivityThreshold,
+                    permissionHandler: permissionHandler
+                )
+            }
+        }
         .sheet(isPresented: $showHibernateSheet) {
             HibernateSheet(
                 projects: viewModel.inactiveProjects,
@@ -105,7 +115,7 @@ struct ProjectActivityView: View {
     private var subtitleText: String {
         if viewModel.isScanning { return "Scanning…" }
         guard let snapshot = viewModel.snapshot, !snapshot.projects.isEmpty else { return "" }
-        let count = "^[\(snapshot.projects.count) project](inflect: true)"
+        let count = ProjectCountFormatting.projects(snapshot.projects.count)
         return "\(count) · \(StorageFormatting.bytes(snapshot.totalSize)) total"
     }
 
@@ -186,6 +196,10 @@ struct ProjectActivityView: View {
         selectedProject = project
     }
 
+    func selectTechnology(_ technology: ProjectTechnology) {
+        selectedTechnologyDetail = technology
+    }
+
     private var initialState: some View {
         InitialStateView(
             title: "Discover your project activity",
@@ -228,7 +242,8 @@ struct ProjectActivityView: View {
 
     private func presentProPaywallFromDetail() {
         selectedProject = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
             onRequirePro()
         }
     }

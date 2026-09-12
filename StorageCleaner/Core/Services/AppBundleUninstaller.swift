@@ -59,7 +59,7 @@ extension AppBundleUninstaller {
 
     static let live = AppBundleUninstaller(
         moveToTrashDirectly: { url in
-            try await trashWithFileManager(url)
+            try trashWithFileManager(url)
         },
         moveToTrashWithUserSelectedAccess: { url in
             try await trashWithUserSelectedApplicationsAccess(url)
@@ -108,21 +108,9 @@ extension AppBundleUninstaller {
         return true
     }
 
-    private static func trashWithFileManager(_ url: URL) async throws {
-        do {
-            var resultingItemURL: NSURL?
-            try FileManager.default.trashItem(at: url, resultingItemURL: &resultingItemURL)
-        } catch {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                NSWorkspace.shared.recycle([url]) { _, error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume()
-                    }
-                }
-            }
-        }
+    private static func trashWithFileManager(_ url: URL) throws {
+        var resultingItemURL: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &resultingItemURL)
     }
 
     @MainActor
@@ -133,7 +121,7 @@ extension AppBundleUninstaller {
         if let bookmarkedAccessURL = resolveBookmarkedApplicationsFolder(for: applicationsFolder),
            appURL.isDescendant(of: bookmarkedAccessURL) {
             do {
-                try await trash(appURL, withAccessTo: bookmarkedAccessURL)
+                try trash(appURL, withAccessTo: bookmarkedAccessURL)
             } catch {
                 guard Self.isPermissionError(error) else { throw error }
                 throw error
@@ -151,79 +139,66 @@ extension AppBundleUninstaller {
 
         try storeApplicationsFolderBookmark(accessURL, for: applicationsFolder)
         do {
-            try await trash(appURL, withAccessTo: accessURL)
+            try trash(appURL, withAccessTo: accessURL)
         } catch {
             guard Self.isPermissionError(error) else { throw error }
             throw error
         }
     }
 
+    /// Lets Finder perform the privileged delete operation. A sandboxed app cannot
+    /// elevate itself with Authorization Services; Finder owns the administrator/
+    /// Touch ID prompt and keeps the bundle recoverable in Trash.
+    @MainActor
     private static func trashWithAdministratorAuthorization(_ url: URL) async throws {
         let appURL = url.standardizedFileURL
-        let output = await runAppleScript(administratorTrashScript(for: appURL))
-        guard output.succeeded else {
+        NSApp.activate(ignoringOtherApps: true)
+
+        guard let script = NSAppleScript(source: finderTrashScript(for: appURL)) else {
             throw AppBundleUninstallerError.administratorApprovalFailed(
                 appURL,
-                firstMeaningfulLine(of: output.output)
+                "Finder could not prepare the administrator authorization request."
             )
+        }
+
+        var errorInfo: NSDictionary?
+        script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            let message = meaningfulMessage(from: errorInfo)
+            if isFinderAuthorizationDenial(errorInfo) {
+                throw AppBundleUninstallerError.authorizationRequired(appURL)
+            }
+            throw AppBundleUninstallerError.administratorApprovalFailed(appURL, message)
         }
     }
 
-    private static func administratorTrashScript(for url: URL) -> String {
-        let sourcePath = escapedAppleScriptString(url.standardizedFileURL.path)
-        let trashPath = escapedAppleScriptString(
-            FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".Trash", isDirectory: true)
-                .path
-        )
-        let fileName = escapedAppleScriptString(url.lastPathComponent)
+    static func finderTrashScript(for url: URL) -> String {
+        let path = escapedAppleScriptString(url.standardizedFileURL.path)
         return """
-        set sourcePath to "\(sourcePath)"
-        set trashPath to "\(trashPath)"
-        set fileName to "\(fileName)"
-        set destinationPath to trashPath & "/" & fileName
-        set testCommand to "/bin/test -e " & quoted form of destinationPath
-        set destinationExists to do shell script testCommand & " && /bin/echo yes || /bin/echo no"
-        if destinationExists is "yes" then
-            set destinationPath to destinationPath & "." & (do shell script "/bin/date +%Y%m%d%H%M%S")
-        end if
-        set trashCommand to "/bin/mkdir -p " & quoted form of trashPath
-        set moveCommand to "/bin/mv -- " & quoted form of sourcePath & " " & quoted form of destinationPath
-        do shell script trashCommand & " && " & moveCommand with administrator privileges
+        set targetPath to "\(path)"
+        tell application id "com.apple.finder"
+            delete POSIX file targetPath
+        end tell
         """
     }
 
-    private static func runAppleScript(_ script: String) async -> CommandOutput {
-        await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            process.arguments = ["-e", script]
-
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            do {
-                try process.run()
-            } catch {
-                return CommandOutput(exitCode: -1, output: error.localizedDescription)
-            }
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return CommandOutput(
-                exitCode: process.terminationStatus,
-                output: String(bytes: data, encoding: .utf8) ?? ""
-            )
-        }.value
+    private static func meaningfulMessage(from errorInfo: NSDictionary?) -> String {
+        let message = errorInfo?[NSAppleScript.errorMessage] as? String
+        return if let message, !message.isEmpty {
+            message
+        } else {
+            "The administrator request was cancelled or failed."
+        }
     }
 
-    private static func firstMeaningfulLine(of output: String) -> String {
-        let line = output
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty }
-        return line ?? "The administrator request was cancelled or failed."
+    private static func isFinderAuthorizationDenial(_ errorInfo: NSDictionary?) -> Bool {
+        guard let errorNumber = errorInfo?[NSAppleScript.errorNumber] as? NSNumber else {
+            return false
+        }
+        // -1743 is the TCC denial returned when macOS has not allowed Apple Events;
+        // -60005 is the SecurityAgent authorization denial. Treat either as an
+        // authorization failure so the UI does not expose a raw script error.
+        return errorNumber.intValue == -1743 || errorNumber.intValue == -60005
     }
 
     private static func escapedAppleScriptString(_ value: String) -> String {
@@ -232,7 +207,7 @@ extension AppBundleUninstaller {
             .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
-    private static func trash(_ appURL: URL, withAccessTo accessURL: URL) async throws {
+    private static func trash(_ appURL: URL, withAccessTo accessURL: URL) throws {
         let didStartAccess = accessURL.startAccessingSecurityScopedResource()
         defer {
             if didStartAccess {
@@ -244,7 +219,7 @@ extension AppBundleUninstaller {
             throw AppBundleUninstallerError.selectedLocationDoesNotAuthorizeTrash(appURL)
         }
 
-        try await trashWithFileManager(appURL)
+        try trashWithFileManager(appURL)
     }
 
     @MainActor
@@ -321,13 +296,6 @@ extension AppBundleUninstaller {
     private static func normalizedPath(for url: URL) -> String {
         url.standardizedFileURL.resolvingSymlinksInPath().path
     }
-}
-
-private struct CommandOutput: Sendable {
-    let exitCode: Int32
-    let output: String
-
-    var succeeded: Bool { exitCode == 0 }
 }
 
 private extension URL {

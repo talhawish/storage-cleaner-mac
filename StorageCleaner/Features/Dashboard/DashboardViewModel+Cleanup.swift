@@ -50,7 +50,10 @@ extension DashboardViewModel {
         }
         let access = permissionHandler.beginHomeFolderAccess()
         defer { access?.stop() }
-        let result = await cleanupService.delete(urls: urls)
+        let result = await cleanupService.delete(
+            urls: urls,
+            precomputedBytes: precomputedCleanupBytes(for: urls)
+        )
         await reconcileCleanup(result, failureRoute: surfacingFailure ? .trash : nil)
         return result
     }
@@ -185,6 +188,25 @@ extension DashboardViewModel {
     private func reclaimedBytesByURL(from deletedItems: [DeletedItem]) -> [URL: Int64] {
         Dictionary(
             deletedItems.map { ($0.originalURL, $0.bytesReclaimed) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// Reuses the byte measurements captured by the scan. Directory sizes are expensive to
+    /// enumerate, especially for System Junk where one action can contain thousands of cache
+    /// folders; measuring them again immediately before moving them to Trash made the cleanup
+    /// modal appear stuck and delayed the actual move.
+    private func precomputedCleanupBytes(for urls: [URL]) -> [URL: Int64] {
+        guard let snapshot else { return [:] }
+        let requestedPaths = Set(urls.map(\.standardizedFileURL))
+        return Dictionary(
+            snapshot.findings.flatMap { finding in
+                finding.pathBytes.compactMap { url, bytes in
+                    let standardizedURL = url.standardizedFileURL
+                    guard requestedPaths.contains(standardizedURL) else { return nil }
+                    return (standardizedURL, bytes)
+                }
+            },
             uniquingKeysWith: { first, _ in first }
         )
     }

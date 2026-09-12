@@ -14,6 +14,7 @@ final class EmulatorsViewModelTests: XCTestCase {
         var nextMeasure: [EmulatorImage] = []
         var removeCalls: [[EmulatorImage]] = []
         var nextRemove: EmulatorCleanupResult = .init(removedIDs: [], totalBytesReclaimed: 0, failures: [])
+        var onRemove: (() -> Void)?
 
         func discover() async -> [EmulatorImage] {
             discoverCalls += 1
@@ -30,6 +31,7 @@ final class EmulatorsViewModelTests: XCTestCase {
         }
 
         func remove(_ images: [EmulatorImage]) async -> EmulatorCleanupResult {
+            onRemove?()
             removeCalls.append(images)
             return nextRemove
         }
@@ -257,7 +259,7 @@ final class EmulatorsViewModelTests: XCTestCase {
 
     // MARK: - Deletion
 
-    func testDeleteForwardsToServiceAndClearsSelection() async {
+    func testDeleteForwardsToService() async {
         let service = FakeEmulatorService()
         service.nextDiscover = [runtime(), deviceSupport()]
         let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
@@ -271,6 +273,50 @@ final class EmulatorsViewModelTests: XCTestCase {
 
         XCTAssertEqual(service.removeCalls.count, 1)
         XCTAssertEqual(service.removeCalls.first?.count, 2)
+    }
+
+    func testDeleteHoldsHomeFolderAccessForEntireRemoval() async {
+        let service = FakeEmulatorService()
+        let handler = RecordingPermissionHandler()
+        let image = deviceSupport()
+        service.nextDiscover = [image]
+        service.nextRemove = .init(removedIDs: [image.id], totalBytesReclaimed: image.bytes, failures: [])
+        service.onRemove = {
+            XCTAssertTrue(handler.isAccessActive, "security scope must remain active while moving files to Trash")
+        }
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: handler)
+        viewModel.start()
+        try? await Task.sleep(for: .milliseconds(700))
+
+        _ = await viewModel.delete([image])
+
+        XCTAssertFalse(handler.isAccessActive)
+        XCTAssertEqual(handler.beginCallCount, 2, "load and removal must each acquire access")
+        XCTAssertEqual(handler.stopCallCount, 2, "every acquired security scope must be released")
+    }
+
+    func testPartialDeleteRemovesSuccessesAndKeepsFailuresSelected() async {
+        let service = FakeEmulatorService()
+        let removed = runtime()
+        let failed = deviceSupport()
+        service.nextDiscover = [removed, failed]
+        service.nextRemove = EmulatorCleanupResult(
+            removedIDs: [removed.id],
+            totalBytesReclaimed: removed.bytes,
+            failures: [.init(id: failed.id, message: "Permission denied")]
+        )
+        let viewModel = EmulatorsViewModel(service: service, permissionHandler: grantedHandler())
+        viewModel.start()
+        try? await Task.sleep(for: .milliseconds(700))
+        viewModel.selectedIDs = [removed.id, failed.id]
+
+        _ = await viewModel.delete(viewModel.selectedImages)
+
+        XCTAssertEqual(viewModel.images.map(\.id), [failed.id])
+        XCTAssertEqual(viewModel.selectedIDs, [failed.id])
+        XCTAssertTrue(viewModel.showCleanupFailure)
+        XCTAssertTrue(viewModel.cleanupFailureMessage?.contains(failed.title) == true)
+        XCTAssertTrue(viewModel.cleanupFailureMessage?.contains("Permission denied") == true)
     }
 
     // MARK: - Live wiring
@@ -406,11 +452,17 @@ private final class GrantedPermissionHandler: StoragePermissionHandling, @unchec
 /// handler. Returns `nil` for the access (mirrors the unsandboxed / test path).
 private final class RecordingPermissionHandler: StoragePermissionHandling, @unchecked Sendable {
     private(set) var beginCallCount = 0
+    private(set) var stopCallCount = 0
+    private(set) var isAccessActive = false
     func currentStatuses() -> [StoragePermissionStatus] { [] }
     func requestHomeFolderAccess() -> Bool { false }
     func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
         beginCallCount += 1
-        return nil
+        isAccessActive = true
+        return SecurityScopedResourceAccess { [weak self] in
+            self?.isAccessActive = false
+            self?.stopCallCount += 1
+        }
     }
 }
 

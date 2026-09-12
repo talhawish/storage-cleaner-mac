@@ -91,7 +91,9 @@ final class ProjectActivityScannerTests: XCTestCase {
         let snapshot = await scanner.scan()
 
         XCTAssertEqual(snapshot.projects.first { $0.name == "next_app" }?.iconFallback, .nextJS)
+        XCTAssertEqual(snapshot.projects.first { $0.name == "next_app" }?.frameworks, [.nextJS, .react])
         XCTAssertEqual(snapshot.projects.first { $0.name == "nuxt_app" }?.iconFallback, .nuxt)
+        XCTAssertEqual(snapshot.projects.first { $0.name == "nuxt_app" }?.frameworks, [.nuxt, .vue])
     }
 
     func testFrameworkIconFallbacksDetectLaravelAndDjango() async throws {
@@ -111,7 +113,9 @@ final class ProjectActivityScannerTests: XCTestCase {
         let snapshot = await scanner.scan()
 
         XCTAssertEqual(snapshot.projects.first { $0.name == "laravel_app" }?.iconFallback, .laravel)
+        XCTAssertEqual(snapshot.projects.first { $0.name == "laravel_app" }?.frameworks, [.laravel])
         XCTAssertEqual(snapshot.projects.first { $0.name == "django_app" }?.iconFallback, .django)
+        XCTAssertEqual(snapshot.projects.first { $0.name == "django_app" }?.frameworks, [.django])
     }
 
     func testEmptyPackageJSONIsNotReactNative() throws {
@@ -186,10 +190,12 @@ final class ProjectActivityScannerTests: XCTestCase {
         let snapshot = await scanner.scan()
 
         let project = try XCTUnwrap(snapshot.projects.first { $0.name == "node_app" })
+        let expectedDependencies = StorageFormatting.itemSize(at: modules)
+        let expectedTotal = StorageFormatting.itemSize(at: root)
         XCTAssertEqual(project.technology, .nodeJS)
-        XCTAssertEqual(project.totalSize, 50_000 + 2)        // index.js + package.json + dep.js
-        XCTAssertEqual(project.dependencySize, 40_000)       // node_modules only
-        XCTAssertEqual(project.projectSize, 10_002)
+        XCTAssertEqual(project.totalSize, expectedTotal)
+        XCTAssertEqual(project.dependencySize, expectedDependencies)
+        XCTAssertEqual(project.projectSize, expectedTotal - expectedDependencies)
     }
 
     func testPHPProjectActivityUsesComposerVendorFallback() async throws {
@@ -202,13 +208,14 @@ final class ProjectActivityScannerTests: XCTestCase {
         let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2, minimumProjectSize: 1)
         let snapshot = await scanner.scan()
         let project = try XCTUnwrap(snapshot.projects.first)
+        let expectedDependencies = StorageFormatting.itemSize(at: vendor)
 
         XCTAssertEqual(project.technology, .php)
-        XCTAssertEqual(project.dependencySize, 20_000)
-        XCTAssertEqual(project.projectSize, 8_000)
+        XCTAssertEqual(project.dependencySize, expectedDependencies)
+        XCTAssertEqual(project.projectSize, StorageFormatting.itemSize(at: root) - expectedDependencies)
     }
 
-    func testHiddenDependencyDirectoriesAreCountedButHiddenSourceIsNot() async throws {
+    func testHiddenDependenciesAndRepositoryDataAreIncludedInAllocatedSize() async throws {
         let root = temporaryDirectory.appending(path: "swift_pkg", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try "// pkg".write(to: root.appending(path: "Package.swift"), atomically: true, encoding: .utf8)
@@ -229,9 +236,12 @@ final class ProjectActivityScannerTests: XCTestCase {
         let project = try XCTUnwrap(snapshot.projects.first)
 
         XCTAssertEqual(project.technology, .swift)
-        XCTAssertEqual(project.dependencySize, 20_000, "hidden .build is reclaimable")
-        // Package.swift (6 bytes) + main.swift (6_000) + .build (20_000); .git excluded.
-        XCTAssertEqual(project.totalSize, 6 + 6_000 + 20_000)
+        XCTAssertEqual(project.dependencySize, StorageFormatting.itemSize(at: build), "hidden .build is reclaimable")
+        XCTAssertEqual(
+            project.totalSize,
+            StorageFormatting.itemSize(at: root),
+            ".git still consumes project disk space"
+        )
     }
 
     func testScannerDoesNotDescendIntoDetectedProjects() async throws {
@@ -271,6 +281,16 @@ final class ProjectActivityScannerTests: XCTestCase {
         XCTAssertEqual(snapshot.projects.map(\.name), ["big", "small"], "sorted by size descending")
         XCTAssertGreaterThanOrEqual(snapshot.scanDuration, 0)
         XCTAssertEqual(snapshot.totalSize, snapshot.projects.reduce(0) { $0 + $1.totalSize })
+    }
+
+    func testOverlappingSearchRootsAreCollapsedBeforeScanning() {
+        let documents = temporaryDirectory.appending(path: "Documents", directoryHint: .isDirectory)
+        let github = documents.appending(path: "GitHub", directoryHint: .isDirectory)
+        let desktop = temporaryDirectory.appending(path: "Desktop", directoryHint: .isDirectory)
+
+        let roots = ProjectActivityScanner.nonOverlappingSearchRoots([github, documents, desktop, documents])
+
+        XCTAssertEqual(Set(roots), Set([documents.standardizedFileURL, desktop.standardizedFileURL]))
     }
 
     func testRecentDependencyFilesDoNotCountAsProjectActivity() async throws {

@@ -17,6 +17,7 @@ final class DashboardViewModel {
     let cleanupService: CleanupService
     let cliRemovalService: CLIRemovalService
     let dockerService: DockerService
+    let emulatorService: any EmulatorsServicing
     let historyStore: (any ScanHistoryStore)?
     /// Owns the app's current Pro/Free entitlement. Optional so existing
     /// unit tests that don't care about subscriptions can still construct
@@ -79,6 +80,7 @@ final class DashboardViewModel {
         cleanupService: CleanupService = FileManagerCleanupService(),
         cliRemovalService: CLIRemovalService = .live,
         dockerService: DockerService = .live,
+        emulatorService: any EmulatorsServicing = EmulatorManagementService.live,
         diskSpaceReader: any DiskSpaceReading = LiveDiskSpaceService.shared,
         historyStore: (any ScanHistoryStore)? = nil,
         subscriptionController: SubscriptionController? = nil
@@ -88,6 +90,7 @@ final class DashboardViewModel {
         self.cleanupService = cleanupService
         self.cliRemovalService = cliRemovalService
         self.dockerService = dockerService
+        self.emulatorService = emulatorService
         self.diskSpaceReader = diskSpaceReader
         self.historyStore = historyStore
         self.subscriptionController = subscriptionController

@@ -1,5 +1,6 @@
 import AppKit
 import AVKit
+import ImageIO
 import Quartz
 import SwiftUI
 
@@ -146,8 +147,25 @@ struct ZoomableImageView: View {
 
     private func load() async {
         let loaded = await withPreviewAccess {
-            await Task.detached(priority: .userInitiated) {
-                NSImage(contentsOf: url)
+            await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+                // A preview does not need the source's full resolution. A
+                // bounded decode prevents a single multi-gigapixel photo from
+                // exhausting the app while still allowing the 8x zoom range.
+                let options: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceShouldCacheImmediately: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 8_192
+                ]
+                guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(
+                    source,
+                    0,
+                    options as CFDictionary
+                ) else {
+                    return nil
+                }
+                return NSImage(cgImage: thumbnail, size: .zero)
             }.value
         }
         if let loaded {

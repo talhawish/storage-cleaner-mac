@@ -51,28 +51,7 @@ enum StorageFormatting {
     /// Hidden files and directories (dotfiles) are included so CLI toolchains
     /// like `~/.rustup`, `~/.cargo`, `~/.npm` and their caches are fully counted.
     static func itemSize(at url: URL) -> Int64 {
-        let sizeKeys: Set<URLResourceKey> = [.isRegularFileKey, .fileAllocatedSizeKey, .fileSizeKey]
-        let values = try? url.resourceValues(forKeys: sizeKeys)
-        if values?.isRegularFile == true {
-            return Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
-        }
-
-        let fileManager = FileManager.default
-        guard let enumerator = fileManager.enumerator(
-            at: url,
-            includingPropertiesForKeys: Array(sizeKeys),
-            options: []
-        ) else {
-            return 0
-        }
-
-        var total: Int64 = 0
-        for case let child as URL in enumerator {
-            let childValues = try? child.resourceValues(forKeys: sizeKeys)
-            guard childValues?.isRegularFile == true else { continue }
-            total += Int64(childValues?.fileAllocatedSize ?? childValues?.fileSize ?? 0)
-        }
-        return total
+        FileSystemItemSizer.allocatedSize(of: url)
     }
 
     static func modificationDate(at url: URL) -> Date {

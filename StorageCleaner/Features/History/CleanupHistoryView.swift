@@ -1,10 +1,8 @@
 import SwiftData
 import SwiftUI
 
-/// "Cleanup History" page — surfaces what the user has cleaned over time, with a hero summary,
-/// a top-categories breakdown, and a card-style list of recent scans. Uses a `ScrollView` rather
-/// than a `List` so the hero and breakdown grid sit on the same vertical canvas and breathe
-/// against the page background.
+/// "Cleanup History" page — keeps the latest overall scan visible without mixing older scan-only
+/// inventory into the durable cleanup audit trail.
 struct CleanupHistoryView: View {
     var canRevealInFinder = true
     /// Non-nil when the history store failed to persist a record. Rendered as
@@ -40,13 +38,21 @@ struct CleanupHistoryView: View {
                 if scans.isEmpty {
                     emptyState
                 } else {
-                    CleanupHeroSummary(viewModel: viewModel)
-
-                    if !viewModel.topCategories.isEmpty {
-                        TopCleanedCategoriesCard(categories: viewModel.topCategories)
+                    if let latestScan = viewModel.latestOverallScan {
+                        latestScanSection(latestScan)
                     }
 
-                    scansSection
+                    if viewModel.cleanupSummaries.isEmpty {
+                        noCleanupState
+                    } else {
+                        CleanupHeroSummary(viewModel: viewModel)
+
+                        if !viewModel.topCategories.isEmpty {
+                            TopCleanedCategoriesCard(categories: viewModel.topCategories)
+                        }
+
+                        cleanupSection
+                    }
                 }
             }
             .padding(pagePadding)
@@ -64,7 +70,7 @@ struct CleanupHistoryView: View {
             ConfirmationModal(
                 variant: .destructive,
                 title: "Clear all history?",
-                message: "This permanently removes every recorded scan and cleanup from the history. "
+                message: "This permanently removes the latest scan and every recorded cleanup. "
                     + "Files already moved to Trash are not affected.",
                 showsCloseButton: false,
                 preferredHeight: 280,
@@ -97,7 +103,7 @@ struct CleanupHistoryView: View {
                 }
                 .help("Clear all history")
                 .accessibilityLabel("Clear all history")
-                .accessibilityHint("Permanently removes every recorded scan and cleanup")
+                .accessibilityHint("Permanently removes the latest scan and every recorded cleanup")
                 .accessibilityIdentifier("clear-history-button")
             }
         }
@@ -110,7 +116,7 @@ struct CleanupHistoryView: View {
             Text("Cleanup History")
                 .font(.largeTitle.bold())
             Text("See what you've cleaned over time, the categories driving the biggest impact, and "
-                 + "the details of every scan.")
+                 + "a snapshot of your latest overall scan.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -121,29 +127,42 @@ struct CleanupHistoryView: View {
     // MARK: - Subtitle
 
     private var navigationSubtitle: String {
-        guard !scans.isEmpty else { return "No scans yet" }
-        if viewModel.totalScansWithCleanup == 0 {
-            return "\(viewModel.totalScans) scan\(viewModel.totalScans == 1 ? "" : "s")"
-        }
+        guard !scans.isEmpty else { return "No activity yet" }
+        guard viewModel.totalScansWithCleanup > 0 else { return "Latest overall scan" }
         return "\(viewModel.totalScansWithCleanup) cleanup\(viewModel.totalScansWithCleanup == 1 ? "" : "s")"
     }
 
-    // MARK: - Scans section
+    // MARK: - Latest scan
 
-    private var scansSection: some View {
+    private func latestScanSection(_ summary: CleanupScanSummary) -> some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
             SectionHeader(
-                title: "Recent Scans",
-                subtitle: scanListSubtitle,
+                title: "Latest Overall Scan",
+                subtitle: "Most recent completed full scan",
+                systemImage: "magnifyingglass"
+            )
+            LatestOverallScanCard(summary: summary)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("cleanup-history-latest-scan")
+    }
+
+    // MARK: - Cleanup section
+
+    private var cleanupSection: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+            SectionHeader(
+                title: "Cleanup History",
+                subtitle: "Newest first",
                 systemImage: "clock.arrow.circlepath"
             ) {
-                Text("\(viewModel.summaries.count) total")
+                Text("\(viewModel.cleanupSummaries.count) total")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
 
             VStack(spacing: AppTheme.Spacing.medium) {
-                ForEach(viewModel.summaries) { summary in
+                ForEach(viewModel.cleanupSummaries) { summary in
                     HistoryScanCard(
                         summary: summary,
                         onOpen: { selectedSummary = summary }
@@ -152,12 +171,7 @@ struct CleanupHistoryView: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("cleanup-history-scans")
-    }
-
-    private var scanListSubtitle: String {
-        if viewModel.summaries.count <= 1 { return "Every scan you've ever run" }
-        return "Newest first"
+        .accessibilityIdentifier("cleanup-history-cleanups")
     }
 
     // MARK: - Persistence warning
@@ -201,10 +215,21 @@ struct CleanupHistoryView: View {
     private var emptyState: some View {
         EmptyStateView(
             title: "No history yet",
-            message: "Run a scan from the Overview and clean the items you don't need. The lifetime "
-                + "summary, top categories, and per-scan details will appear here.",
+            message: "Run an overall scan from the Overview. Your latest scan and future cleanup "
+                + "activity will appear here.",
             systemImage: "clock.arrow.circlepath",
             tint: AppTheme.mint
         )
+    }
+
+    private var noCleanupState: some View {
+        EmptyStateView(
+            title: "No cleanups yet",
+            message: "Your latest overall scan stays above. Cleanup actions will appear here after "
+                + "you review and remove items.",
+            systemImage: "trash.slash",
+            tint: AppTheme.mint
+        )
+        .accessibilityIdentifier("cleanup-history-empty-cleanups")
     }
 }

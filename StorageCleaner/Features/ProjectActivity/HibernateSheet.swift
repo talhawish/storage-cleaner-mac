@@ -84,7 +84,7 @@ struct HibernateSheet: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 16) {
-                Label("^[\(projects.count) project](inflect: true)", systemImage: "folder.fill")
+                Label(ProjectCountFormatting.projects(projects.count), systemImage: "folder.fill")
                 Label(StorageFormatting.bytes(hibernatableSize), systemImage: "internaldrive")
                 if !selectedProjects.isEmpty {
                     Label(
@@ -125,8 +125,8 @@ struct HibernateSheet: View {
             Text(summary.failed.isEmpty ? "Hibernation Complete" : "Hibernation Finished With Issues")
                 .font(.title.bold())
 
-            Text("Reclaimed \(StorageFormatting.bytes(summary.reclaimedBytes)) of dependencies from "
-                + "^[\(summary.succeeded.count) project](inflect: true). Your source is untouched.")
+            Text("Moved \(StorageFormatting.bytes(summary.reclaimedBytes)) of dependencies from "
+                + "\(ProjectCountFormatting.projects(summary.succeeded.count)) to Trash. Your source is untouched.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

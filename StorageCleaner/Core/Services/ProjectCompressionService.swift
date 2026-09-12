@@ -25,9 +25,9 @@ struct CompressionOutcome: Identifiable, Sendable {
     /// dependency bytes plus the difference between the project size and the
     /// archive size.
     let totalReclaimedBytes: Int64
-    /// When non-nil, the operation did not complete successfully and the
-    /// project folder is left untouched (or in a state the user can recover
-    /// from by reinstalling dependencies).
+    /// When non-nil, the operation did not complete successfully. The project
+    /// source remains recoverable, but dependencies already moved to Trash may
+    /// need to be restored or reinstalled.
     let failureReason: String?
 
     var id: UUID { project.id }
@@ -38,7 +38,8 @@ struct CompressionOutcome: Identifiable, Sendable {
 /// after first hibernating it (removing its regenerable dependencies). The
 /// original folder is moved to the Trash only once the archive has been
 /// created **and** integrity-checked, so a partial or corrupted zip never
-/// results in data loss.
+/// removes source files. Dependencies moved during the first step remain
+/// recoverable from Trash if a later compression step fails.
 ///
 /// The service runs as an actor so the long-running compression step never
 /// blocks the UI. All filesystem mutations are bounded by the actor's
@@ -110,7 +111,7 @@ actor ProjectCompressionService: ProjectCompressionServicing {
         var context = PipelineContext(
             project: project,
             zipURL: Self.zipURL(for: project),
-            originalSize: directorySize(project.path)
+            originalSize: ProjectDependencyInventory.allocatedSize(of: project.path, fileManager: fileManager)
         )
 
         if fileManager.fileExists(atPath: context.zipURL.path) {
@@ -121,7 +122,10 @@ actor ProjectCompressionService: ProjectCompressionServicing {
             )
         }
 
-        let dependencyDirectories = projectDependencyDirectories(in: project)
+        let dependencyDirectories = ProjectDependencyInventory.directories(
+            for: project,
+            fileManager: fileManager
+        )
         context.reclamation = reclaim(dependencyDirectories: dependencyDirectories, in: project)
         if let reason = context.reclamation?.failureReason {
             return makeFailure(context: context, reason: reason)
@@ -253,7 +257,11 @@ actor ProjectCompressionService: ProjectCompressionServicing {
                 result.failureReason = "Compression was cancelled before the archive was created."
                 return result
             }
-            let size = directorySize(directory)
+            let size = ProjectDependencyInventory.allocatedSize(of: directory, fileManager: fileManager)
+            guard !Task.isCancelled else {
+                result.failureReason = "Compression was cancelled before the archive was created."
+                return result
+            }
             do {
                 try remove(directory)
                 result.bytesReclaimed += size
@@ -268,38 +276,11 @@ actor ProjectCompressionService: ProjectCompressionServicing {
         return result
     }
 
-    /// The dependency directories the same way `ProjectHibernationService` does
-    /// it: walking the project tree and matching directory names against the
-    /// technology's known set. Duplicated locally so the service can operate
-    /// without depending on the hibernation actor.
-    private func projectDependencyDirectories(in project: ProjectInfo) -> [URL] {
-        guard !project.technology.dependencyDirectoryNames.isEmpty else { return [] }
-
-        guard let enumerator = fileManager.enumerator(
-            at: project.path,
-            includingPropertiesForKeys: [.isDirectoryKey]
-        ) else { return [] }
-
-        var matches: [URL] = []
-        while let url = enumerator.nextObject() as? URL {
-            guard !Task.isCancelled else { break }
-            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
-            if ProjectDependencyRules.isDependencyDirectory(
-                url,
-                for: project.technology,
-                projectRoot: project.path,
-                fileManager: fileManager
-            ) {
-                matches.append(url)
-                enumerator.skipDescendants()
-            }
-        }
-        return matches
-    }
-
     private func validatedArchiveSize(at url: URL) throws -> Int64 {
-        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        guard values.isRegularFile == true, let size = values.fileSize, size > 0 else {
+        let values = try url.resourceValues(
+            forKeys: [.isRegularFileKey, .fileAllocatedSizeKey, .fileSizeKey]
+        )
+        guard values.isRegularFile == true, let logicalSize = values.fileSize, logicalSize > 0 else {
             throw ProcessRunError(
                 executable: "/usr/bin/ditto",
                 arguments: ["<archive>"],
@@ -307,7 +288,7 @@ actor ProjectCompressionService: ProjectCompressionServicing {
                 standardError: Data("archive is missing or empty".utf8)
             )
         }
-        return Int64(size)
+        return ProjectDependencyInventory.allocatedSize(from: values)
     }
 
     private func cleanupFailedArchive(at url: URL) {
@@ -322,22 +303,6 @@ actor ProjectCompressionService: ProjectCompressionServicing {
         case .delete:
             try fileManager.removeItem(at: url)
         }
-    }
-
-    private func directorySize(_ directory: URL) -> Int64 {
-        guard let enumerator = fileManager.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey]
-        ) else { return 0 }
-
-        var total: Int64 = 0
-        while let url = enumerator.nextObject() as? URL {
-            guard !Task.isCancelled else { break }
-            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey]),
-                  values.isDirectory != true else { continue }
-            total += Int64(values.fileSize ?? 0)
-        }
-        return total
     }
 
     private func friendlyMessage(for error: Error, phase: String, suffix: String = "") -> String {

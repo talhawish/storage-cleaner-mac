@@ -168,6 +168,24 @@ final class StorageCleanerUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["category-detail-xcodeArtifacts"].exists)
     }
 
+    @MainActor
+    func testCleanupHistoryShowsOnlyLatestOverallScanAboveCleanupActivity() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+        startScanAndWaitForResults(in: app)
+
+        let historyRow = app.descendants(matching: .any)["sidebar-cleanupHistory"]
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 4))
+        historyRow.click()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["cleanup-history-root"].waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["latest-overall-scan-card"].waitForExistence(timeout: 4)
+        )
+        XCTAssertFalse(app.staticTexts["Recent Scans"].exists)
+    }
+
     /// Regression for the pre-scan UX: opening Developer Storage before any
     /// scan has run must show the welcoming `InitialStateView` (with the
     /// "initial-state-scan-button" CTA), not a "No X Found" empty state.

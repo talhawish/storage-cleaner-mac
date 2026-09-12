@@ -7,6 +7,7 @@ struct AppContainer: Sendable {
     let diskSpaceReader: any DiskSpaceReading
     let subscriptionService: any SubscriptionService
     let dockerService: DockerService
+    let emulatorService: any EmulatorsServicing
 
     static var live: AppContainer {
         let permissionHandler = FileSystemPermissionService()
@@ -20,7 +21,8 @@ struct AppContainer: Sendable {
             cleanupService: FileManagerCleanupService(),
             diskSpaceReader: LiveDiskSpaceService.shared,
             subscriptionService: StoreKitSubscriptionService(),
-            dockerService: dockerService
+            dockerService: dockerService,
+            emulatorService: EmulatorManagementService.live
         )
     }
 
@@ -36,11 +38,67 @@ struct AppContainer: Sendable {
                 subscriptionService: DemoSubscriptionService(
                     entitlement: arguments.contains("--use-demo-free-subscription") ? .free : .lifetime
                 ),
-                dockerService: .demo()
+                dockerService: .demo(),
+                emulatorService: DemoEmulatorService()
             )
         }
 
         return .live
+    }
+}
+
+/// UI-test/demo launches must never enumerate or mutate the developer's real
+/// Xcode and Android folders. The simulator screen gets this deterministic,
+/// in-memory service through the same composition root as the dashboard scanner.
+private final class DemoEmulatorService: @unchecked Sendable, EmulatorsServicing {
+    private let lock = NSLock()
+    private var images: [EmulatorImage] = [
+        EmulatorImage(
+            id: "demo-device-support-26-4",
+            platform: .iosDeviceSupport,
+            title: "iOS 26.4 · iPhone15,3",
+            versionLabel: "26.4",
+            key: VersionKey.parse("26.4"),
+            bytes: 4_750_000_000,
+            detail: "Build 22H340",
+            removal: .trashDirectory(URL(filePath: "/tmp/StorageCleanerDemo/iOS DeviceSupport/26.4")),
+            isRemovable: true,
+            lastUsed: nil
+        ),
+        EmulatorImage(
+            id: "demo-device-support-26-5",
+            platform: .iosDeviceSupport,
+            title: "iOS 26.5 · iPhone15,3",
+            versionLabel: "26.5",
+            key: VersionKey.parse("26.5"),
+            bytes: 5_840_000_000,
+            detail: "Build 23E254",
+            removal: .trashDirectory(URL(filePath: "/tmp/StorageCleanerDemo/iOS DeviceSupport/26.5")),
+            isRemovable: true,
+            lastUsed: nil
+        )
+    ]
+
+    func discover() async -> [EmulatorImage] {
+        lock.withLock { images }
+    }
+
+    func measuringRemainingSizes(in images: [EmulatorImage]) -> [EmulatorImage] {
+        images
+    }
+
+    func remove(_ images: [EmulatorImage]) async -> EmulatorCleanupResult {
+        let requestedIDs = Set(images.map(\.id))
+        let removed = lock.withLock { () -> [EmulatorImage] in
+            let matches = self.images.filter { requestedIDs.contains($0.id) }
+            self.images.removeAll { requestedIDs.contains($0.id) }
+            return matches
+        }
+        return EmulatorCleanupResult(
+            removedIDs: removed.map(\.id),
+            totalBytesReclaimed: removed.reduce(Int64(0)) { $0 + $1.bytes },
+            failures: []
+        )
     }
 }
 

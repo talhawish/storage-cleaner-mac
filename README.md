@@ -283,12 +283,30 @@ Storage cleanup is destructive by nature. Production cleanup work must preserve 
 Cleanup is always user-initiated and confirmed. Filesystem-backed items move to the Trash whenever
 possible; tool-managed resources such as Docker images, containers, volumes, build cache, and Apple
 simulator runtimes use their owning CLI and are explicitly labeled when removal is permanent. Every
-successful cleanup is written to Cleanup History.
+successful cleanup is written to Cleanup History. File cleanup confirmations use an immutable,
+non-empty selection snapshot and preview the exact names, full paths, item count, and estimated size
+before the action begins.
+Cleanup History keeps one latest overall scan snapshot for context and lists only real cleanup
+actions below it; newer full scans replace older scan-only records so routine scanning does not
+fill the audit trail with "No cleanup" entries.
 
 ## Detection coverage
 
 The live scanner currently inspects these storage candidate types:
 
+- Project Activity: project totals use allocated on-disk bytes (including hidden repository data),
+  while hibernatable space counts only regenerable dependency/build directories. Scan, hibernate,
+  and compress share the same dependency inventory rules across Swift, Flutter, React Native,
+  Android, Node.js, PHP, Python, Ruby, Rust, Go, Java/Kotlin, and .NET. Each technology row opens a
+  detail view with project, activity, dependency, hibernation, and layered framework information.
+  Detection includes React/Next.js, Vue/Nuxt/Quasar, Angular, Svelte/SvelteKit, Express, NestJS,
+  Laravel, Symfony, WordPress, Django, Flask, FastAPI, Rails, Sinatra, Spring Boot, Ktor, ASP.NET Core,
+  Blazor, Vapor, and common Rust and Go web frameworks. Layered frameworks are shown together without
+  double-counting project storage. Monorepos remain one storage-owning root while bounded nested-project
+  discovery identifies apps and packages inside workspace containers, counts their frameworks, and adds
+  their technologies to dependency sizing and hibernation rules. Those rules are scoped to the nearest
+  project boundary, preventing generic names such as `vendor`, `build`, or `dist` from affecting a sibling;
+  a single polyglot component can safely contribute multiple manifest technologies at the same boundary.
 - Xcode artifacts: DerivedData, archives, simulators, and SwiftPM checkouts
 - Node dependencies: `node_modules`, npm, pnpm, and yarn caches
 - Docker artifacts: the Docker screen queries the active Docker context for images, containers,
@@ -324,10 +342,14 @@ The live scanner currently inspects these storage candidate types:
   phpenv/Laravel Herd, .NET, Java via Jabba/jEnv/SDKMAN/asdf, Haskell via GHCup/Stack, Flutter via
   FVM or hand-cloned SDKs, Deno, plus Homebrew versioned formulae like `php@8.1`/`php@8.2`, asdf
   plugins, and system JDKs) — keep the newest, reclaim the rest. Lives inside Developer Storage.
-- Simulators & emulators: iOS/Apple simulator runtimes (often 8+ GB each) and Android system images by
-  API level — view every installed OS image with its size and remove the ones you don't need. Apple
-  runtimes are removed with `xcrun simctl runtime delete` (re-downloadable); Android images move to the
-  Trash (restorable)
+- Simulators & emulators: Apple simulator runtimes and device instances, iOS Device Support debug
+  symbols, and Android system images — view every installed item with its size and remove the ones you
+  don't need. Apple-managed resources use `simctl`; filesystem-backed items are moved to Trash while
+  home-folder access remains active. Partial failures stay selected and report their removal error so
+  they can be retried safely.
+- Applications: app bundles are moved to Trash through security-scoped Applications access. Bundles
+  that require administrator approval use AppKit's Finder-style recycle operation so macOS owns the
+  authentication UI and the item remains recoverable from Trash.
 - Junk files: temporary files, logs, crash reports, disposable archives, and old disk images
 - System Junk: actionable orphaned Application Support data, caches, sandbox containers,
   preferences, saved application state, and old crash reports. Cleanup uses Finder-style Trash
@@ -359,6 +381,13 @@ UI tests can add `--use-demo-free-subscription` alongside `--use-demo-scanner` t
 `make ui-test` keeps its runner and DerivedData under `/private/tmp` by default so macOS does not
 mistake automation infrastructure for a request to access Desktop, Documents, or Downloads. Set
 `UI_TEST_DERIVED_DATA` to override that location, but keep it outside privacy-protected user folders.
+Demo/UI-test launches also inject an isolated in-memory emulator service, so opening Simulators & Emulators never
+probes, sizes, or mutates the developer machine's real Xcode and Android installations.
+
+Large filesystem walks drain Foundation autoreleased objects per item and remain cancellation-aware.
+Media thumbnails are downsampled to their display size and share a 128 MB / 512-item cache; subprocess
+stdout and stderr capture is capped at 8 MB per stream. These bounds keep repeated scans and long media
+grids responsive under memory pressure without changing reported storage totals.
 
 Keyboard shortcuts currently available:
 

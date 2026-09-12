@@ -76,13 +76,14 @@ struct TopCleanedCategory: Identifiable, Equatable, Sendable {
     var domain: StorageDomain { kind.defaultDomain }
 }
 
-/// Cleanup History's derived state: lifetime totals for the summary header, plus a
-/// per-scan mapping the rows and detail sheet read from. Lives in the view model so the
-/// layout only deals with `Identifiable` value types and tests can drive it directly.
+/// Cleanup History's derived state: the latest overall scan, cleanup-only history, and lifetime
+/// cleanup totals. Lives in the view model so filtering and ordering are tested outside the view.
 @MainActor
 @Observable
 final class CleanupHistoryViewModel {
     private(set) var summaries: [CleanupScanSummary] = []
+    private(set) var latestOverallScan: CleanupScanSummary?
+    private(set) var cleanupSummaries: [CleanupScanSummary] = []
     private(set) var totalScans: Int = 0
     private(set) var totalScansWithCleanup: Int = 0
     private(set) var totalBytesReclaimed: Int64 = 0
@@ -103,17 +104,21 @@ final class CleanupHistoryViewModel {
     }
 
     func update(with scans: [StoredScan]) {
-        let mapped = scans.map(Self.summary(from:))
+        let sortedScans = scans.sorted { $0.date > $1.date }
+        let mapped = sortedScans.map(Self.summary(from:))
         summaries = mapped
+        latestOverallScan = sortedScans
+            .first(where: { $0.recordKind == .overallScan })
+            .map(Self.summary(from:))
+        cleanupSummaries = mapped.filter(\.hasCleanup)
         totalScans = scans.count
-        totalScansWithCleanup = mapped.filter(\.hasCleanup).count
-        totalBytesReclaimed = mapped.reduce(Int64(0)) { $0 + $1.totalBytesCleaned }
-        totalItemsReclaimed = mapped.reduce(0) { $0 + $1.totalItemsCleaned }
-        let cleanupDates = mapped.filter(\.hasCleanup).map(\.date)
+        totalScansWithCleanup = cleanupSummaries.count
+        totalBytesReclaimed = cleanupSummaries.reduce(Int64(0)) { $0 + $1.totalBytesCleaned }
+        totalItemsReclaimed = cleanupSummaries.reduce(0) { $0 + $1.totalItemsCleaned }
+        let cleanupDates = cleanupSummaries.map(\.date)
         lastCleanupDate = cleanupDates.max()
         firstCleanupDate = cleanupDates.min()
-        largestCleanup = mapped
-            .filter(\.hasCleanup)
+        largestCleanup = cleanupSummaries
             .max(by: { $0.totalBytesCleaned < $1.totalBytesCleaned })
             .map {
                 LargestCleanup(
@@ -123,11 +128,11 @@ final class CleanupHistoryViewModel {
                 )
             }
 
-        let (monthBytes, monthItems) = Self.currentMonthTotals(in: mapped)
+        let (monthBytes, monthItems) = Self.currentMonthTotals(in: cleanupSummaries)
         bytesReclaimedThisMonth = monthBytes
         itemsReclaimedThisMonth = monthItems
 
-        topCategories = Self.topCategories(from: mapped, limit: 6)
+        topCategories = Self.topCategories(from: cleanupSummaries, limit: 6)
     }
 
     /// Aggregates lifetime category totals across every scan, sorted by bytes reclaimed, and

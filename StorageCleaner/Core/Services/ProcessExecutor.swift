@@ -38,6 +38,11 @@ protocol ProcessExecuting: Sendable {
 /// Runs a subprocess and collects both output streams while the process is
 /// still executing so a verbose child cannot block on a full pipe buffer.
 struct SystemProcessExecutor: ProcessExecuting {
+    /// Command output is diagnostic/control data, never a file payload. Keep
+    /// draining pipes to avoid child-process deadlocks, but retain only a
+    /// bounded prefix so a noisy tool cannot exhaust application memory.
+    static let maximumCapturedBytesPerStream = 8 * 1_024 * 1_024
+
     func run(executable: URL, arguments: [String]) async throws -> ProcessRunResult {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
@@ -46,8 +51,8 @@ struct SystemProcessExecutor: ProcessExecuting {
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
-            let stdout = LockedDataBuffer()
-            let stderr = LockedDataBuffer()
+            let stdout = LockedDataBuffer(limit: Self.maximumCapturedBytesPerStream)
+            let stderr = LockedDataBuffer(limit: Self.maximumCapturedBytesPerStream)
             let state = RunningProcessState(
                 process: process,
                 stdoutPipe: stdoutPipe,
@@ -152,12 +157,20 @@ private final class RunningProcessState: @unchecked Sendable {
 
 private final class LockedDataBuffer: @unchecked Sendable {
     private let lock = NSLock()
+    private let limit: Int
     private var storage = Data()
+
+    init(limit: Int) {
+        self.limit = limit
+        storage.reserveCapacity(min(limit, 64 * 1_024))
+    }
 
     func append(_ data: Data) {
         guard !data.isEmpty else { return }
         lock.withLock {
-            storage.append(data)
+            let remainingCapacity = max(0, limit - storage.count)
+            guard remainingCapacity > 0 else { return }
+            storage.append(data.prefix(remainingCapacity))
         }
     }
 

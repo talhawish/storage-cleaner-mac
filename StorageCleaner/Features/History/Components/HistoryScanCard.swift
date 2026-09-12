@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// One row in the "Recent Scans" list on the Cleanup History page. Card-shaped instead of a
-/// classic list row so the page reads as a stack of distinct events rather than a sparse table.
-/// Shows the scan date, the top cleaned categories as chips, and the totals; tapping the card
-/// opens the detail sheet via `onOpen`.
+/// One cleanup session in the Cleanup History list. Scan-only records are filtered before this
+/// view is created, keeping every row focused on a destructive action and its audit details.
 struct HistoryScanCard: View {
     let summary: CleanupScanSummary
     let onOpen: () -> Void
@@ -72,33 +70,22 @@ struct HistoryScanCard: View {
         HStack(alignment: .center, spacing: 8) {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(summary.hasCleanup ? AppTheme.mint : .secondary)
+                .foregroundStyle(AppTheme.mint)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
-                Text(summary.hasCleanup
-                     ? StorageFormatting.bytes(summary.totalBytesCleaned)
-                     : "No cleanup")
+                Text(StorageFormatting.bytes(summary.totalBytesCleaned))
                     .font(.title3.weight(.bold).monospacedDigit())
-                    .foregroundStyle(summary.hasCleanup ? .primary : .secondary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
-                if summary.hasCleanup {
-                    Text(
-                        "\(StorageFormatting.items(summary.totalItemsCleaned)) "
-                            + "item\(summary.totalItemsCleaned == 1 ? "" : "s") in "
-                            + "\(summary.categories.count) "
-                            + "categor\(summary.categories.count == 1 ? "y" : "ies")"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                } else {
-                    Text(
-                        "Scanned \(StorageFormatting.bytes(summary.reclaimableBytes)) of reclaimable space"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                }
+                Text(
+                    "\(StorageFormatting.items(summary.totalItemsCleaned)) "
+                        + "item\(summary.totalItemsCleaned == 1 ? "" : "s") in "
+                        + "\(summary.categories.count) "
+                        + "categor\(summary.categories.count == 1 ? "y" : "ies")"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
         }
     }
@@ -119,7 +106,7 @@ struct HistoryScanCard: View {
     }
 
     @ViewBuilder private var categoryChips: some View {
-        if summary.hasCleanup && !summary.categories.isEmpty {
+        if !summary.categories.isEmpty {
             HStack(spacing: 6) {
                 ForEach(Array(summary.categories.prefix(3))) { category in
                     CategoryChip(category: category)
@@ -136,13 +123,6 @@ struct HistoryScanCard: View {
                 }
                 Spacer(minLength: 0)
             }
-        } else if !summary.hasCleanup {
-            Label(
-                "Items scanned but not removed",
-                systemImage: "eye"
-            )
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.tertiary)
         }
     }
 
@@ -152,12 +132,8 @@ struct HistoryScanCard: View {
         var parts = [
             "Scan on \(summary.date.formatted(date: .complete, time: .shortened))"
         ]
-        if summary.hasCleanup {
-            parts.append("Cleaned \(StorageFormatting.bytes(summary.totalBytesCleaned))")
-            parts.append("\(StorageFormatting.items(summary.totalItemsCleaned)) items removed")
-        } else {
-            parts.append("No items removed")
-        }
+        parts.append("Cleaned \(StorageFormatting.bytes(summary.totalBytesCleaned))")
+        parts.append("\(StorageFormatting.items(summary.totalItemsCleaned)) items removed")
         if let freed = summary.freedBytesByCleanup {
             if freed > 0 {
                 parts.append("Free space grew by \(StorageFormatting.bytes(freed))")

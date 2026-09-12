@@ -8,9 +8,9 @@
 
 <template>
   <AppWindow title="Storage Cleaner — Dashboard">
-    <div class="grid grid-cols-[200px_1fr]">
+    <div class="grid grid-cols-1 md:grid-cols-[200px_minmax(0,1fr)]">
       <!-- Sidebar -->
-      <aside class="hidden border-r border-ink-200/80 bg-ink-50/40 p-3 sm:block">
+      <aside class="hidden border-r border-ink-200/80 bg-ink-50/40 p-3 md:block">
         <p class="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">
           Overview
         </p>
@@ -39,9 +39,9 @@
       </aside>
 
       <!-- Main -->
-      <div class="p-4 sm:p-5">
+      <div class="min-w-0 p-4 sm:p-5">
         <!-- Donut + breakdown -->
-        <div class="flex items-start gap-5">
+        <div class="flex flex-col items-center gap-4 md:flex-row md:items-start md:gap-5">
           <div class="relative grid size-[112px] place-items-center">
             <svg viewBox="0 0 36 36" class="size-full -rotate-90">
               <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#e6e9ef" stroke-width="3" />
@@ -58,7 +58,7 @@
             </div>
           </div>
 
-          <div class="min-w-0 flex-1 space-y-1.5">
+          <div class="w-full min-w-0 flex-1 space-y-1.5">
             <div v-for="(item, i) in [
               { label: 'Apple',    value: '32.1 GB', pct: 92, dot: 'bg-domain-apple' },
               { label: 'Web',      value: '18.7 GB', pct: 64, dot: 'bg-domain-web' },

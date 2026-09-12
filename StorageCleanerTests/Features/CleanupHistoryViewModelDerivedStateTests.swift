@@ -16,9 +16,11 @@ final class CleanupHistoryViewModelDerivedStateTests: XCTestCase {
 
     private func makeScan(
         in context: ModelContext,
+        recordKind: HistoryRecordKind? = nil,
         date: Date = .now
     ) -> StoredScan {
         let scan = StoredScan(
+            recordKind: recordKind,
             date: date,
             durationSeconds: 10,
             scannedItemCount: 1,
@@ -94,6 +96,40 @@ final class CleanupHistoryViewModelDerivedStateTests: XCTestCase {
 
         XCTAssertEqual(viewModel.totalScans, 2)
         XCTAssertEqual(viewModel.totalScansWithCleanup, 1)
+    }
+
+    func testUpdateSeparatesLatestOverallScanFromCleanupHistory() throws {
+        let fixture = makeFixture()
+        let olderScanOnly = makeScan(
+            in: fixture.context,
+            recordKind: .overallScan,
+            date: Date(timeIntervalSince1970: 100)
+        )
+        let latestOverall = makeScan(
+            in: fixture.context,
+            recordKind: .overallScan,
+            date: Date(timeIntervalSince1970: 200)
+        )
+        let cleanupOnly = makeScan(
+            in: fixture.context,
+            recordKind: .cleanupOnly,
+            date: Date(timeIntervalSince1970: 300)
+        )
+        makeCleanup(
+            in: fixture.context,
+            scan: cleanupOnly,
+            kind: .browserCaches,
+            bytes: 1_024,
+            items: 1
+        )
+        try fixture.context.save()
+
+        let viewModel = CleanupHistoryViewModel()
+        viewModel.update(with: [olderScanOnly, cleanupOnly, latestOverall])
+
+        XCTAssertEqual(viewModel.latestOverallScan?.date, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(viewModel.cleanupSummaries.map(\.date), [Date(timeIntervalSince1970: 300)])
+        XCTAssertFalse(viewModel.cleanupSummaries.contains(where: { !$0.hasCleanup }))
     }
 
     func testFirstAndLastCleanupDatesBracketTheHistory() throws {

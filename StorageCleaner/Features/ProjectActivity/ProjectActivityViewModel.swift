@@ -90,7 +90,10 @@ final class ProjectActivityViewModel {
         isScanning = true
         lastHibernation = nil
         let result = await scanner.scan()
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            isScanning = false
+            return
+        }
         snapshot = result
         hasScanned = true
         isScanning = false
@@ -134,7 +137,7 @@ final class ProjectActivityViewModel {
     @discardableResult
     func hibernate(_ projects: [ProjectInfo]) async -> HibernationSummary {
         let summary = await hibernationService.hibernate(projects)
-        reclaimDependencies(forProjectIDs: summary.succeeded.map(\.id))
+        updateDependencies(from: summary.outcomes)
         lastHibernation = summary
         return summary
     }
@@ -146,6 +149,7 @@ final class ProjectActivityViewModel {
                 project: project,
                 reclaimedBytes: 0,
                 removedDirectoryCount: 0,
+                remainingDependencyBytes: project.dependencySize,
                 failureReason: "Hibernation did not run."
             )
     }
@@ -153,11 +157,21 @@ final class ProjectActivityViewModel {
     /// Reflect a successful hibernation in place: the projects stay in the list
     /// but with their reclaimed dependencies removed from the size breakdown.
     /// Re-sorts by size to preserve the snapshot's largest-first ordering.
-    private func reclaimDependencies(forProjectIDs ids: [UUID]) {
-        guard let snapshot, !ids.isEmpty else { return }
-        let reclaimed = Set(ids)
+    private func updateDependencies(from outcomes: [HibernationOutcome]) {
+        guard !outcomes.isEmpty else { return }
+        let remainingByID = Dictionary(
+            uniqueKeysWithValues: outcomes.map { ($0.id, $0.remainingDependencyBytes) }
+        )
+        updateDependencySizes(remainingByID)
+    }
+
+    private func updateDependencySizes(_ remainingByID: [UUID: Int64]) {
+        guard let snapshot, !remainingByID.isEmpty else { return }
         let updated = snapshot.projects
-            .map { reclaimed.contains($0.id) ? $0.withDependenciesReclaimed : $0 }
+            .map { project in
+                guard let remaining = remainingByID[project.id] else { return project }
+                return project.withDependencySize(remaining)
+            }
             .sorted { $0.totalSize > $1.totalSize }
         self.snapshot = ProjectActivitySnapshot(
             projects: updated,
@@ -182,8 +196,15 @@ final class ProjectActivityViewModel {
         lastCompression = outcome
         if outcome.succeeded {
             removeProjectFromSnapshot(id: project.id)
+        } else if outcome.reclaimedDependencyBytes > 0 {
+            let remaining = max(0, project.dependencySize - outcome.reclaimedDependencyBytes)
+            updateDependencySize(forProjectID: project.id, remainingBytes: remaining)
         }
         return outcome
+    }
+
+    private func updateDependencySize(forProjectID id: UUID, remainingBytes: Int64) {
+        updateDependencySizes([id: remainingBytes])
     }
 
     private func removeProjectFromSnapshot(id: UUID) {
