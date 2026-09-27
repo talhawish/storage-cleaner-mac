@@ -45,6 +45,18 @@ struct DockerImage: Identifiable, Sendable, Equatable, Hashable {
     let uniqueBytes: Int64?
     let containerCount: Int?
 
+    /// Docker can return one row per repository tag for the same image ID.
+    /// Keep those rows distinct in SwiftUI while retaining `id` for CLI actions.
+    var rowID: String {
+        [id, repository, tag].joined(separator: "\u{0}")
+    }
+
+    /// Removing a tag removes only that reference. An untagged image needs its ID.
+    var removalReference: String {
+        guard repository != "<none>", !tag.isEmpty, tag != "<none>" else { return id }
+        return "\(repository):\(tag)"
+    }
+
     var displayName: String {
         if repository == "<none>" && tag == "<none>" { return id }
         if tag.isEmpty || tag == "<none>" { return repository }

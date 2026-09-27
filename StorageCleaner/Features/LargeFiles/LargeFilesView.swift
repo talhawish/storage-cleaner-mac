@@ -3,7 +3,7 @@ import SwiftUI
 struct LargeFilesView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
-    let onDelete: ([URL]) -> Void
+    let onDelete: ([URL]) async -> CleanupResult
     let permissionHandler: (any StoragePermissionHandling)?
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
@@ -13,11 +13,16 @@ struct LargeFilesView: View {
     @State private var locationFilter: LargeFileLocationFilter = .all
     @State private var selectedURLs: Set<URL> = []
     @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isDeleting = false
     @State private var previewURL: URL?
     @State private var allLargeFileRecords: [FindingFileRecord] = []
     @State private var isLoadingRecords = false
 
-    private var thresholdBytes: Int64 { Int64(largeFileThresholdMB) * 1_000_000 }
+    private var threshold: LargeFileThreshold {
+        LargeFileThreshold(rawValue: largeFileThresholdMB) ?? .hundredMB
+    }
+
+    private var thresholdBytes: Int64 { threshold.bytes }
     private var recordsIdentity: FindingFileRecordsIdentity { FindingFileRecordsIdentity(findings: findings) }
     private var hasScannedPaths: Bool { findings.contains { !$0.filePaths.isEmpty } }
     private var loadedLargeFileRecords: [FindingFileRecord] { hasScannedPaths ? allLargeFileRecords : [] }
@@ -68,7 +73,7 @@ struct LargeFilesView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if !selectedURLs.isEmpty {
+                if !selectedURLs.isEmpty && !isDeleting {
                     Button {
                         requestDeleteConfirmation()
                     } label: {
@@ -128,6 +133,10 @@ struct LargeFilesView: View {
 
     private var largeFilesContent: some View {
         List {
+            if isDeleting {
+                ProgressView("Moving selected files…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             locationSection
             thresholdSection
 
@@ -138,6 +147,7 @@ struct LargeFilesView: View {
             }
         }
         .listStyle(.inset(alternatesRowBackgrounds: true))
+        .disabled(isDeleting)
     }
 
     private var locationSection: some View {
@@ -155,10 +165,10 @@ struct LargeFilesView: View {
 
     private var thresholdSection: some View {
         Section {
-            Picker("Minimum size", selection: $largeFileThresholdMB) {
+            Picker("Minimum size", selection: largeFileThresholdBinding) {
                 ForEach(LargeFileThreshold.allCases) { threshold in
                     Text(threshold.label)
-                        .tag(threshold.megabytes)
+                        .tag(threshold)
                         .accessibilityIdentifier("large-file-threshold-\(threshold.megabytes)")
                 }
             }
@@ -241,9 +251,14 @@ struct LargeFilesView: View {
     }
 
     private func performDelete(_ request: FileCleanupRequest) {
+        guard !isDeleting else { return }
         cleanupRequest = nil
-        selectedURLs.subtract(request.urls)
-        onDelete(request.urls)
+        isDeleting = true
+        Task { @MainActor in
+            let result = await onDelete(request.urls)
+            selectedURLs.subtract(result.deletedItems.map(\.originalURL))
+            isDeleting = false
+        }
     }
 
     private func loadRecords() async {
@@ -257,6 +272,13 @@ struct LargeFilesView: View {
         allLargeFileRecords = records
         selectedURLs.formIntersection(Set(records.map(\.url)))
         isLoadingRecords = false
+    }
+
+    private var largeFileThresholdBinding: Binding<LargeFileThreshold> {
+        Binding(
+            get: { threshold },
+            set: { largeFileThresholdMB = $0.megabytes }
+        )
     }
 }
 

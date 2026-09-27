@@ -42,9 +42,51 @@ struct CleanupResult: Sendable {
     var failedCount: Int { failedURLs.count }
 }
 
+struct CleanupProgress: Sendable, Equatable {
+    enum Phase: Sendable, Equatable {
+        case preparing
+        case movingToTrash
+        case permanentlyDeleting
+    }
+
+    let phase: Phase
+    let completedCount: Int
+    let totalCount: Int
+
+    var message: String {
+        switch phase {
+        case .preparing:
+            "Preparing \(completedCount) of \(totalCount)…"
+        case .movingToTrash:
+            "Moving \(completedCount) of \(totalCount) to Trash…"
+        case .permanentlyDeleting:
+            "Clearing Trash, \(completedCount) of \(totalCount)…"
+        }
+    }
+}
+
+typealias CleanupProgressHandler = @Sendable (CleanupProgress) -> Void
+
+struct CleanupProgressReporter: Sendable {
+    private let handler: CleanupProgressHandler
+
+    init(_ handler: @escaping CleanupProgressHandler) {
+        self.handler = handler
+    }
+
+    func report(_ progress: CleanupProgress) {
+        handler(progress)
+    }
+}
+
 protocol CleanupService: Sendable {
     func delete(urls: [URL]) async -> CleanupResult
     func delete(urls: [URL], precomputedBytes: [URL: Int64]) async -> CleanupResult
+    func delete(
+        urls: [URL],
+        precomputedBytes: [URL: Int64],
+        progress: @escaping CleanupProgressHandler
+    ) async -> CleanupResult
 }
 
 extension CleanupService {
@@ -53,6 +95,21 @@ extension CleanupService {
     /// does not walk the same tree a second time.
     func delete(urls: [URL], precomputedBytes: [URL: Int64]) async -> CleanupResult {
         await delete(urls: urls)
+    }
+
+    func delete(
+        urls: [URL],
+        precomputedBytes: [URL: Int64],
+        progress: @escaping CleanupProgressHandler
+    ) async -> CleanupResult {
+        progress(CleanupProgress(phase: .preparing, completedCount: urls.count, totalCount: urls.count))
+        let result = await delete(urls: urls, precomputedBytes: precomputedBytes)
+        progress(CleanupProgress(
+            phase: .movingToTrash,
+            completedCount: result.deletedCount + result.failedCount,
+            totalCount: urls.count
+        ))
+        return result
     }
 }
 
@@ -69,20 +126,33 @@ struct FileManagerCleanupService: CleanupService {
     }
 
     func delete(urls: [URL], precomputedBytes: [URL: Int64]) async -> CleanupResult {
+        await delete(urls: urls, precomputedBytes: precomputedBytes, progress: { _ in })
+    }
+
+    func delete(
+        urls: [URL],
+        precomputedBytes: [URL: Int64],
+        progress: @escaping CleanupProgressHandler
+    ) async -> CleanupResult {
         let deletionURLs = Self.normalizedDeletionURLs(urls)
         guard !deletionURLs.isEmpty else {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
+        progress(CleanupProgress(phase: .preparing, completedCount: 0, totalCount: deletionURLs.count))
         let normalizedBytes = Dictionary(
             precomputedBytes.map { ($0.key.standardizedFileURL, $0.value) },
             uniquingKeysWith: { first, _ in first }
         )
-        let prepared = await Self.prepare(deletionURLs, precomputedBytes: normalizedBytes)
+        let prepared = await Self.prepare(
+            deletionURLs,
+            precomputedBytes: normalizedBytes,
+            progress: progress
+        )
         let alreadyInTrash = prepared.items.filter(\.isAlreadyInTrash)
         let toRecycle = prepared.items.filter { !$0.isAlreadyInTrash }
-        let permanentResult = await Self.removeFromTrash(alreadyInTrash)
-        let recycleResult = await recycle(toRecycle)
+        let permanentResult = await Self.removeFromTrash(alreadyInTrash, progress: progress)
+        let recycleResult = await recycle(toRecycle, progress: progress)
 
         let deletedItems = permanentResult.deletedItems + recycleResult.deletedItems
         return CleanupResult(
@@ -93,23 +163,39 @@ struct FileManagerCleanupService: CleanupService {
         )
     }
 
-    private func recycle(_ items: [PreparedDeletion]) async -> CleanupResult {
-        guard !items.isEmpty, !Task.isCancelled else {
+    private func recycle(
+        _ items: [PreparedDeletion],
+        progress: @escaping CleanupProgressHandler
+    ) async -> CleanupResult {
+        guard !items.isEmpty else {
             return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
         }
 
         var deletedURLs: [URL] = []
         var deletedItems: [DeletedItem] = []
         var failedURLs: [(URL, Error)] = []
+        var completedCount = 0
 
-        // NSWorkspace performs one coordinated Finder-style operation for the supplied URLs.
-        // Passing thousands of paths in one request can leave its completion handler pending for
-        // minutes (or indefinitely when one path is problematic). Smaller batches keep the
-        // operation recoverable and let successful batches be reported independently.
+        // Keep requests small and independent so a problematic location does not block the full
+        // selection. The trash mover also bounds the number of simultaneous filesystem operations.
         for start in stride(from: 0, to: items.count, by: Self.trashBatchSize) {
-            guard !Task.isCancelled else { break }
+            guard !Task.isCancelled else {
+                failedURLs.append(contentsOf: items[start...].map { ($0.url, CancellationError()) })
+                break
+            }
             let end = min(start + Self.trashBatchSize, items.count)
-            let result = await recycleBatch(Array(items[start..<end]))
+            let batch = Array(items[start..<end])
+            let completedBeforeBatch = completedCount
+            let result = await recycleBatch(batch) { completedInBatch in
+                let overallCompleted = completedBeforeBatch + completedInBatch
+                guard Self.shouldReportProgress(overallCompleted, total: items.count) else { return }
+                progress(CleanupProgress(
+                    phase: .movingToTrash,
+                    completedCount: overallCompleted,
+                    totalCount: items.count
+                ))
+            }
+            completedCount += batch.count
             deletedURLs.append(contentsOf: result.deletedURLs)
             deletedItems.append(contentsOf: result.deletedItems)
             failedURLs.append(contentsOf: result.failedURLs)
@@ -123,20 +209,27 @@ struct FileManagerCleanupService: CleanupService {
         )
     }
 
-    private func recycleBatch(_ items: [PreparedDeletion]) async -> CleanupResult {
-        let moveResult = await trashMover.moveToTrash(items.map(\.url))
+    private func recycleBatch(
+        _ items: [PreparedDeletion],
+        progress: @escaping @Sendable (Int) -> Void
+    ) async -> CleanupResult {
+        let moveResult = await trashMover.moveToTrash(items.map(\.url), progress: progress)
         let destinations = Dictionary(
             uniqueKeysWithValues: moveResult.destinationBySource.map {
                 ($0.key.standardizedFileURL, $0.value)
             }
         )
+        let alreadyMissing = Set(moveResult.alreadyMissingSources.map(\.standardizedFileURL))
         let fallbackError = moveResult.error ?? CocoaError(.fileWriteUnknown)
         let deletedItems = items.compactMap { item -> DeletedItem? in
+            if alreadyMissing.contains(item.url) {
+                return DeletedItem(originalURL: item.url, bytesReclaimed: 0)
+            }
             guard destinations[item.url] != nil else { return nil }
             return DeletedItem(originalURL: item.url, bytesReclaimed: item.bytes)
         }
         let failed = items.compactMap { item -> (URL, Error)? in
-            guard destinations[item.url] == nil else { return nil }
+            guard destinations[item.url] == nil, !alreadyMissing.contains(item.url) else { return nil }
             let error: Error = Self.isAppContainer(item.url)
                 ? CleanupError.containerAuthorizationRequired(item.url, fallbackError)
                 : fallbackError
@@ -152,26 +245,44 @@ struct FileManagerCleanupService: CleanupService {
     }
 
     private static let trashBatchSize = 100
+    private static let maximumConcurrentPreparationTasks = 6
 
     private static func prepare(
         _ urls: [URL],
-        precomputedBytes: [URL: Int64]
+        precomputedBytes: [URL: Int64],
+        progress: @escaping CleanupProgressHandler
     ) async -> (items: [PreparedDeletion], failures: [(URL, Error)]) {
         await withTaskGroup(of: PreparedDeletionResult.self) { group in
-            for url in urls {
+            var pending = urls.makeIterator()
+            func addNextPreparation() {
+                guard let url = pending.next() else { return }
                 group.addTask(priority: .userInitiated) {
                     prepareSynchronously(url, precomputedBytes: precomputedBytes)
                 }
             }
 
+            for _ in 0..<min(maximumConcurrentPreparationTasks, urls.count) {
+                addNextPreparation()
+            }
+
             var items: [PreparedDeletion] = []
             var failures: [(URL, Error)] = []
-            for await result in group {
+            var completedCount = 0
+            while let result = await group.next() {
+                completedCount += 1
+                if shouldReportProgress(completedCount, total: urls.count) {
+                    progress(CleanupProgress(
+                        phase: .preparing,
+                        completedCount: completedCount,
+                        totalCount: urls.count
+                    ))
+                }
                 switch result {
                 case let .ready(item): items.append(item)
                 case let .failed(url, error): failures.append((url, error))
-                case .cancelled: break
+                case let .cancelled(url): failures.append((url, CancellationError()))
                 }
+                addNextPreparation()
             }
             return (items.sorted { $0.url.path < $1.url.path }, failures)
         }
@@ -182,22 +293,32 @@ struct FileManagerCleanupService: CleanupService {
         precomputedBytes: [URL: Int64]
     ) -> PreparedDeletionResult {
         let fileManager = FileManager.default
-        guard !Task.isCancelled else { return .cancelled }
+        guard !Task.isCancelled else { return .cancelled(url) }
 
         guard !SystemJunkProtectionPolicy.protects(url) else {
             return .failed(url, CleanupError.protectedSystemItem(url))
         }
 
-        guard fileManager.fileExists(atPath: url.path) else {
-            return .failed(url, CleanupError.fileNotFound(url))
+        let attributes: [FileAttributeKey: Any]?
+        do {
+            attributes = try FileItemExistence.attributes(at: url, fileManager: fileManager)
+        } catch {
+            return .failed(url, error)
+        }
+        guard attributes != nil else {
+            return .ready(PreparedDeletion(
+                url: url.standardizedFileURL,
+                bytes: precomputedBytes[url.standardizedFileURL] ?? 0,
+                isAlreadyInTrash: false
+            ))
         }
 
         let size = precomputedBytes[url.standardizedFileURL]
             ?? sizeOfItem(at: url, fileManager: fileManager)
         guard let size else {
-            return .cancelled
+            return .cancelled(url)
         }
-        guard !Task.isCancelled else { return .cancelled }
+        guard !Task.isCancelled else { return .cancelled(url) }
 
         return .ready(PreparedDeletion(
             url: url.standardizedFileURL,
@@ -206,37 +327,45 @@ struct FileManagerCleanupService: CleanupService {
         ))
     }
 
-    private static func removeFromTrash(_ items: [PreparedDeletion]) async -> CleanupResult {
-        await withTaskGroup(of: CleanupResult.self) { group in
-            for item in items {
+    private static func removeFromTrash(
+        _ items: [PreparedDeletion],
+        progress: @escaping CleanupProgressHandler
+    ) async -> CleanupResult {
+        guard !items.isEmpty else {
+            return CleanupResult(deletedURLs: [], deletedItems: [], failedURLs: [], totalBytesReclaimed: 0)
+        }
+
+        return await withTaskGroup(of: CleanupResult.self) { group in
+            var pending = items.makeIterator()
+            func addNextRemoval() {
+                guard let item = pending.next() else { return }
                 group.addTask(priority: .userInitiated) {
-                    do {
-                        try FileManager.default.removeItem(at: item.url)
-                        let deleted = DeletedItem(originalURL: item.url, bytesReclaimed: item.bytes)
-                        return CleanupResult(
-                            deletedURLs: [item.url],
-                            deletedItems: [deleted],
-                            failedURLs: [],
-                            totalBytesReclaimed: item.bytes
-                        )
-                    } catch {
-                        return CleanupResult(
-                            deletedURLs: [],
-                            deletedItems: [],
-                            failedURLs: [(item.url, error)],
-                            totalBytesReclaimed: 0
-                        )
-                    }
+                    Self.removeFromTrash(item)
                 }
+            }
+
+            let maxConcurrent = min(maximumConcurrentPreparationTasks, items.count)
+            for _ in 0..<maxConcurrent {
+                addNextRemoval()
             }
 
             var deletedURLs: [URL] = []
             var deletedItems: [DeletedItem] = []
             var failedURLs: [(URL, Error)] = []
-            for await result in group {
+            var completedCount = 0
+            while let result = await group.next() {
+                completedCount += 1
                 deletedURLs.append(contentsOf: result.deletedURLs)
                 deletedItems.append(contentsOf: result.deletedItems)
                 failedURLs.append(contentsOf: result.failedURLs)
+                if shouldReportProgress(completedCount, total: items.count) {
+                    progress(CleanupProgress(
+                        phase: .permanentlyDeleting,
+                        completedCount: completedCount,
+                        totalCount: items.count
+                    ))
+                }
+                addNextRemoval()
             }
             return CleanupResult(
                 deletedURLs: deletedURLs,
@@ -245,6 +374,45 @@ struct FileManagerCleanupService: CleanupService {
                 totalBytesReclaimed: deletedItems.reduce(0) { $0 + $1.bytesReclaimed }
             )
         }
+    }
+
+    private static func removeFromTrash(_ item: PreparedDeletion) -> CleanupResult {
+        guard !Task.isCancelled else {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [(item.url, CancellationError())],
+                totalBytesReclaimed: 0
+            )
+        }
+
+        do {
+            if try FileItemExistence.attributes(at: item.url) != nil {
+                do {
+                    try FileManager.default.removeItem(at: item.url)
+                } catch {
+                    guard FileItemExistence.isMissingItemError(error) else { throw error }
+                }
+            }
+            let deleted = DeletedItem(originalURL: item.url, bytesReclaimed: item.bytes)
+            return CleanupResult(
+                deletedURLs: [item.url],
+                deletedItems: [deleted],
+                failedURLs: [],
+                totalBytesReclaimed: item.bytes
+            )
+        } catch {
+            return CleanupResult(
+                deletedURLs: [],
+                deletedItems: [],
+                failedURLs: [(item.url, error)],
+                totalBytesReclaimed: 0
+            )
+        }
+    }
+
+    private static func shouldReportProgress(_ completedCount: Int, total: Int) -> Bool {
+        completedCount == total || completedCount.isMultiple(of: max(1, total / 100))
     }
 
     private static func isAppContainer(_ url: URL) -> Bool {
@@ -301,7 +469,7 @@ private struct PreparedDeletion: Sendable {
 private enum PreparedDeletionResult: Sendable {
     case ready(PreparedDeletion)
     case failed(URL, any Error)
-    case cancelled
+    case cancelled(URL)
 }
 
 private extension URL {

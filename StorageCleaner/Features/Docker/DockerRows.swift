@@ -89,7 +89,6 @@ struct DockerContainerRow: View {
 
             Button("Remove \(container.name)", systemImage: "trash", role: .destructive, action: onRemove)
                 .labelStyle(.iconOnly)
-                .accessibilityLabel("Remove container")
                 .disabled(container.isRunning)
                 .help(
                     container.isRunning

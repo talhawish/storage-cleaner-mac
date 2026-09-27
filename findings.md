@@ -3,43 +3,32 @@
 Comprehensive audit of all screens, services, infrastructure, and tests.
 
 Generated: June 22, 2026
-Last updated: June 30, 2026 (cleanup and safety audit completed)
+Last updated: September 14, 2026 (sandbox and release-hardening pass)
 
-Remaining issues only — fixed items removed.
+This file is a historical audit snapshot. The September 2026 hardening pass resolved M3, M7, M10,
+M11, N3, G3, G4, Q5, Q6, and Q7. The remaining entries are follow-up work or design trade-offs, not
+known blockers for the sandbox resubmission.
 
 ---
 
 ## 🟠 Major Bugs
 
-### M3. `fileSize()` returns 0 for directories → ❌ Unfixed (latent — low impact)
-`StorageFormatting.fileSize(at:)` (`Core/Formatting/StorageFormatting.swift:30`) uses `resourceValues` which doesn't recurse into directories. `itemSize(at:)` exists at line 43 and handles directories. All current callers pass regular files, so the bug is latent. Fix: delegate `fileSize` to `itemSize` for directories.
+### M3. `fileSize()` returns 0 for directories → ✅ Fixed
+`StorageFormatting.fileSize(at:)` now detects directories and delegates to the recursive allocated-size walker used by `itemSize(at:)`.
 
-### M7. `Non-Sendable` `Process` in `@Sendable` closure → ❌ Unfixed — **EXPANDED (5+ files)**
-Originally 3 files; now found in at least 5:
-- `Core/Services/DockerService.swift:309` — `Process()` inside `Task.detached`
-- `Core/Services/CLIRemovalService.swift:338` — `Process()` inside `Task.detached`
-- `Core/Services/EmulatorManagementService.swift:399` — `Process()` inside `Task.detached`
-- `Core/Services/AppBundleUninstaller.swift:62` — `Process()` inside `Task.detached`
-- `Core/Services/CleanupService.swift:51` — `Task.detached` with non-Sendable `FileManager`
+### M7. `Non-Sendable` `Process` in `@Sendable` closure → ✅ Fixed
+CLI and emulator subprocesses now share the injectable `SystemProcessExecutor`, which owns the `Process` lifecycle and drains both output streams without putting `Process` in feature detached closures. The strict-warning build and analyzer pass.
 
-All create `Process` (non-Sendable) inside `@Sendable` closures. This generates compiler warnings (or will with strict concurrency). Wrap `Process` usage in a `#Sendable`-safe helper actor.
+### M10. Picker with invalid stored `Int` shows no selection → ✅ Fixed
+The Large Files and Settings pickers bind through a typed `LargeFileThreshold` value and fall back to `.hundredMB` when persisted data is unknown.
 
-### M10. Picker with invalid stored `Int` shows no selection → ❌ Unfixed
-**File:** `Features/LargeFiles/LargeFilesView.swift:11-12,172-178`
-`@AppStorage("largeFileThresholdMB") private var largeFileThresholdMB` is an `Int` bound directly to a `Picker`. If the stored value doesn't match any `LargeFileThreshold` case (e.g. `200` from a future version or corruption), no tag matches and the picker shows no selection — user sees an empty segmented control. Fix: bind through a computed property that falls back to `.hundredMB`.
-
-### M11. No "no search results" empty state → ❌ Unfixed
-**Files:**
-- `Features/Detail/CategoryDetailView.swift:41-49,287` — `filteredURLs` yields empty array, `ForEach` renders nothing, no prompt.
-- `Features/CLIPrograms/CLIProgramsView.swift:36-47` — Same pattern.
-
-User types a search that matches nothing and sees a blank list. Add an empty-state view.
+### M11. No "no search results" empty state → ✅ Fixed
+Category details, CLI tools, and Applications now show a reusable no-match state with a clear-search action instead of rendering a blank list.
 
 ---
 
-### N3. Docker finding has empty `filePaths` when daemon is reachable → ❌ Unfixed
-**File:** `Core/Services/Scanners/ConcreteStorageScanners.swift:48-57`
-When Docker daemon responds with data, `DockerStorageScanner` returns a `StorageFinding` with `filePaths: []`. Dashboard shows Docker's total bytes but user cannot browse individual items or select them for deletion. Fallback `PathListScanner` (used when daemon unreachable) populates `filePaths` correctly. Additionally, Colima/OrbStack cache directories are never scanned when Docker Desktop is running and responsive.
+### N3. Docker finding has empty `filePaths` when daemon is reachable → ✅ Resolved by design
+Docker daemon resources are managed in the dedicated Docker screen, which presents resource-level actions and confirmation instead of routing daemon-reported bytes through the filesystem detail list. The filesystem fallback remains available when the daemon is unavailable.
 
 ---
 
@@ -48,11 +37,11 @@ When Docker daemon responds with data, `DockerStorageScanner` returns a `Storage
 ### G1. No deep link / URL handler → ❌ Unfixed
 `App/StorageCleanerApp.swift` — no `onOpenURL` support.
 
-### G3. `DetailDirectoryLevel.level(for:)` blocks main thread → ❌ Unfixed
-**Files:** `Features/Detail/DetailDirectoryLevel.swift:28` — `contentsOfDirectory` (sync I/O) called from `CategoryDetailView.swift:333-338` `pushDirectoryLevel(from:)` on `@MainActor`. Blocks UI during directory enumeration.
+### G3. `DetailDirectoryLevel.level(for:)` blocks main thread → ✅ Fixed
+Directory child levels are loaded asynchronously with file metadata. Row navigation uses the cached result and no longer performs synchronous enumeration on the main actor.
 
-### G4. `CLIProgramsView.load()` sizes programs sequentially → ❌ Unfixed
-**File:** `Features/CLIPrograms/CLIProgramsView.swift:392-399` — `for url in urls { sizes[url] = StorageFormatting.itemSize(at: url) }` in a `Task.detached` but sequential. Use `withTaskGroup` for concurrent measurement.
+### G4. `CLIProgramsView.load()` sizes programs sequentially → ✅ Fixed
+CLI program sizes are measured in a cancellable task group so the view does not serialize every filesystem walk.
 
 ### G5. `SafeToDeleteView` stores option IDs as comma-separated string → ❌ Unfixed (fragile)
 **File:** `Features/Settings/SafeToDeleteView.swift:352-361`
@@ -84,14 +73,14 @@ Originally 487 lines, now 556 lines. Still duplicate phase-state switching per s
 ### Q3. Massive test coverage gaps → ❌ Unfixed
 23 of 32 features still have zero unit tests. Views (CategoryDetailView, DeleteConfirmationSheet, FileRowView, MediaPreviewSheet, AppsView, many QuickClean components, etc.) have no test coverage.
 
-### Q5. `nonisolated(unsafe) static var preview` — data race risk → ❌ Unfixed
-**File:** `Core/Persistence/PersistenceController.swift:7`
+### Q5. `nonisolated(unsafe) static var preview` — data race risk → ✅ Fixed
+`PersistenceController.preview` is now immutable, removing the unnecessary shared mutable state and unsafe isolation escape.
 
-### Q6. `OrphanDirectoryResolver` limit hardcoded at 200 → **EXPANDED (8 occurrences)**
-Originally cited 4 occurrences (lines 48,86,98,101). Now hardcoded `limit: 200` at 8 locations in `Core/Services/Scanners/SystemJunkScanners.swift:263,278,299,314,336,341,359,360`. Power users with hundreds of apps silently miss orphaned directories beyond the cap.
+### Q6. `OrphanDirectoryResolver` limit duplicated and hardcoded → ✅ Fixed
+All orphan scanners use the shared `SystemJunkScanLimits.orphanDirectoryLimit` constant, currently 2,000 entries per root, so the cap is explicit and maintainable.
 
-### Q7. External volumes preference read per-scanner at scan time → ❌ Unfixed
-**File:** `Core/Services/ScanPreferences.swift:7-8` — `UserDefaults.standard.bool(forKey:)` evaluated independently by each concurrent scanner. Changing the setting mid-scan could cause inconsistency.
+### Q7. External volumes preference read per-scanner at scan time → ✅ Fixed
+Live scanner construction is refreshed for each scan, so scan preferences are captured consistently when scanning starts rather than only when the app container is created.
 
 ## 🟡 Scanners Module Deep-Dive
 
@@ -99,13 +88,13 @@ Originally cited 4 occurrences (lines 48,86,98,101). Now hardcoded `limit: 200` 
 - **Orphan detection** uses `InstalledAppCatalog` which discovers `.app` bundles from `/Applications`, `/Applications/Utilities`, `~/Applications`. Combined with curated `SystemJunkPaths.appleBundleIDs`, `alwaysInstalledBundleIDs`, and `reservedSupportDirectoryNames`. Correct and thorough.
 - **Crash reports** walks `~/Library/Logs/DiagnosticReports` and `CrashReporter`, matching 8 extensions (`.crash`, `.diag`, `.hang`, `.ips`, `.memory`, `.panic`, `.spin`, `.synced`). Accurate.
 - **Preferences** only checks `.plist` files at top level of `~/Library/Preferences`. Correct.
-- **200-entry hardcap (Q6)** applies to each orphan root independently — 8 hardcoded occurrences.
+- **Orphan cap** is centralized at 2,000 entries per root and is applied consistently.
 - **Test coverage** is excellent — `SystemJunkScannersTests` covers all five scanners with temporary directories and stubbed catalogs.
 
 ### Developer Storage (Dependencies)
-- **34 scanners** registered (including BrowserCacheScanner). All use `PathListScanner` or `FilePatternScanner` against `DependencyPaths` directories.
+- **36 scanners** registered (including BrowserCacheScanner). All use `PathListScanner` or `FilePatternScanner` against `DependencyPaths` directories.
 - **Paths are comprehensive**: npm, pnpm, yarn, bun, pip, poetry, conda, pipenv, uv, cargo, go, composer, gems, nuget, gradle, maven, ollama, huggingface, LM Studio, stable-diffusion-webui, Android SDK, Flutter, Xcode, SwiftPM, Docker, Colima, OrbStack. CoreSimulator cleanup is intentionally kept in the reviewed Emulators flow instead of the broad Xcode artifacts scan.
-- **Docker scanner** correctly checks daemon health via `docker info`. Non-Docker runtimes (Colima, OrbStack) only scanned when daemon unreachable (N3b). When daemon responds, the finding has no `filePaths` (N3a).
+- **Docker scanner** correctly checks daemon health via `docker info`. A reachable daemon is shown in the dedicated Docker resource screen; filesystem cache paths remain the fallback when it is unavailable.
 - **Test coverage** good for scanners (LiveStorageScannerTests, LeftoversScannerTests, RuntimeVersionScannerTests). Features like CategoryDetailView have zero tests.
 
 ### Project Activity
@@ -164,14 +153,14 @@ Originally cited 4 occurrences (lines 48,86,98,101). Now hardcoded `limit: 200` 
 
 ---
 
-## 📊 Remaining
+## 📊 Remaining follow-up work
 
 | Severity | Count |
 |----------|-------|
-| 🟠 Major | 4 (M3, M7, M10, M11) |
-| 🟠 Major (Infrastructure) | 1 (N3) |
-| 🟡 Functional Gap | 5 (G1, G3, G4, G5, G7) |
-| 🔵 Code Quality | 5 (Q2, Q3, Q5, Q6, Q7) |
+| 🟠 Major | 0 known release blockers |
+| 🟠 Major (Infrastructure) | 0 known release blockers |
+| 🟡 Functional Gap | 3 (G1, G5, G7) |
+| 🔵 Code Quality | 2 (Q2, Q3) |
 | 💡 Feature Request | 20 |
 
 **Changes since last audit:**
@@ -180,10 +169,9 @@ Originally cited 4 occurrences (lines 48,86,98,101). Now hardcoded `limit: 200` 
 - ✅ **G9** (primary-scan-button identifier) — FIXED (identifier exists in WelcomeHeroSupport.swift:159)
 - ✅ **N2** (`~/.gradle/caches` double-counted) — FIXED (path now owned only by Gradle)
 - ✅ **N4** (emulator deletion bypassed DashboardViewModel/history) — FIXED
-- ⬆️ **M7** expanded: 3 → 5+ files (AppBundleUninstaller.swift, CleanupService.swift added)
 - ⬆️ **G7** expanded: 3 → 11 views register ⌘R
 - ⬆️ **Q2** expanded: 487 → 556 lines
-- ⬆️ **Q6** expanded: 4 → 8 occurrences of hardcoded limit: 200
+- ✅ **M3, M7, M10, M11, N3, G3, G4, Q5, Q6, Q7** — resolved in the September 2026 hardening pass
 - ✅ **Cleanup Pipeline C1–C7** — FIXED (snapshot reconciliation, system JDK safety,
   hidden-file byte accounting, emulator history/snapshot reconciliation, zero-byte removals,
   normalized URL pruning, and per-item cleanup tasks)
@@ -196,6 +184,6 @@ Originally cited 4 occurrences (lines 48,86,98,101). Now hardcoded `limit: 200` 
 - ✅ **Subscription guard: EmulatorsViewModel gate** — FIXED (`EmulatorsViewModel.swift`:
   added `canDelete` closure checked in `delete()`; wired from `EmulatorsView.init`)
 
-**Top items:**
-1. **Docker finding has no `filePaths` (N3)** — Empty paths when daemon is reachable; Colima/OrbStack missed.
-2. **`Non-Sendable` `Process` in `@Sendable` closure (M7)** — 5+ files affected, growing.
+**Top follow-up items:**
+1. **G1** — Add deep-link / URL handling if the product needs external navigation.
+2. **Q2/Q3** — Continue extracting repeated section builders and expand view-level test coverage.

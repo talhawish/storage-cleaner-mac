@@ -224,7 +224,7 @@ struct DockerView: View {
             if snapshot.images.isEmpty {
                 emptyInlineState("No images", systemImage: "photo.stack")
             } else {
-                ForEach(snapshot.images) { image in
+                ForEach(snapshot.images, id: \.rowID) { image in
                     DockerImageRow(
                         image: image,
                         onRemove: { request(.removeImage(image)) }

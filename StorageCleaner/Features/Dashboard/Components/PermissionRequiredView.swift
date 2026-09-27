@@ -47,7 +47,8 @@ struct PermissionRequiredView: View {
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
 
-            Text("One permission lets Storage Cleaner see your Mac — and find what to clean.")
+            Text("Choose your Home folder to scan developer storage. "
+                + "macOS may ask separately before scanning protected folders like Desktop or Downloads.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -81,10 +82,8 @@ struct PermissionRequiredView: View {
 
 // MARK: - Covered scope row
 
-/// One row of small, breathing icon chips that names the locations the Home
-/// permission covers. Each chip pairs an SF Symbol with a short label
-/// (Desktop, Documents, …), so the visual inventory reads as a glance-able
-/// promise rather than a paragraph of explanation.
+/// Locations that a full scan can inspect, subject to macOS's per-folder
+/// privacy controls even after the user chooses their Home folder.
 private struct CoveredScopeRow: View {
     private struct Item: Identifiable {
         let id: String
@@ -109,7 +108,8 @@ private struct CoveredScopeRow: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Home access covers Desktop, Documents, Downloads, Movies, Pictures, and Library.")
+        .accessibilityLabel("Full scans can include Desktop, Documents, Downloads, Movies, Pictures, and Library. "
+            + "macOS may request separate permission for protected folders.")
     }
 }
 

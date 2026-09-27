@@ -114,6 +114,23 @@ final class ProjectCompressionServiceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: zipURL.path), "existing zip untouched")
     }
 
+    func testCompressStopsWhenScannedDependenciesAreNoLongerVisible() async throws {
+        let project = try makeNodeProject(named: "stale-dependencies", sourceBytes: 2_000, dependencyBytes: 4_000)
+        try FileManager.default.removeItem(at: project.path.appending(path: "node_modules"))
+        let command = ProjectCompressionService.CompressionCommand(
+            compress: { _, archive in try Data("archive".utf8).write(to: archive) },
+            verify: { _ in }
+        )
+        let service = ProjectCompressionService(removal: .delete, command: command)
+
+        let outcome = await service.compress(project)
+
+        XCTAssertFalse(outcome.succeeded)
+        XCTAssertTrue(outcome.failureReason?.contains("no longer visible") == true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: project.path.appending(path: "index.js").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outcome.zipURL.path))
+    }
+
     func testCompressFailsWhenCompressionProcessFails() async throws {
         let project = try makeNodeProject(
             named: "broken-zip",

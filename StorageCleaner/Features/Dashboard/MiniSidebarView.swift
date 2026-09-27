@@ -30,6 +30,10 @@ struct MiniSidebarView: View {
                     }
 
                     MiniSidebarGroup {
+                        MiniSidebarButton(section: .aiModels, selection: $selection)
+                    }
+
+                    MiniSidebarGroup {
                         MiniSidebarButton(section: .largeFiles, selection: $selection)
                         MiniSidebarButton(section: .leftovers, selection: $selection)
                         MiniSidebarButton(section: .screenshotsAndRecordings, selection: $selection)
@@ -37,6 +41,7 @@ struct MiniSidebarView: View {
                     }
 
                     MiniSidebarGroup {
+                        MiniSidebarButton(section: .largeFolders, selection: $selection)
                         MiniSidebarButton(section: .systemJunk, selection: $selection)
                     }
 

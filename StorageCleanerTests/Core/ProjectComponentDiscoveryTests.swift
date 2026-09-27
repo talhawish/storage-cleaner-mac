@@ -56,6 +56,28 @@ final class ProjectComponentDiscoveryTests: XCTestCase {
         XCTAssertEqual(components.first?.frameworks, [.nextJS, .react])
     }
 
+    func testDiscoversNestedProjectDeeperThanPreviousLimit() throws {
+        let root = try makeDirectory("workspace")
+        try writePackage([:], to: root)
+        let web = try makeDirectory("packages/one/two/three/four/five/web", under: root)
+        try writePackage(["next": "15"], to: web)
+
+        let components = ProjectComponentDiscovery.discover(in: root, rootTechnology: .nodeJS)
+
+        XCTAssertEqual(components.map { $0.path.resolvingSymlinksInPath() }, [web.resolvingSymlinksInPath()])
+    }
+
+    func testDiscoversNestedProjectInHiddenSourceDirectory() throws {
+        let root = try makeDirectory("workspace")
+        try writePackage([:], to: root)
+        let web = try makeDirectory(".private/apps/web", under: root)
+        try writePackage(["react": "19"], to: web)
+
+        let components = ProjectComponentDiscovery.discover(in: root, rootTechnology: .nodeJS)
+
+        XCTAssertEqual(components.map { $0.path.resolvingSymlinksInPath() }, [web.resolvingSymlinksInPath()])
+    }
+
     func testFlutterPlatformFoldersAreNotReportedAsIndependentProjects() throws {
         let root = try makeDirectory("flutter-app")
         try "name: flutter_app".write(

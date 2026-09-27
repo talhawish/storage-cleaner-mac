@@ -22,6 +22,10 @@ struct SidebarView: View {
                 SidebarRow(section: .cliPrograms)
             }
 
+            Section("AI & ML") {
+                SidebarRow(section: .aiModels)
+            }
+
             Section("Media") {
                 SidebarRow(section: .largeFiles)
                 SidebarRow(section: .leftovers)
@@ -30,6 +34,7 @@ struct SidebarView: View {
             }
 
             Section("System") {
+                SidebarRow(section: .largeFolders)
                 SidebarRow(section: .systemJunk)
             }
 
@@ -69,6 +74,7 @@ struct SidebarView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
+            .background(AppTheme.appBackground)
         }
     }
 }

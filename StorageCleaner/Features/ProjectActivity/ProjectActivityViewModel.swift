@@ -136,7 +136,22 @@ final class ProjectActivityViewModel {
 
     @discardableResult
     func hibernate(_ projects: [ProjectInfo]) async -> HibernationSummary {
-        let summary = await hibernationService.hibernate(projects)
+        let access = permissionHandler?.beginHomeFolderAccess()
+        defer { access?.stop() }
+        let summary: HibernationSummary
+        if permissionHandler != nil && access == nil {
+            summary = HibernationSummary(outcomes: projects.map { project in
+                HibernationOutcome(
+                    project: project,
+                    reclaimedBytes: 0,
+                    removedDirectoryCount: 0,
+                    remainingDependencyBytes: project.dependencySize,
+                    failureReason: Self.homeAccessFailureReason
+                )
+            })
+        } else {
+            summary = await hibernationService.hibernate(projects)
+        }
         updateDependencies(from: summary.outcomes)
         lastHibernation = summary
         return summary
@@ -192,7 +207,23 @@ final class ProjectActivityViewModel {
     /// can retry.
     @discardableResult
     func compress(_ project: ProjectInfo) async -> CompressionOutcome {
-        let outcome = await compressionService.compress(project)
+        let access = permissionHandler?.beginHomeFolderAccess()
+        defer { access?.stop() }
+        let outcome: CompressionOutcome
+        if permissionHandler != nil && access == nil {
+            outcome = CompressionOutcome(
+                project: project,
+                zipURL: ProjectCompressionService.zipURL(for: project),
+                originalSize: project.totalSize,
+                reclaimedDependencyBytes: 0,
+                removedDirectoryCount: 0,
+                archiveSize: 0,
+                totalReclaimedBytes: 0,
+                failureReason: Self.homeAccessFailureReason
+            )
+        } else {
+            outcome = await compressionService.compress(project)
+        }
         lastCompression = outcome
         if outcome.succeeded {
             removeProjectFromSnapshot(id: project.id)
@@ -202,6 +233,9 @@ final class ProjectActivityViewModel {
         }
         return outcome
     }
+
+    private static let homeAccessFailureReason = "Home Folder access is no longer available. "
+        + "Grant access again, then retry."
 
     private func updateDependencySize(forProjectID id: UUID, remainingBytes: Int64) {
         updateDependencySizes([id: remainingBytes])

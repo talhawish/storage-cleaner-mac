@@ -10,6 +10,14 @@ struct CleanupFailurePrompt: Identifiable {
         case trash
         case cliRemoval
         case runtimeRemoval
+
+        var feedbackOperation: CleanupFeedback.Operation {
+            switch self {
+            case .trash: .trash
+            case .cliRemoval: .cliPrograms
+            case .runtimeRemoval: .runtimeVersions
+            }
+        }
     }
 
     let id = UUID()
@@ -39,7 +47,11 @@ extension DashboardViewModel {
     /// partial or total failure raises `cleanupFailure` so `AppShellView`
     /// presents the app-wide failure sheet. Pass `false` only when the caller
     /// surfaces the returned `CleanupResult` itself (System Junk, Quick Clean).
-    func deleteFiles(_ urls: [URL], surfacingFailure: Bool = true) async -> CleanupResult {
+    func deleteFiles(
+        _ urls: [URL],
+        surfacingFailure: Bool = true,
+        progress: CleanupProgressHandler? = nil
+    ) async -> CleanupResult {
         guard gateCleanup() else {
             return CleanupResult(
                 deletedURLs: [],
@@ -50,10 +62,17 @@ extension DashboardViewModel {
         }
         let access = permissionHandler.beginHomeFolderAccess()
         defer { access?.stop() }
-        let result = await cleanupService.delete(
-            urls: urls,
-            precomputedBytes: precomputedCleanupBytes(for: urls)
-        )
+        let precomputedBytes = precomputedCleanupBytes(for: urls)
+        let result: CleanupResult
+        if let progress {
+            result = await cleanupService.delete(
+                urls: urls,
+                precomputedBytes: precomputedBytes,
+                progress: progress
+            )
+        } else {
+            result = await cleanupService.delete(urls: urls, precomputedBytes: precomputedBytes)
+        }
         await reconcileCleanup(result, failureRoute: surfacingFailure ? .trash : nil)
         return result
     }
@@ -70,6 +89,8 @@ extension DashboardViewModel {
                 totalBytesReclaimed: 0
             )
         }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
         let result = await cliRemovalService.remove(urls)
         await reconcileCleanup(result, auditKind: .cliApps, failureRoute: .cliRemoval)
         return result
@@ -87,6 +108,8 @@ extension DashboardViewModel {
                 totalBytesReclaimed: 0
             )
         }
+        let access = permissionHandler.beginHomeFolderAccess()
+        defer { access?.stop() }
         let result = await cliRemovalService.remove(urls)
         await reconcileCleanup(result, auditKind: .runtimeVersions, failureRoute: .runtimeRemoval)
         return result
@@ -152,7 +175,7 @@ extension DashboardViewModel {
         // all-failed cleanup is exactly the case the user must hear about.
         if let failureRoute, result.failedCount > 0 {
             cleanupFailure = CleanupFailurePrompt(
-                feedback: .failed(result: result),
+                feedback: .failed(result: result, operation: failureRoute.feedbackOperation),
                 failedURLs: result.failedURLs.map(\.0),
                 route: failureRoute
             )

@@ -1,28 +1,56 @@
 import SwiftUI
 
 struct DeleteConfirmationSheet: View {
+    enum Mode {
+        case files
+        case cliPrograms
+        case runtimeVersions
+    }
+
     private static var trashPrefix: String { UserHomeDirectory.path + "/.Trash/" }
 
     let selectedURLs: [URL]
     let totalBytes: Int64
+    var mode: Mode = .files
     let onDelete: () -> Void
     let onCancel: () -> Void
 
     @State private var confirmed = false
 
     private var allInTrash: Bool {
-        selectedURLs.allSatisfy { $0.path.hasPrefix(Self.trashPrefix) }
+        mode == .files && !selectedURLs.isEmpty
+            && selectedURLs.allSatisfy { $0.path.hasPrefix(Self.trashPrefix) }
+    }
+
+    private var hasTrashItems: Bool {
+        mode == .files && selectedURLs.contains { $0.path.hasPrefix(Self.trashPrefix) }
+    }
+
+    private var hasUnsupportedCLIItems: Bool {
+        mode == .cliPrograms && selectedURLs.contains { !CLIRemovalPreview.forURL($0).canRemove }
     }
 
     private var titleText: String {
+        if mode == .cliPrograms {
+            return "Remove \(selectedURLs.count) tool\(selectedURLs.count == 1 ? "" : "s")"
+        }
+        if mode == .runtimeVersions {
+            return "Remove \(selectedURLs.count) runtime version\(selectedURLs.count == 1 ? "" : "s")"
+        }
         if allInTrash {
             return "Delete \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") permanently"
+        }
+        if hasTrashItems {
+            return "Clean up \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s")"
         }
         return "Move \(selectedURLs.count) item\(selectedURLs.count == 1 ? "" : "s") to Trash"
     }
 
     private var confirmLabel: String {
-        allInTrash ? "Delete Permanently" : "Move to Trash"
+        if mode == .cliPrograms { return "Remove Tools" }
+        if mode == .runtimeVersions { return "Remove Versions" }
+        if hasTrashItems && !allInTrash { return "Delete Trash Items & Move Others" }
+        return allInTrash ? "Delete Permanently" : "Move to Trash"
     }
 
     private var confirmIcon: String {
@@ -33,9 +61,7 @@ struct DeleteConfirmationSheet: View {
         ConfirmationModal(
             variant: .destructive,
             title: titleText,
-            subtitle: allInTrash
-                ? "These items are already in the Trash and will be permanently removed."
-                : "Review the selected files before cleanup",
+            subtitle: subtitleText,
             trailing: .sizeBadge(value: StorageFormatting.bytes(totalBytes), tint: AppTheme.rose),
             showsCloseButton: false,
             confirm: AppModalActionBar.Action(
@@ -43,7 +69,7 @@ struct DeleteConfirmationSheet: View {
                 systemImage: confirmIcon,
                 isProminent: true,
                 isDestructive: true,
-                isDisabled: confirmed,
+                isDisabled: confirmed || hasUnsupportedCLIItems,
                 isDefault: true,
                 action: {
                     confirmed = true
@@ -53,6 +79,16 @@ struct DeleteConfirmationSheet: View {
             cancel: AppModalActionBar.CancelAction(title: "Cancel", action: onCancel),
             isProcessing: confirmed
         ) {
+            if mode == .cliPrograms {
+                AppModalBanner(
+                    systemImage: "info.circle.fill",
+                    tint: AppTheme.cyan,
+                    text: hasUnsupportedCLIItems
+                        ? "Some selected tools require manual removal. Deselect them to continue."
+                        : "Review each action below. A folder moved to Trash includes all its contents. "
+                            + "Settings and saved data stored elsewhere may remain."
+                )
+            }
             AppModalSection(
                 title: "Selected items",
                 subtitle: "Up to 50 are shown",
@@ -81,6 +117,21 @@ struct DeleteConfirmationSheet: View {
         }
     }
 
+    private var subtitleText: String {
+        if mode == .cliPrograms {
+            return "Review the removal method and exact path for every selected tool."
+        }
+        if mode == .runtimeVersions {
+            return "Homebrew versions are uninstalled; other runtime versions move to the Trash."
+        }
+        if hasTrashItems && !allInTrash {
+            return "Items already in the Trash will be permanently deleted. Other items will move to the Trash."
+        }
+        return allInTrash
+            ? "These items are already in the Trash and will be permanently removed."
+            : "Review the selected files before cleanup"
+    }
+
     private func fileRow(_ url: URL) -> some View {
         HStack(spacing: 10) {
             Image(systemName: iconForURL(url))
@@ -99,6 +150,16 @@ struct DeleteConfirmationSheet: View {
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .help(url.standardizedFileURL.path)
+                if mode == .cliPrograms {
+                    let preview = CLIRemovalPreview.forURL(url)
+                    Text(preview.method)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(preview.canRemove ? AppTheme.cyan : AppTheme.orange)
+                    Text(preview.detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer()

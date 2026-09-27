@@ -63,6 +63,54 @@ final class DockerServiceTests: XCTestCase {
         XCTAssertFalse(snapshot.daemonAvailable)
     }
 
+    func testMultipleTagsForOneImageHaveDistinctRowsAndTagSpecificRemovalReferences() async {
+        let docker = URL(fileURLWithPath: "/usr/local/bin/docker")
+        let service = DockerService(
+            locateDocker: { docker },
+            isDockerDesktopInstalled: { true },
+            runCommand: { _, arguments in
+                switch arguments.joined(separator: " ") {
+                case "version --format {{.Server.Version}}":
+                    .init(exitCode: 0, output: "26.1.0")
+                case "info --format {{json .}}":
+                    .init(exitCode: 0, output: "{}")
+                case "image ls --all --format {{json .}}":
+                    .init(
+                        exitCode: 0,
+                        output: [
+                            #"{"ID":"shared-image-id","Repository":"sample","Tag":"latest","Size":"100MB"}"#,
+                            #"{"ID":"shared-image-id","Repository":"sample","Tag":"stable","Size":"100MB"}"#
+                        ].joined(separator: "\n")
+                    )
+                default:
+                    .init(exitCode: 0, output: "")
+                }
+            }
+        )
+
+        let snapshot = await service.loadSnapshot()
+
+        XCTAssertEqual(snapshot.images.count, 2)
+        XCTAssertEqual(Set(snapshot.images.map(\.rowID)).count, 2)
+        XCTAssertEqual(Set(snapshot.images.map(\.removalReference)), ["sample:latest", "sample:stable"])
+        XCTAssertNotEqual(
+            PendingDockerAction.removeImage(snapshot.images[0]).id,
+            PendingDockerAction.removeImage(snapshot.images[1]).id
+        )
+
+        let untaggedImage = DockerImage(
+            id: "untagged-image-id",
+            repository: "<none>",
+            tag: "<none>",
+            bytes: 100,
+            createdSince: "",
+            sharedBytes: nil,
+            uniqueBytes: nil,
+            containerCount: nil
+        )
+        XCTAssertEqual(untaggedImage.removalReference, "untagged-image-id")
+    }
+
     func testParsesCanonicalDiskUsageWithoutDoubleCountingSharedLayers() throws {
         let usage = try XCTUnwrap(DockerService.parseDiskUsage(Self.diskUsageSummary))
 

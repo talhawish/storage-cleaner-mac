@@ -45,7 +45,7 @@ const sections = [
   {
     title: '5. Safety model',
     body: [
-      'The App performs read-only inventory scans by default. Cleanup operations move files to the macOS Trash. The App does not perform permanent deletion of your files. The App may, with your explicit confirmation, invoke platform tools such as xcrun simctl runtime delete for Apple simulator runtimes; these tools may delete those runtimes from your system. We surface the exact action and target before any confirmation.',
+      'The App performs read-only inventory scans by default. Cleanup operations move files to the macOS Trash whenever the platform supports it. An explicit cleanup of items already in the Trash permanently removes those items, and platform tools such as xcrun simctl runtime delete may permanently remove re-downloadable simulator resources. We surface the exact action and target before any confirmation.',
       'You are responsible for reviewing the preview, the file paths, and the recovery estimate before confirming any cleanup.'
     ]
   },
@@ -137,7 +137,7 @@ const sections = [
             </li>
             <li>· You can use the App on any Mac you own or control.</li>
             <li>· The App is free to scan; Pro is an optional subscription billed by Apple.</li>
-            <li>· The App never permanently deletes files. Cleanup always goes to Trash first.</li>
+            <li>· Cleanup normally goes to Trash first. Explicitly cleaning items already in Trash or platform-managed resources can be permanent.</li>
             <li>· The App is provided as-is. We do our best, but we cannot guarantee zero bugs.</li>
             <li>· If something goes wrong, our liability is capped at what you paid us.</li>
           </ul>

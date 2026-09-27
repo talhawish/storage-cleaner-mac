@@ -9,9 +9,9 @@ struct DetailDirectoryLevel: Identifiable, Equatable, Sendable {
 }
 
 enum DetailDirectoryChildren {
-    static func level(for url: URL) -> DetailDirectoryLevel? {
+    static func level(for url: URL, includingHiddenFiles: Bool = false) -> DetailDirectoryLevel? {
         let childRoot = childrenRoot(for: url)
-        let children = childURLs(in: childRoot)
+        let children = childURLs(in: childRoot, includingHiddenFiles: includingHiddenFiles)
         guard !children.isEmpty else { return nil }
         return DetailDirectoryLevel(root: url, title: url.lastPathComponent, urls: children)
     }
@@ -24,11 +24,12 @@ enum DetailDirectoryChildren {
         return url
     }
 
-    private static func childURLs(in url: URL) -> [URL] {
+    private static func childURLs(in url: URL, includingHiddenFiles: Bool) -> [URL] {
+        let options: FileManager.DirectoryEnumerationOptions = includingHiddenFiles ? [] : [.skipsHiddenFiles]
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: url,
             includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: options
         ) else {
             return []
         }

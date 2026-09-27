@@ -47,6 +47,8 @@ actor AppInventoryService {
     private let uninstallAppBundle: @Sendable (URL) async throws -> Void
     private let fileExists: @Sendable (String) -> Bool
     private let directorySizer: @Sendable (URL) async -> Int64
+    private let permissionHandler: (any StoragePermissionHandling)?
+    private let searchRoots: [URL]
     private let verificationAttempts: Int
     private let verificationDelay: Duration
 
@@ -57,60 +59,92 @@ actor AppInventoryService {
         },
         directorySizer: @escaping @Sendable (URL) async -> Int64 = AppInventoryService.liveSize,
         verificationAttempts: Int = 8,
-        verificationDelay: Duration = .milliseconds(150)
+        verificationDelay: Duration = .milliseconds(150),
+        permissionHandler: (any StoragePermissionHandling)? = nil,
+        searchRoots: [URL] = AppInventoryService.defaultSearchRoots
     ) {
         self.uninstallAppBundle = uninstallAppBundle
         self.fileExists = fileExists
         self.directorySizer = directorySizer
         self.verificationAttempts = verificationAttempts
         self.verificationDelay = verificationDelay
+        self.permissionHandler = permissionHandler
+        self.searchRoots = searchRoots
     }
 
     func scanInstalledApps() async -> [AppItem] {
-        let fileManager = FileManager.default
+        let applicationsRoot = URL(fileURLWithPath: "/Applications", isDirectory: true)
         var items: [AppItem] = []
 
-        let searchPaths = [
-            "/Applications",
-            UserHomeDirectory.url.appendingPathComponent("Applications").path
-        ]
+        if let permissionHandler {
+            let systemApps: [AppItem]
+            if let access = permissionHandler.beginApplicationsFolderAccess(for: applicationsRoot) {
+                defer { access.stop() }
+                systemApps = await scanApps(in: applicationsRoot)
+            } else {
+                systemApps = []
+            }
+            items.append(contentsOf: systemApps)
 
-        for searchPath in searchPaths {
-            guard let contents = try? fileManager.contentsOfDirectory(
-                at: URL(fileURLWithPath: searchPath),
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else { continue }
-
-            for item in contents where item.pathExtension == "app" {
-                guard !Task.isCancelled else { return items }
-
-                let appPath = item.path
-                let plistPath = (appPath as NSString).appendingPathComponent("Contents/Info.plist")
-                let name = (appPath as NSString).lastPathComponent
-                    .replacingOccurrences(of: ".app", with: "")
-
-                var bundleID = name
-                if let plist = NSDictionary(contentsOfFile: plistPath),
-                   let bid = plist["CFBundleIdentifier"] as? String {
-                    bundleID = bid
-                }
-
-                let size = await directorySizer(URL(fileURLWithPath: appPath))
-                let isSystem = appPath.hasPrefix("/System")
-
-                items.append(AppItem(
-                    name: name,
-                    bundleIdentifier: bundleID,
-                    url: URL(fileURLWithPath: appPath),
-                    sizeBytes: size,
-                    isSystemApp: isSystem
-                ))
+            let userAppsRoot = UserHomeDirectory.url.appending(path: "Applications", directoryHint: .isDirectory)
+            let userApps: [AppItem]
+            if let access = permissionHandler.beginHomeFolderAccess() {
+                defer { access.stop() }
+                userApps = await scanApps(in: userAppsRoot)
+            } else {
+                userApps = []
+            }
+            items.append(contentsOf: userApps)
+        } else {
+            for root in searchRoots {
+                items.append(contentsOf: await scanApps(in: root))
             }
         }
 
+        return items.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    private func scanApps(in root: URL) async -> [AppItem] {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var items: [AppItem] = []
+        for item in contents where item.pathExtension.lowercased() == "app" {
+            guard !Task.isCancelled else { return items }
+
+            let appPath = item.path
+            let plistPath = item.appending(path: "Contents/Info.plist").path
+            let name = item.deletingPathExtension().lastPathComponent
+
+            var bundleID = name
+            if let plist = NSDictionary(contentsOfFile: plistPath),
+               let bid = plist["CFBundleIdentifier"] as? String {
+                bundleID = bid
+            }
+
+            let size = await directorySizer(item)
+            let isSystem = appPath.hasPrefix("/System/")
+
+            items.append(AppItem(
+                name: name,
+                bundleIdentifier: bundleID,
+                url: item,
+                sizeBytes: size,
+                isSystemApp: isSystem
+            ))
+        }
         return items
     }
+
+    private static let defaultSearchRoots: [URL] = [
+        URL(fileURLWithPath: "/Applications", isDirectory: true),
+        UserHomeDirectory.url.appending(path: "Applications", directoryHint: .isDirectory)
+    ]
 
     func uninstallApp(_ item: AppItem) async throws {
         let appURL = item.url.standardizedFileURL

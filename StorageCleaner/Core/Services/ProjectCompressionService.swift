@@ -68,16 +68,19 @@ actor ProjectCompressionService: ProjectCompressionServicing {
     private let fileManager: FileManager
     private let removal: Removal
     private let command: CompressionCommand
+    private let trashMover: any TrashMoving
 
     /// Production initializer. Uses `/usr/bin/ditto` for compression and
     /// `/usr/bin/unzip -t` for verification.
     init(
         fileManager: FileManager = .default,
         removal: Removal = .trash,
-        executor: DittoProcessExecutor = DittoProcessExecutor()
+        executor: DittoProcessExecutor = DittoProcessExecutor(),
+        trashMover: any TrashMoving = WorkspaceTrashMover()
     ) {
         self.fileManager = fileManager
         self.removal = removal
+        self.trashMover = trashMover
         self.command = CompressionCommand(
             compress: { try await executor.compressDirectory($0, to: $1) },
             verify: { try await executor.verifyArchive($0) }
@@ -89,11 +92,13 @@ actor ProjectCompressionService: ProjectCompressionServicing {
     init(
         fileManager: FileManager = .default,
         removal: Removal = .delete,
-        command: CompressionCommand
+        command: CompressionCommand,
+        trashMover: any TrashMoving = WorkspaceTrashMover()
     ) {
         self.fileManager = fileManager
         self.removal = removal
         self.command = command
+        self.trashMover = trashMover
     }
 
     /// The mutable inputs every step of the pipeline shares. Bundled so each
@@ -126,7 +131,13 @@ actor ProjectCompressionService: ProjectCompressionServicing {
             for: project,
             fileManager: fileManager
         )
-        context.reclamation = reclaim(dependencyDirectories: dependencyDirectories, in: project)
+        guard !dependencyDirectories.isEmpty || project.dependencySize == 0 else {
+            return makeFailure(
+                context: context,
+                reason: ProjectDependencyInventory.unavailableDependenciesMessage(for: project)
+            )
+        }
+        context.reclamation = await reclaim(dependencyDirectories: dependencyDirectories, in: project)
         if let reason = context.reclamation?.failureReason {
             return makeFailure(context: context, reason: reason)
         }
@@ -161,7 +172,7 @@ actor ProjectCompressionService: ProjectCompressionServicing {
         context.archiveSize = archiveSize
 
         if let outcome = await verifyArchive(context: context) { return outcome }
-        if let outcome = removeOriginalFolder(context: context) { return outcome }
+        if let outcome = await removeOriginalFolder(context: context) { return outcome }
         return makeSuccess(context: context)
     }
 
@@ -183,10 +194,10 @@ actor ProjectCompressionService: ProjectCompressionServicing {
 
     /// Removes the original project folder. Returns `nil` on success so the
     /// pipeline can keep going.
-    private func removeOriginalFolder(context: PipelineContext) -> CompressionOutcome? {
+    private func removeOriginalFolder(context: PipelineContext) async -> CompressionOutcome? {
         let context = context
         do {
-            try remove(context.project.path)
+            try await remove(context.project.path)
             return nil
         } catch {
             return makeFailure(
@@ -249,7 +260,7 @@ actor ProjectCompressionService: ProjectCompressionServicing {
     private func reclaim(
         dependencyDirectories: [URL],
         in project: ProjectInfo
-    ) -> ReclamationResult {
+    ) async -> ReclamationResult {
         var result = ReclamationResult()
         var failures: [String] = []
         for directory in dependencyDirectories {
@@ -263,7 +274,7 @@ actor ProjectCompressionService: ProjectCompressionServicing {
                 return result
             }
             do {
-                try remove(directory)
+                try await remove(directory)
                 result.bytesReclaimed += size
                 result.removedCount += 1
             } catch {
@@ -295,11 +306,10 @@ actor ProjectCompressionService: ProjectCompressionServicing {
         try? fileManager.removeItem(at: url)
     }
 
-    private func remove(_ url: URL) throws {
+    private func remove(_ url: URL) async throws {
         switch removal {
         case .trash:
-            var resultingURL: NSURL?
-            try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
+            try await trashMover.moveOneToTrash(url)
         case .delete:
             try fileManager.removeItem(at: url)
         }

@@ -29,7 +29,8 @@ enum InstalledBinaryCatalog {
                 guard let resolved = resolvedTarget(of: entry, fileManager: fileManager) else { continue }
                 let path = resolved.path
                 // Counted by the Homebrew / Node-global catalogs already.
-                if path.contains("/Cellar/") || path.contains("/node_modules/") { continue }
+                if path.contains("/Cellar/") || path.contains("/Caskroom/")
+                    || path.contains("/node_modules/") { continue }
                 guard seen.insert(resolved).inserted else { continue }
 
                 programs.append(

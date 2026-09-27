@@ -21,6 +21,8 @@ struct ProjectDetailView: View {
     @State private var hibernationError: String?
     @State private var compressionOutcome: CompressionOutcome?
     @State private var showCompressionSuccess = false
+    @State private var closeAfterHibernation = false
+    @State private var showSuccessAfterCompression = false
 
     var body: some View {
         AppModal(
@@ -100,53 +102,73 @@ struct ProjectDetailView: View {
                 )
             }
         }
-        .sheet(item: hibernateConfirmationBinding) { _ in
-            ConfirmationModal(
-                variant: .warning,
-                title: "Hibernate this project?",
-                message: hibernateMessage,
-                iconSystemName: "archivebox.fill",
-                iconTint: AppTheme.orange,
-                showsCloseButton: true,
-                confirm: AppModalActionBar.Action(
-                    title: "Move Dependencies to Trash",
-                    systemImage: "archivebox.fill",
-                    isProminent: true,
-                    isDefault: true,
-                    action: hibernateProject
-                ),
-                cancel: AppModalActionBar.CancelAction(title: "Cancel")
-            )
-        }
-        .sheet(item: compressConfirmationBinding) { _ in
-            ConfirmationModal(
-                variant: .destructive,
-                title: "Hibernate & Compress this project?",
-                message: compressMessage,
-                iconSystemName: "doc.zipper",
-                iconTint: project.activityStatus == .abandoned ? .red : AppTheme.accent,
-                showsCloseButton: true,
-                confirm: AppModalActionBar.Action(
-                    title: "Hibernate & Compress",
-                    systemImage: "doc.zipper",
-                    isProminent: true,
-                    isDestructive: true,
-                    isDefault: true,
-                    action: compressProject
-                ),
-                cancel: AppModalActionBar.CancelAction(title: "Cancel")
-            )
-        }
-        .alert("Couldn't hibernate", isPresented: hibernationErrorBinding) {
-            Button("OK", role: .cancel) { hibernationError = nil }
-        } message: {
-            Text(hibernationError ?? "")
-        }
-        .alert("Couldn't compress", isPresented: compressionErrorBinding) {
-            Button("OK", role: .cancel) { compressionOutcome = nil }
-        } message: {
-            Text(compressionOutcome?.failureReason ?? "")
-        }
+        .sheet(
+            item: hibernateConfirmationBinding,
+            onDismiss: {
+                if closeAfterHibernation {
+                    closeAfterHibernation = false
+                    dismiss()
+                }
+            },
+            content: { _ in
+                ConfirmationModal(
+                    variant: .warning,
+                    title: "Hibernate this project?",
+                    message: hibernateMessage,
+                    iconSystemName: "archivebox.fill",
+                    iconTint: AppTheme.orange,
+                    showsCloseButton: !isHibernating,
+                    confirm: AppModalActionBar.Action(
+                        title: "Move Dependencies to Trash",
+                        systemImage: "archivebox.fill",
+                        isProminent: true,
+                        isDefault: true,
+                        action: hibernateProject
+                    ),
+                    cancel: AppModalActionBar.CancelAction(title: "Cancel"),
+                    isProcessing: isHibernating
+                ) {
+                    if let hibernationError {
+                        AppModalBanner(systemImage: "xmark.octagon.fill", tint: .red, text: hibernationError)
+                    }
+                }
+                .interactiveDismissDisabled(isHibernating)
+            }
+        )
+        .sheet(
+            item: compressConfirmationBinding,
+            onDismiss: {
+                if showSuccessAfterCompression {
+                    showSuccessAfterCompression = false
+                    showCompressionSuccess = true
+                }
+            },
+            content: { _ in
+                ConfirmationModal(
+                    variant: .destructive,
+                    title: "Hibernate & Compress this project?",
+                    message: compressMessage,
+                    iconSystemName: "doc.zipper",
+                    iconTint: project.activityStatus == .abandoned ? .red : AppTheme.accent,
+                    showsCloseButton: !isCompressing,
+                    confirm: AppModalActionBar.Action(
+                        title: "Hibernate & Compress",
+                        systemImage: "doc.zipper",
+                        isProminent: true,
+                        isDestructive: true,
+                        isDefault: true,
+                        action: compressProject
+                    ),
+                    cancel: AppModalActionBar.CancelAction(title: "Cancel"),
+                    isProcessing: isCompressing
+                ) {
+                    if let failureReason = compressionOutcome?.failureReason {
+                        AppModalBanner(systemImage: "xmark.octagon.fill", tint: .red, text: failureReason)
+                    }
+                }
+                .interactiveDismissDisabled(isCompressing)
+            }
+        )
         .sheet(isPresented: $showCompressionSuccess) {
             if let outcome = compressionOutcome, outcome.succeeded {
                 CompressionSuccessSheet(outcome: outcome)
@@ -176,23 +198,6 @@ struct ProjectDetailView: View {
         Binding(
             get: { pendingAction == .compress ? .compress : nil },
             set: { if $0 == nil { pendingAction = nil } }
-        )
-    }
-
-    private var hibernationErrorBinding: Binding<Bool> {
-        Binding(
-            get: { hibernationError != nil },
-            set: { if !$0 { hibernationError = nil } }
-        )
-    }
-
-    private var compressionErrorBinding: Binding<Bool> {
-        Binding(
-            get: {
-                guard let outcome = compressionOutcome else { return false }
-                return !outcome.succeeded
-            },
-            set: { if !$0 { compressionOutcome = nil } }
         )
     }
 
@@ -330,16 +335,21 @@ struct ProjectDetailView: View {
             onRequirePro()
             return
         }
+        hibernationError = nil
+        compressionOutcome = nil
         pendingAction = action
     }
 
     private func hibernateProject() {
+        guard !isHibernating else { return }
+        hibernationError = nil
         isHibernating = true
         Task {
             let outcome = await onHibernate(project)
             isHibernating = false
             if outcome.succeeded {
-                dismiss()
+                closeAfterHibernation = true
+                pendingAction = nil
             } else {
                 hibernationError = outcome.failureReason ?? "The project could not be hibernated."
             }
@@ -347,16 +357,16 @@ struct ProjectDetailView: View {
     }
 
     private func compressProject() {
+        guard !isCompressing else { return }
+        compressionOutcome = nil
         isCompressing = true
         Task {
             let outcome = await onCompress(project)
             isCompressing = false
             compressionOutcome = outcome
             if outcome.succeeded {
-                // Close the confirmation first so the success sheet can
-                // present cleanly; then surface the success sheet.
+                showSuccessAfterCompression = true
                 pendingAction = nil
-                showCompressionSuccess = true
             }
         }
     }

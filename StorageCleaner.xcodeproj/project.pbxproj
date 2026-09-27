@@ -168,7 +168,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2660;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					7D644E1763C5644866325F31 = {
 						ProvisioningStyle = Automatic;
@@ -255,20 +255,18 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 18;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 848R6Y8374;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Storage Cleaner";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Storage Cleaner asks Finder to move administrator-owned applications to Trash so macOS can show its native authorization prompt.";
-				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Storage Cleaner uses media library access to find large and duplicate video files, such as old screen recordings, so you can review them before choosing what to move to Trash.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
 				SDKROOT = macosx;
 			};
@@ -484,20 +482,18 @@
 				CODE_SIGN_ENTITLEMENTS = StorageCleaner/StorageCleaner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 18;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 848R6Y8374;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Storage Cleaner";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Storage Cleaner asks Finder to move administrator-owned applications to Trash so macOS can show its native authorization prompt.";
-				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Storage Cleaner uses media library access to find large and duplicate video files, such as old screen recordings, so you can review them before choosing what to move to Trash.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.storagecleaner.developer;
 				SDKROOT = macosx;
 			};

@@ -1,108 +1,59 @@
 import Foundation
 
-/// Finds project boundaries nested inside a repository without emitting them
-/// as separate top-level projects. The bounded breadth-first walk avoids
-/// dependency trees and stops at ordinary child project roots, keeping
-/// monorepo discovery fast and preventing storage double-counting.
+/// Finds project boundaries at any depth inside a repository without emitting
+/// them as separate top-level projects. Generated directories are pruned while
+/// nested source projects remain discoverable at any depth.
 enum ProjectComponentDiscovery {
-    private static let maximumDepth = 4
-    private static let excludedDirectoryNames: Set<String> = [
-        ".git", ".hg", ".svn", ".idea", ".vscode", ".firebase",
-        "node_modules", "Pods", "DerivedData", ".dart_tool", ".pub-cache",
-        ".gradle", ".cxx", ".build", ".swiftpm", ".nuxt", ".next",
-        ".output", ".turbo", ".quasar", ".cache", "target", "vendor",
-        "dist", "build", "bin", "obj"
-    ]
-
-    private struct Candidate {
-        let url: URL
-        let depth: Int
-    }
-
     static func discover(
         in projectRoot: URL,
         rootTechnology: ProjectTechnology,
         fileManager: FileManager = .default
     ) -> [ProjectComponentInfo] {
-        var queue = childDirectories(
-            of: projectRoot,
-            rootTechnology: rootTechnology,
-            depth: 1,
-            fileManager: fileManager
-        )
-        var index = 0
         var components: [ProjectComponentInfo] = []
+        guard let enumerator = fileManager.enumerator(
+            at: projectRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsPackageDescendants],
+            errorHandler: { _, _ in true }
+        ) else { return components }
 
-        while index < queue.count {
-            guard !Task.isCancelled else { break }
-            let candidate = queue[index]
-            index += 1
+        while !Task.isCancelled {
+            let hasCandidate = autoreleasepool {
+                guard let candidate = enumerator.nextObject() as? URL else { return false }
+                guard (try? candidate.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
+                    return true
+                }
+                if ProjectDiscoveryTraversalPolicy.shouldSkipComponent(
+                    at: candidate,
+                    rootTechnology: rootTechnology,
+                    fileManager: fileManager
+                ) {
+                    enumerator.skipDescendants()
+                    return true
+                }
 
-            let technologies = ProjectDetector.detectAll(at: candidate.url, fileManager: fileManager)
-            if let technology = ProjectDetector.primaryTechnology(in: technologies) {
+                let technologies = ProjectDetector.detectAll(at: candidate, fileManager: fileManager)
+                guard let technology = ProjectDetector.primaryTechnology(in: technologies) else { return true }
                 let frameworks = technologies.reduce(into: Set<ProjectFramework>()) { result, stack in
                     result.formUnion(ProjectFramework.detected(
-                        at: candidate.url,
+                        at: candidate,
                         technology: stack,
                         fileManager: fileManager
                     ))
                 }
                 components.append(ProjectComponentInfo(
-                    name: candidate.url.lastPathComponent,
-                    path: candidate.url,
+                    name: candidate.lastPathComponent,
+                    path: candidate,
                     technology: technology,
                     technologies: technologies,
                     frameworks: frameworks
                 ))
-                continue
+                enumerator.skipDescendants()
+                return true
             }
-
-            guard candidate.depth < maximumDepth else { continue }
-            queue.append(contentsOf: childDirectories(
-                of: candidate.url,
-                rootTechnology: rootTechnology,
-                depth: candidate.depth + 1,
-                fileManager: fileManager
-            ))
+            guard hasCandidate else { break }
         }
 
         return components.sorted { $0.path.path < $1.path.path }
-    }
-
-    private static func childDirectories(
-        of directory: URL,
-        rootTechnology: ProjectTechnology,
-        depth: Int,
-        fileManager: FileManager
-    ) -> [Candidate] {
-        let urls = (try? fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-
-        return urls.compactMap { url in
-            guard !shouldSkip(url, rootTechnology: rootTechnology),
-                  (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
-                return nil
-            }
-            return Candidate(url: url, depth: depth)
-        }
-    }
-
-    private static func shouldSkip(_ directory: URL, rootTechnology: ProjectTechnology) -> Bool {
-        let name = directory.lastPathComponent
-        guard !name.hasPrefix("."), !excludedDirectoryNames.contains(name) else { return true }
-
-        switch rootTechnology {
-        case .flutter:
-            return ["android", "ios", "linux", "macos", "web", "windows"].contains(name)
-        case .reactNative:
-            return ["android", "ios"].contains(name)
-        case .dotNet:
-            return name == "packages"
-        default:
-            return false
-        }
     }
 }

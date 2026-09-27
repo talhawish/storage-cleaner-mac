@@ -43,6 +43,23 @@ final class StorageFormattingTests: XCTestCase {
         XCTAssertGreaterThan(metadata.bytes, 0)
     }
 
+    func testGradleDependencyRootsUseReadableDisplayNames() throws {
+        let cases: [(URL, String)] = [
+            (root.appendingPathComponent("gradle/caches", isDirectory: true), "Gradle caches"),
+            (
+                root.appendingPathComponent("gradle/wrapper/dists", isDirectory: true),
+                "Gradle wrapper distributions"
+            ),
+            (root.appendingPathComponent(".m2/repository", isDirectory: true), "Maven local repository")
+        ]
+
+        for (directory, expectedName) in cases {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let metadata = DetailFileMetadata.load(for: directory, findingKind: .gradleDependencies)
+            XCTAssertEqual(metadata.displayName, expectedName)
+        }
+    }
+
     func testItemSizeIncludesHiddenNestedFiles() throws {
         let hiddenDirectory = root.appendingPathComponent(".toolchain/cache", isDirectory: true)
         try FileManager.default.createDirectory(at: hiddenDirectory, withIntermediateDirectories: true)

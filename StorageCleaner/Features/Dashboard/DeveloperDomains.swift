@@ -11,7 +11,6 @@ enum DeveloperDomains {
         .dockerArtifacts,
         .flutterArtifacts,
         .androidStudioArtifacts,
-        .androidPackages,
         .pythonDependencies,
         .rustDependencies,
         .goDependencies,
@@ -21,7 +20,6 @@ enum DeveloperDomains {
         .gradleDependencies,
         .cliApps,
         .nodeDependencies,
-        .aiModelCaches,
         .runtimeVersions
     ]
 
@@ -32,7 +30,6 @@ enum DeveloperDomains {
         .webDevelopment,
         .mobileDevelopment,
         .containers,
-        .artificialIntelligence,
         .otherCaches
     ]
 

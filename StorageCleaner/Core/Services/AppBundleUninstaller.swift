@@ -6,7 +6,7 @@ enum AppBundleUninstallerError: LocalizedError, Sendable {
     case applicationsAccessNotGranted(URL)
     case selectedLocationDoesNotAuthorizeTrash(URL)
     case authorizationRequired(URL)
-    case administratorApprovalFailed(URL, String)
+    case workspaceRecycleFailed(URL, String)
 
     var errorDescription: String? {
         switch self {
@@ -18,8 +18,8 @@ enum AppBundleUninstallerError: LocalizedError, Sendable {
             "The selected location did not grant access to move \(url.lastPathComponent) to Trash."
         case let .authorizationRequired(url):
             "\(url.lastPathComponent) needs macOS administrator authorization before it can be moved to Trash."
-        case let .administratorApprovalFailed(url, message):
-            "Administrator approval did not move \(url.lastPathComponent) to Trash: \(message)"
+        case let .workspaceRecycleFailed(url, message):
+            "The macOS Trash operation did not move \(url.lastPathComponent): \(message)"
         }
     }
 }
@@ -27,7 +27,7 @@ enum AppBundleUninstallerError: LocalizedError, Sendable {
 struct AppBundleUninstaller: Sendable {
     var moveToTrashDirectly: @Sendable (URL) async throws -> Void
     var moveToTrashWithUserSelectedAccess: @Sendable (URL) async throws -> Void
-    var moveToTrashWithAdminAuthorization: @Sendable (URL) async throws -> Void
+    var moveToTrashWithWorkspace: @Sendable (URL) async throws -> Void
 
     func uninstall(_ url: URL) async throws {
         let appURL = url.standardizedFileURL
@@ -45,14 +45,14 @@ struct AppBundleUninstaller: Sendable {
                 guard Self.isPermissionError(error) || Self.isAuthorizationRequired(error) else {
                     throw error
                 }
-                try await moveToTrashWithAdminAuthorization(appURL)
+                try await moveToTrashWithWorkspace(appURL)
             }
         }
     }
 }
 
 extension AppBundleUninstaller {
-    private static let applicationsBookmarkKeyPrefix = "ApplicationsFolderSecurityScopedBookmark"
+    private static let applicationsBookmarkKeyPrefix = FileSystemPermissionService.applicationsBookmarkKeyPrefix
     private static let bookmarkStore: any BookmarkDataStoring = UserDefaultsBookmarkDataStore(
         userDefaults: UserDefaults(suiteName: "com.storagecleaner.developer") ?? .standard
     )
@@ -64,14 +64,14 @@ extension AppBundleUninstaller {
         moveToTrashWithUserSelectedAccess: { url in
             try await trashWithUserSelectedApplicationsAccess(url)
         },
-        moveToTrashWithAdminAuthorization: { url in
-            try await trashWithAdministratorAuthorization(url)
+        moveToTrashWithWorkspace: { url in
+            try await trashWithWorkspace(url)
         }
     )
 
     static func supportsAppTrashRemoval(for url: URL) -> Bool {
         let appURL = url.standardizedFileURL
-        guard appURL.pathExtension == "app" else { return false }
+        guard appURL.pathExtension.lowercased() == "app" else { return false }
 
         let allowedRoots = [
             URL(fileURLWithPath: "/Applications", isDirectory: true),
@@ -81,9 +81,12 @@ extension AppBundleUninstaller {
             )
         ]
 
-        return allowedRoots
-            .map { $0.standardizedFileURL.path + "/" }
-            .contains { appURL.path.hasPrefix($0) }
+        let parent = appURL.deletingLastPathComponent()
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        return allowedRoots.contains { root in
+            parent == root.standardizedFileURL.resolvingSymlinksInPath()
+        }
     }
 
     static func isPermissionError(_ error: Error) -> Bool {
@@ -146,65 +149,39 @@ extension AppBundleUninstaller {
         }
     }
 
-    /// Lets Finder perform the privileged delete operation. A sandboxed app cannot
-    /// elevate itself with Authorization Services; Finder owns the administrator/
-    /// Touch ID prompt and keeps the bundle recoverable in Trash.
+    /// Uses AppKit's Finder-style recycle operation for bundles that need more than a
+    /// direct security-scoped FileManager move. No Apple Events or scripting exception is
+    /// needed for this API. If macOS still requires administrator authorization, the
+    /// caller presents the existing guidance to complete the move in Finder.
     @MainActor
-    private static func trashWithAdministratorAuthorization(_ url: URL) async throws {
+    private static func trashWithWorkspace(_ url: URL) async throws {
         let appURL = url.standardizedFileURL
-        NSApp.activate(ignoringOtherApps: true)
+        let applicationsFolder = containingApplicationsFolder(for: appURL)
+        let result: TrashMoveResult
 
-        guard let script = NSAppleScript(source: finderTrashScript(for: appURL)) else {
-            throw AppBundleUninstallerError.administratorApprovalFailed(
-                appURL,
-                "Finder could not prepare the administrator authorization request."
-            )
+        if let accessURL = resolveBookmarkedApplicationsFolder(for: applicationsFolder),
+           appURL.isDescendant(of: accessURL) {
+            let didStartAccess = accessURL.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    accessURL.stopAccessingSecurityScopedResource()
+                }
+            }
+            result = await WorkspaceTrashMover().moveToTrash([appURL])
+        } else {
+            result = await WorkspaceTrashMover().moveToTrash([appURL])
         }
 
-        var errorInfo: NSDictionary?
-        script.executeAndReturnError(&errorInfo)
-        if let errorInfo {
-            let message = meaningfulMessage(from: errorInfo)
-            if isFinderAuthorizationDenial(errorInfo) {
+        guard result.destinationBySource[appURL] != nil else {
+            let error = result.error ?? CocoaError(.fileWriteUnknown)
+            if Self.isPermissionError(error) {
                 throw AppBundleUninstallerError.authorizationRequired(appURL)
             }
-            throw AppBundleUninstallerError.administratorApprovalFailed(appURL, message)
+            throw AppBundleUninstallerError.workspaceRecycleFailed(
+                appURL,
+                error.localizedDescription
+            )
         }
-    }
-
-    static func finderTrashScript(for url: URL) -> String {
-        let path = escapedAppleScriptString(url.standardizedFileURL.path)
-        return """
-        set targetPath to "\(path)"
-        tell application id "com.apple.finder"
-            delete POSIX file targetPath
-        end tell
-        """
-    }
-
-    private static func meaningfulMessage(from errorInfo: NSDictionary?) -> String {
-        let message = errorInfo?[NSAppleScript.errorMessage] as? String
-        return if let message, !message.isEmpty {
-            message
-        } else {
-            "The administrator request was cancelled or failed."
-        }
-    }
-
-    private static func isFinderAuthorizationDenial(_ errorInfo: NSDictionary?) -> Bool {
-        guard let errorNumber = errorInfo?[NSAppleScript.errorNumber] as? NSNumber else {
-            return false
-        }
-        // -1743 is the TCC denial returned when macOS has not allowed Apple Events;
-        // -60005 is the SecurityAgent authorization denial. Treat either as an
-        // authorization failure so the UI does not expose a raw script error.
-        return errorNumber.intValue == -1743 || errorNumber.intValue == -60005
-    }
-
-    private static func escapedAppleScriptString(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     private static func trash(_ appURL: URL, withAccessTo accessURL: URL) throws {

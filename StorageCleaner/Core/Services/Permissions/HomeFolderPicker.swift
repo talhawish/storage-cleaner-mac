@@ -26,7 +26,8 @@ struct NSOpenPanelHomeFolderPicker: HomeFolderPicking {
     private func makePanel(defaultURL: URL) -> NSOpenPanel {
         let panel = NSOpenPanel()
         panel.title = "Choose \(defaultURL.lastPathComponent)"
-        panel.message = "Use \(defaultURL.path) so StorageCleaner can build one complete cleanup report."
+        panel.message = "Choose \(defaultURL.path) to scan developer storage. "
+            + "macOS may ask separately for protected folders during a full scan."
         panel.prompt = "Use Home Folder"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -59,6 +60,41 @@ struct NSOpenPanelHomeFolderPicker: HomeFolderPicking {
             """
         }
 
-        return "Choose \(homePath) so Desktop, Documents, Downloads, Pictures, and Movies can be scanned together."
+        return "Choose \(homePath). macOS may ask separately before protected folders are scanned."
+    }
+}
+
+protocol ApplicationsFolderPicking: Sendable {
+    @MainActor
+    func pickApplicationsFolder(defaultURL: URL) -> URL?
+}
+
+struct NSOpenPanelApplicationsFolderPicker: ApplicationsFolderPicking {
+    @MainActor
+    func pickApplicationsFolder(defaultURL: URL) -> URL? {
+        while true {
+            let panel = NSOpenPanel()
+            panel.title = "Choose Applications"
+            panel.message = "Use \(defaultURL.path) so Storage Cleaner can inventory installed apps safely."
+            panel.prompt = "Use Applications"
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.canCreateDirectories = false
+            panel.showsHiddenFiles = false
+            panel.directoryURL = defaultURL
+
+            guard panel.runModal() == .OK, let selectedURL = panel.url else { return nil }
+            guard FileSystemPermissionService.isApplicationsFolder(selectedURL, expected: defaultURL) else {
+                let alert = NSAlert()
+                alert.messageText = "Choose the Applications folder"
+                alert.informativeText = "Select \(defaultURL.path), not a folder inside it."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "Choose Applications")
+                alert.runModal()
+                continue
+            }
+            return selectedURL.standardizedFileURL
+        }
     }
 }

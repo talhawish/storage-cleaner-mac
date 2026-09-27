@@ -65,6 +65,8 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
     case androidStudioArtifacts
     case androidPackages
     case aiModelCaches
+    case localAIModels
+    case largeFolders
     case largeFiles
     case largeVideos
     case screenRecordings
@@ -103,7 +105,9 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .reactNativeArtifacts: "React Native artifacts"
         case .androidStudioArtifacts: "Android Studio artifacts"
         case .androidPackages: "Leftover APKs"
-        case .aiModelCaches: "AI model caches"
+        case .aiModelCaches: "Known AI model stores"
+        case .localAIModels: "Local AI model files"
+        case .largeFolders: "Other large folders"
         case .largeFiles: "Large files"
         case .largeVideos: "Large videos"
         case .screenRecordings: "Screen recordings"
@@ -144,7 +148,9 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .reactNativeArtifacts: "Per-project iOS Pods, iOS/Android build, and Gradle outputs from React Native"
         case .androidStudioArtifacts: "Android Studio system data, emulator files, SDK caches, and Gradle outputs"
         case .androidPackages: "Loose APK and AAB build outputs"
-        case .aiModelCaches: "Local model downloads, embeddings, and generated cache files"
+        case .aiModelCaches: "Known local model stores and their downloaded files"
+        case .localAIModels: "Large model-weight files discovered by format, across your Home folder"
+        case .largeFolders: "Large Home-folder directories not already covered by a focused scanner"
         case .largeFiles: "Large documents, archives, installers, datasets, disk images, exports, and other files"
         case .largeVideos: "Large movie files, exports, captures, and old demos"
         case .screenRecordings: "macOS recordings, meeting captures, simulator demos, and tutorials"
@@ -160,7 +166,7 @@ enum StorageFindingKind: String, CaseIterable, Equatable, Sendable {
         case .phpDependencies: "Composer project vendor folders and downloaded cache"
         case .rubyDependencies: "RubyGems cache, Bundler packages, rbenv and RVM versions"
         case .dotnetDependencies: "NuGet packages and .NET build caches"
-        case .gradleDependencies: "Gradle build cache, Maven repository, and downloaded dependencies"
+        case .gradleDependencies: "Gradle build caches and wrapper distributions, plus Maven dependencies"
         case .junkFiles: "Temporary files, logs, and stale downloads"
         case .cliApps: "Homebrew formulae, Rust toolchains, Node version managers, and installed CLI tools"
         case .runtimeVersions: "Older language runtime and SDK versions kept by version managers"

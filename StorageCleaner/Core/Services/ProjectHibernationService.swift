@@ -47,28 +47,33 @@ actor ProjectHibernationService {
 
     private let fileManager = FileManager.default
     private let removal: Removal
+    private let trashMover: any TrashMoving
 
-    init(removal: Removal = .trash) {
+    init(removal: Removal = .trash, trashMover: any TrashMoving = WorkspaceTrashMover()) {
         self.removal = removal
+        self.trashMover = trashMover
     }
 
     func hibernate(_ projects: [ProjectInfo]) async -> HibernationSummary {
         var outcomes: [HibernationOutcome] = []
         for project in projects {
             guard !Task.isCancelled else { break }
-            outcomes.append(hibernate(project))
+            outcomes.append(await hibernate(project))
         }
         return HibernationSummary(outcomes: outcomes)
     }
 
-    func hibernate(_ project: ProjectInfo) -> HibernationOutcome {
+    func hibernate(_ project: ProjectInfo) async -> HibernationOutcome {
         guard fileManager.fileExists(atPath: project.path.path) else {
             return outcome(project, reason: "The project folder no longer exists.")
         }
 
         let directories = ProjectDependencyInventory.directories(for: project, fileManager: fileManager)
         guard !directories.isEmpty else {
-            return outcome(project, reason: "No regenerable dependencies were found to reclaim.")
+            return outcome(
+                project,
+                reason: ProjectDependencyInventory.unavailableDependenciesMessage(for: project)
+            )
         }
 
         var reclaimed: Int64 = 0
@@ -85,11 +90,11 @@ actor ProjectHibernationService {
                 break
             }
             do {
-                try remove(directory)
+                try await remove(directory)
                 reclaimed += size
                 removed += 1
             } catch {
-                failures.append(directory.lastPathComponent)
+                failures.append("\(directory.path): \(error.localizedDescription)")
             }
         }
 
@@ -123,11 +128,10 @@ actor ProjectHibernationService {
         )
     }
 
-    private func remove(_ url: URL) throws {
+    private func remove(_ url: URL) async throws {
         switch removal {
         case .trash:
-            var resultingURL: NSURL?
-            try fileManager.trashItem(at: url, resultingItemURL: &resultingURL)
+            try await trashMover.moveOneToTrash(url)
         case .delete:
             try fileManager.removeItem(at: url)
         }

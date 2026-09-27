@@ -69,6 +69,57 @@ extension AppShellView {
         .accessibilityIdentifier("large-files-empty")
     }
 
+    func reviewableStorageInitialState(
+        title: String,
+        subtitle: String,
+        actionTitle: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        InitialStateView(
+            title: title,
+            subtitle: subtitle,
+            highlights: [
+                InitialStateHighlight(title: "Hidden folders", systemImage: "eye.slash"),
+                InitialStateHighlight(title: "Format-based discovery", systemImage: "doc.text.magnifyingglass"),
+                InitialStateHighlight(title: "Review before Trash", systemImage: "trash")
+            ],
+            actionTitle: actionTitle,
+            systemImage: systemImage,
+            tint: AppTheme.orange,
+            action: action
+        )
+        .accessibilityIdentifier("reviewable-storage-initial")
+    }
+
+    func reviewableStorageEmptyState(
+        title: String,
+        message: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        EmptyStateView(
+            title: title,
+            message: message,
+            systemImage: "checkmark.seal.fill",
+            tint: AppTheme.mint,
+            actionTitle: "Scan Again",
+            action: action
+        )
+        .accessibilityIdentifier("reviewable-storage-empty")
+    }
+
+    func reviewableStorageHiddenItemsState(action: @escaping () -> Void) -> some View {
+        EmptyStateView(
+            title: "Review items are hidden",
+            message: "Turn on review items to inspect these paths before moving anything to the Trash.",
+            systemImage: "eye.slash",
+            tint: AppTheme.orange,
+            actionTitle: "Show Review Items",
+            action: action
+        )
+        .accessibilityIdentifier("reviewable-storage-hidden-items")
+    }
+
     func leftoversInitialState(action: @escaping () -> Void) -> some View {
         InitialStateView(
             title: "Hunt down leftover installers",

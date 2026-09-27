@@ -12,6 +12,8 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertTrue(SystemJunkTypeFilter.all.contains(.orphanedAppPreferences))
         XCTAssertTrue(SystemJunkTypeFilter.all.contains(.orphanedSavedApplicationState))
         XCTAssertTrue(SystemJunkTypeFilter.all.contains(.oldCrashReports))
+        XCTAssertTrue(SystemJunkTypeFilter.all.contains(.browserCaches))
+        XCTAssertFalse(SystemJunkTypeFilter.all.contains(.junkFiles))
     }
 
     func testSubTypeFilterOnlyMatchesItsOwnKind() {
@@ -20,9 +22,13 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertFalse(SystemJunkTypeFilter.appSupport.contains(.orphanedAppContainers))
         XCTAssertFalse(SystemJunkTypeFilter.appSupport.contains(.orphanedAppPreferences))
         XCTAssertFalse(SystemJunkTypeFilter.appSupport.contains(.oldCrashReports))
+        XCTAssertFalse(SystemJunkTypeFilter.appSupport.contains(.browserCaches))
 
         XCTAssertTrue(SystemJunkTypeFilter.caches.contains(.orphanedAppCaches))
         XCTAssertFalse(SystemJunkTypeFilter.caches.contains(.orphanedAppSupport))
+
+        XCTAssertTrue(SystemJunkTypeFilter.browserCaches.contains(.browserCaches))
+        XCTAssertFalse(SystemJunkTypeFilter.browserCaches.contains(.orphanedAppSupport))
 
         XCTAssertTrue(SystemJunkTypeFilter.containers.contains(.orphanedAppContainers))
         XCTAssertFalse(SystemJunkTypeFilter.containers.contains(.orphanedAppSupport))
@@ -44,6 +50,8 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .orphanedAppPreferences), .preferences)
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .orphanedSavedApplicationState), .savedState)
         XCTAssertEqual(SystemJunkTypeFilter.filter(for: .oldCrashReports), .crashReports)
+        XCTAssertEqual(SystemJunkTypeFilter.filter(for: .browserCaches), .browserCaches)
+        XCTAssertEqual(SystemJunkTypeFilter.filter(for: .junkFiles), .all)
     }
 
     func testFilterForNonSystemJunkKindFallsBackToAll() {
@@ -72,7 +80,7 @@ final class SystemJunkTypeFilterTests: XCTestCase {
         XCTAssertEqual(feedback.cancelTitle, "Done")
         XCTAssertTrue(feedback.message.contains("1 item was moved to Trash."))
         XCTAssertTrue(feedback.message.contains("1 item still needs permission."))
-        XCTAssertTrue(feedback.message.contains("Grant Full Disk Access in System Settings"))
+        XCTAssertTrue(feedback.message.contains("Check Storage Cleaner's access to this location"))
     }
 
     func testCleanupFeedbackExplainsProtectedContainerAuthorization() {
@@ -91,5 +99,24 @@ final class SystemJunkTypeFilterTests: XCTestCase {
 
         XCTAssertTrue(feedback.message.contains("approve the macOS request to access protected app data"))
         XCTAssertFalse(feedback.message.contains("choose your Home folder again"))
+    }
+
+    func testCLIFailureExplainsUninstallErrorWithoutPermissionClaim() {
+        let formula = URL(filePath: "/opt/homebrew/Cellar/git")
+        let result = CleanupResult(
+            deletedURLs: [],
+            deletedItems: [],
+            failedURLs: [(formula, CLIRemovalError.homebrewUninstallFailed(
+                name: "git", message: "Required by another formula"
+            ))],
+            totalBytesReclaimed: 0
+        )
+
+        let feedback = CleanupFeedback.failed(result: result, operation: .cliPrograms)
+
+        XCTAssertEqual(feedback.title, "1 item could not be removed")
+        XCTAssertEqual(feedback.confirmTitle, "Retry Removal")
+        XCTAssertTrue(feedback.message.contains("Required by another formula"))
+        XCTAssertFalse(feedback.message.contains("Full Disk Access"))
     }
 }

@@ -191,6 +191,75 @@ final class ProjectActivityViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.inactiveProjects.contains { $0.name == "abandoned-swift" })
     }
 
+    func testLaravelProjectHibernatesComposerAndNodeDependenciesWithHomeAccess() async throws {
+        let root = projectsRoot.appending(path: "laravel-app", directoryHint: .isDirectory)
+        let vendor = root.appending(path: "vendor", directoryHint: .isDirectory)
+        let modules = root.appending(path: "node_modules", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: vendor, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: modules, withIntermediateDirectories: true)
+        try #"{"require":{"laravel/framework":"^12.0"}}"#.write(
+            to: root.appending(path: "composer.json"), atomically: true, encoding: .utf8
+        )
+        try #"{"devDependencies":{"vite":"^6.0"}}"#.write(
+            to: root.appending(path: "package.json"), atomically: true, encoding: .utf8
+        )
+        try "source".write(to: root.appending(path: "artisan"), atomically: true, encoding: .utf8)
+        try Data(repeating: 1, count: 8_000).write(to: vendor.appending(path: "autoload.php"))
+        try Data(repeating: 2, count: 12_000).write(to: modules.appending(path: "vite.js"))
+
+        let access = RecordingProjectAccessHandler()
+        viewModel = ProjectActivityViewModel(
+            scanner: ProjectActivityScanner(
+                searchPaths: [projectsRoot],
+                maxDepth: 2,
+                minimumProjectSize: 1,
+                permissionHandler: access
+            ),
+            hibernationService: ProjectHibernationService(removal: .delete),
+            compressionService: StubCompressionService(),
+            permissionHandler: access
+        )
+        await viewModel.performScan()
+        let project = try XCTUnwrap(viewModel.snapshot?.projects.first { $0.name == "laravel-app" })
+        XCTAssertEqual(project.rootTechnologies, [.php, .nodeJS])
+        let expectedDependencySize = StorageFormatting.itemSize(at: vendor)
+            + StorageFormatting.itemSize(at: modules)
+        XCTAssertEqual(project.dependencySize, expectedDependencySize)
+
+        let outcome = await viewModel.hibernate(project)
+
+        XCTAssertTrue(outcome.succeeded, outcome.failureReason ?? "")
+        XCTAssertEqual(outcome.removedDirectoryCount, 2)
+        XCTAssertEqual(outcome.remainingDependencyBytes, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vendor.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modules.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appending(path: "artisan").path))
+        XCTAssertEqual(access.beginCount, 2, "scan and hibernation each acquire Home Folder access")
+        XCTAssertEqual(access.stopCount, 2, "both access tokens are released")
+    }
+
+    func testDeniedHomeAccessStopsHibernationAndCompressionBeforeMutation() async throws {
+        await viewModel.performScan()
+        let project = try XCTUnwrap(viewModel.snapshot?.projects.first { $0.name == "active-node" })
+        let denied = DenyingProjectActivityPermissionHandler()
+        viewModel = ProjectActivityViewModel(
+            scanner: ProjectActivityScanner(searchPaths: [projectsRoot], maxDepth: 2, minimumProjectSize: 1),
+            hibernationService: ProjectHibernationService(removal: .delete),
+            compressionService: StubCompressionService(),
+            permissionHandler: denied
+        )
+
+        let hibernation = await viewModel.hibernate(project)
+        let compression = await viewModel.compress(project)
+
+        XCTAssertFalse(hibernation.succeeded)
+        XCTAssertTrue(hibernation.failureReason?.contains("Home Folder access") == true)
+        XCTAssertFalse(compression.succeeded)
+        XCTAssertTrue(compression.failureReason?.contains("Home Folder access") == true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: project.path.appending(path: "node_modules").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: compression.zipURL.path))
+    }
+
     func testCancelScanIsSafeWhenIdle() {
         XCTAssertFalse(viewModel.isScanning)
         viewModel.cancelScan()
@@ -396,5 +465,23 @@ private final class DenyingProjectActivityPermissionHandler: @unchecked Sendable
 
     func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
         nil
+    }
+}
+
+private final class RecordingProjectAccessHandler: @unchecked Sendable, StoragePermissionHandling {
+    private let lock = NSLock()
+    private var begins = 0
+    private var stops = 0
+
+    var beginCount: Int { lock.withLock { begins } }
+    var stopCount: Int { lock.withLock { stops } }
+
+    func currentStatuses() -> [StoragePermissionStatus] { allAccessibleStatuses }
+
+    func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        lock.withLock { begins += 1 }
+        return SecurityScopedResourceAccess(onStop: { [self] in
+            lock.withLock { stops += 1 }
+        })
     }
 }

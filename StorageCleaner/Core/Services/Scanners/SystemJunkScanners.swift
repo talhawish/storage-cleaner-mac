@@ -1,5 +1,10 @@
 import Foundation
 
+private enum SystemJunkScanLimits {
+    static let orphanDirectoryLimit = 2_000
+    static let orphanPreferencesLimit = 2_000
+}
+
 /// Builds the list of orphan directories under a Library root. An entry is orphaned when no
 /// installed app's `CFBundleIdentifier` (or directory name) matches it. Shared by the
 /// Application Support, Caches, and Containers scanners.
@@ -10,6 +15,9 @@ struct OrphanDirectoryResolver: Sendable {
     var cleanupEligibility = SystemJunkCleanupEligibility()
 
     func resolveOrphans() -> [URL] {
+        // An incomplete installed-app catalog is not evidence that a Library entry is orphaned.
+        // This happens when the sandbox has not been granted access to /Applications.
+        guard catalog.isComplete else { return [] }
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: root.path) else { return [] }
         let entries: [URL]
@@ -24,7 +32,11 @@ struct OrphanDirectoryResolver: Sendable {
         }
 
         let orphanURLs = entries.compactMap { url -> URL? in
-            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
+            let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
+            guard let values = try? url.resourceValues(forKeys: keys), values.isDirectory == true else {
+                return nil
+            }
+            guard values.isSymbolicLink != true else {
                 return nil
             }
             guard DirectoryAccessProbe.state(of: url) == .accessible else { return nil }
@@ -47,6 +59,11 @@ struct OrphanDirectoryResolver: Sendable {
 /// `InstalledAppCatalog` and by tests that inject a fixed set of installed bundle IDs.
 protocol OrphanCatalog: Sendable {
     func ownsLibraryEntry(named entryName: String) -> Bool
+    var isComplete: Bool { get }
+}
+
+extension OrphanCatalog {
+    var isComplete: Bool { true }
 }
 
 extension InstalledAppCatalog: OrphanCatalog {}
@@ -106,19 +123,22 @@ struct OrphanedPreferencesScanner: StorageCategoryScanning {
     private let collector: FileSystemCollector
     private let builder: CandidateFindingBuilder
     private let cleanupEligibility: SystemJunkCleanupEligibility
+    private let limit: Int
 
     init(
         root: URL = DependencyPaths.SystemJunk.preferences,
         catalog: any OrphanCatalog,
         collector: FileSystemCollector,
         builder: CandidateFindingBuilder = CandidateFindingBuilder(),
-        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility()
+        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility(),
+        limit: Int = SystemJunkScanLimits.orphanPreferencesLimit
     ) {
         self.root = root
         self.catalog = catalog
         self.collector = collector
         self.builder = builder
         self.cleanupEligibility = cleanupEligibility
+        self.limit = limit
     }
 
     /// Test-only initializer that takes a custom root so unit tests can run against a temporary
@@ -128,13 +148,15 @@ struct OrphanedPreferencesScanner: StorageCategoryScanning {
         collector: FileSystemCollector,
         builder: CandidateFindingBuilder = CandidateFindingBuilder(),
         root: URL,
-        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility()
+        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility(),
+        limit: Int = SystemJunkScanLimits.orphanPreferencesLimit
     ) {
         self.root = root
         self.catalog = catalog
         self.collector = collector
         self.builder = builder
         self.cleanupEligibility = cleanupEligibility
+        self.limit = limit
     }
 
     func scan() async -> CategoryScanResult {
@@ -170,16 +192,22 @@ struct OrphanedPreferencesScanner: StorageCategoryScanning {
             return []
         }
 
-        return entries.compactMap { url in
+        let orphanURLs = entries.compactMap { url -> URL? in
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
                 return nil
             }
             guard url.pathExtension.lowercased() == "plist" else { return nil }
             guard cleanupEligibility.contains(url) else { return nil }
             let stem = url.deletingPathExtension().lastPathComponent
-            guard !stem.isEmpty else { return nil }
+            guard !stem.isEmpty, !stem.hasPrefix(".") else { return nil }
             return catalog.ownsLibraryEntry(named: stem) ? nil : url
         }
+
+        return Array(
+            orphanURLs
+                .sorted { $0.lastPathComponent.lowercased() < $1.lastPathComponent.lowercased() }
+                .prefix(limit)
+        )
     }
 }
 
@@ -194,6 +222,10 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
     private let collector: FileSystemCollector
     private let builder: CandidateFindingBuilder
     private let cleanupEligibility: SystemJunkCleanupEligibility
+    private let minimumAge: TimeInterval
+    private let now: Date
+
+    static let defaultMinimumAge: TimeInterval = 30 * 24 * 60 * 60
 
     init(
         roots: [URL] = [
@@ -202,12 +234,16 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
         ],
         collector: FileSystemCollector,
         builder: CandidateFindingBuilder = CandidateFindingBuilder(),
-        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility()
+        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility(),
+        minimumAge: TimeInterval = OldCrashReportsScanner.defaultMinimumAge,
+        now: Date = .now
     ) {
         self.roots = roots
         self.collector = collector
         self.builder = builder
         self.cleanupEligibility = cleanupEligibility
+        self.minimumAge = max(0, minimumAge)
+        self.now = now
     }
 
     /// Test-only initializer that accepts custom roots so unit tests can run against a temporary
@@ -216,18 +252,25 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
         collector: FileSystemCollector,
         roots: [URL],
         builder: CandidateFindingBuilder = CandidateFindingBuilder(),
-        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility()
+        cleanupEligibility: SystemJunkCleanupEligibility = SystemJunkCleanupEligibility(),
+        minimumAge: TimeInterval = OldCrashReportsScanner.defaultMinimumAge,
+        now: Date = .now
     ) {
         self.roots = roots
         self.collector = collector
         self.builder = builder
         self.cleanupEligibility = cleanupEligibility
+        self.minimumAge = max(0, minimumAge)
+        self.now = now
     }
 
     func scan() async -> CategoryScanResult {
         let result = collector.collectFiles(
             at: roots,
-            matching: Self.isCrashReport,
+            matching: { record in
+                Self.isCrashReport(record)
+                    && record.modificationDate.map { $0 <= now.addingTimeInterval(-minimumAge) } == true
+            },
             prioritizeLargest: true
         )
         let eligibleCandidates = result.candidates.filter { cleanupEligibility.contains($0.url) }
@@ -248,7 +291,7 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
     }
 
     private static func isCrashReport(_ record: FileRecord) -> Bool {
-        [
+        let reportExtensions = [
             "crash",
             "diag",
             "hang",
@@ -257,7 +300,8 @@ struct OldCrashReportsScanner: StorageCategoryScanning {
             "panic",
             "spin",
             "synced"
-        ].contains(record.pathExtensionLowercased)
+        ]
+        return reportExtensions.contains(record.pathExtensionLowercased)
     }
 }
 
@@ -275,7 +319,7 @@ struct OrphanedSavedAppStateScanner: StorageCategoryScanning {
             resolvers: [OrphanDirectoryResolver(
                 root: DependencyPaths.SystemJunk.savedApplicationState,
                 catalog: catalog,
-                limit: 200
+                limit: SystemJunkScanLimits.orphanDirectoryLimit
             )],
             collector: collector,
             safety: .safe
@@ -287,7 +331,11 @@ struct OrphanedSavedAppStateScanner: StorageCategoryScanning {
     internal init(collector: FileSystemCollector, catalog: any OrphanCatalog, root: URL) {
         scanner = OrphanedDirectoriesScanner(
             kind: .orphanedSavedApplicationState,
-            resolvers: [OrphanDirectoryResolver(root: root, catalog: catalog, limit: 200)],
+            resolvers: [OrphanDirectoryResolver(
+                root: root,
+                catalog: catalog,
+                limit: SystemJunkScanLimits.orphanDirectoryLimit
+            )],
             collector: collector,
             safety: .safe
         )
@@ -311,7 +359,7 @@ struct OrphanedAppSupportScanner: StorageCategoryScanning {
             resolvers: [OrphanDirectoryResolver(
                 root: DependencyPaths.SystemJunk.applicationSupport,
                 catalog: catalog,
-                limit: 200
+                limit: SystemJunkScanLimits.orphanDirectoryLimit
             )],
             collector: collector
         )
@@ -326,7 +374,11 @@ struct OrphanedAppSupportScanner: StorageCategoryScanning {
     ) {
         scanner = OrphanedDirectoriesScanner(
             kind: .orphanedAppSupport,
-            resolvers: [OrphanDirectoryResolver(root: root, catalog: catalog, limit: 200)],
+            resolvers: [OrphanDirectoryResolver(
+                root: root,
+                catalog: catalog,
+                limit: SystemJunkScanLimits.orphanDirectoryLimit
+            )],
             collector: collector
         )
     }
@@ -347,7 +399,7 @@ struct OrphanedAppCachesScanner: StorageCategoryScanning {
             resolvers: [OrphanDirectoryResolver(
                 root: DependencyPaths.SystemJunk.caches,
                 catalog: catalog,
-                limit: 200
+                limit: SystemJunkScanLimits.orphanDirectoryLimit
             )],
             collector: collector,
             safety: .safe
@@ -363,7 +415,11 @@ struct OrphanedAppCachesScanner: StorageCategoryScanning {
     ) {
         scanner = OrphanedDirectoriesScanner(
             kind: .orphanedAppCaches,
-            resolvers: [OrphanDirectoryResolver(root: root, catalog: catalog, limit: 200)],
+            resolvers: [OrphanDirectoryResolver(
+                root: root,
+                catalog: catalog,
+                limit: SystemJunkScanLimits.orphanDirectoryLimit
+            )],
             collector: collector,
             safety: .safe
         )
@@ -390,13 +446,13 @@ struct OrphanedAppContainersScanner: StorageCategoryScanning {
                 OrphanDirectoryResolver(
                     root: DependencyPaths.SystemJunk.containers,
                     catalog: catalog,
-                    limit: 200,
+                    limit: SystemJunkScanLimits.orphanDirectoryLimit,
                     cleanupEligibility: cleanupEligibility
                 ),
                 OrphanDirectoryResolver(
                     root: DependencyPaths.SystemJunk.groupContainers,
                     catalog: catalog,
-                    limit: 200,
+                    limit: SystemJunkScanLimits.orphanDirectoryLimit,
                     cleanupEligibility: cleanupEligibility
                 )
             ],
@@ -419,13 +475,13 @@ struct OrphanedAppContainersScanner: StorageCategoryScanning {
                 OrphanDirectoryResolver(
                     root: root,
                     catalog: catalog,
-                    limit: 200,
+                    limit: SystemJunkScanLimits.orphanDirectoryLimit,
                     cleanupEligibility: cleanupEligibility
                 ),
                 OrphanDirectoryResolver(
                     root: groupContainersRoot,
                     catalog: catalog,
-                    limit: 200,
+                    limit: SystemJunkScanLimits.orphanDirectoryLimit,
                     cleanupEligibility: cleanupEligibility
                 )
             ],

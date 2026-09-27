@@ -11,7 +11,7 @@ import SwiftUI
 /// The detail-route version of this surface lives in ``RuntimeVersionsView`` and shares
 /// the same group row/header primitives.
 struct RuntimeVersionsSection: View {
-    let onRemove: ([URL]) async -> Void
+    let onRemove: ([URL]) async -> CleanupResult
     let permissionHandler: (any StoragePermissionHandling)?
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
@@ -19,7 +19,8 @@ struct RuntimeVersionsSection: View {
     @State private var groups: [RuntimeVersionGroup] = []
     @State private var selectedURLs: Set<URL> = []
     @State private var isLoading = true
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isRemoving = false
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -39,12 +40,17 @@ struct RuntimeVersionsSection: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
+            if isRemoving {
+                ProgressView("Removing runtime versions…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
             if isLoading && groups.isEmpty {
                 loadingState
             } else if groups.isEmpty {
                 emptyState
             } else {
-                content
+                content.disabled(isRemoving)
             }
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous))
@@ -53,20 +59,13 @@ struct RuntimeVersionsSection: View {
                 .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
         }
         .task { await load() }
-        .sheet(isPresented: $showDeleteConfirmation) {
+        .sheet(item: $cleanupRequest) { request in
             DeleteConfirmationSheet(
-                selectedURLs: Array(selectedURLs),
-                totalBytes: selectedBytes,
-                onDelete: {
-                    let urls = Array(selectedURLs)
-                    selectedURLs.removeAll()
-                    showDeleteConfirmation = false
-                    Task {
-                        await onRemove(urls)
-                        await load()
-                    }
-                },
-                onCancel: { showDeleteConfirmation = false }
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                mode: .runtimeVersions,
+                onDelete: { performRemoval(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
     }
@@ -244,7 +243,20 @@ private extension RuntimeVersionsSection {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        guard !isRemoving else { return }
+        cleanupRequest = FileCleanupRequest(urls: selectedURLs, totalBytes: selectedBytes)
+    }
+
+    func performRemoval(_ request: FileCleanupRequest) {
+        guard !isRemoving else { return }
+        cleanupRequest = nil
+        isRemoving = true
+        Task { @MainActor in
+            let result = await onRemove(request.urls)
+            selectedURLs.subtract(result.deletedItems.map(\.originalURL))
+            isRemoving = false
+            await load()
+        }
     }
 
     /// Two-phase load: discover groups (fast) then measure on-disk sizes in the background.

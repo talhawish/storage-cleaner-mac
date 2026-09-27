@@ -41,6 +41,18 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.totalBytesReclaimed, 12_288)
     }
 
+    func testDeletingAnItemThatDisappearedAfterScanningIsIdempotent() async {
+        let missing = temporaryDirectory.appending(path: "already-gone.tmp")
+
+        let result = await FileManagerCleanupService().delete(urls: [missing])
+
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.deletedItems.map(\.originalURL), [missing.standardizedFileURL])
+        XCTAssertEqual(result.deletedItems.first?.bytesReclaimed, 0)
+        XCTAssertTrue(result.deletedURLs.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missing.path))
+    }
+
     func testDeleteDirectoryCountsHiddenFilesInReclaimedBytes() async throws {
         let directory = temporaryDirectory.appending(path: "hidden-cache", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -154,6 +166,29 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertTrue(mover.requests.allSatisfy { $0.count <= 100 })
     }
 
+    func testCleanupReportsPreparationAndPerItemTrashProgress() async throws {
+        let files = try (0..<205).map { index in
+            let file = temporaryDirectory.appending(path: "progress-item-\(index).tmp")
+            try Data(repeating: 1, count: 1).write(to: file)
+            return file
+        }
+        let mover = BatchRecordingTrashMover()
+        let recorder = CleanupProgressRecorder()
+        let service = FileManagerCleanupService(trashMover: mover)
+
+        let result = await service.delete(
+            urls: files,
+            precomputedBytes: Dictionary(uniqueKeysWithValues: files.map { ($0, Int64(1)) }),
+            progress: { recorder.append($0) }
+        )
+
+        XCTAssertEqual(result.deletedCount, files.count)
+        XCTAssertTrue(recorder.events.contains { $0.phase == .preparing })
+        XCTAssertEqual(recorder.events.last?.phase, .movingToTrash)
+        XCTAssertEqual(recorder.events.last?.completedCount, files.count)
+        XCTAssertEqual(recorder.events.last?.totalCount, files.count)
+    }
+
     func testProtectedSystemContainerNeverReachesTrashMover() async {
         let protectedURL = SystemJunkPaths.containers.appending(path: "com.example.protected")
         let mover = RecordingTrashMover()
@@ -163,6 +198,32 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertTrue(mover.requests.isEmpty)
         XCTAssertEqual(result.failedURLs.map(\.0), [protectedURL.standardizedFileURL])
         XCTAssertTrue(result.failedURLs.first?.1 is CleanupError)
+    }
+
+    func testSingleTrashMoveAcceptsStandardizedSourceInWorkspaceResult() async throws {
+        let source = URL(fileURLWithPath: "/Users/test/.opencode/bin/opencode")
+        let destination = URL(fileURLWithPath: "/Users/test/.Trash/opencode")
+        let mover = StubTrashMover(result: TrashMoveResult(
+            destinationBySource: [source.standardizedFileURL: destination],
+            error: CocoaError(.fileWriteUnknown)
+        ))
+
+        try await mover.moveOneToTrash(source)
+    }
+
+    func testSingleTrashMoveReportsFailureWhenWorkspaceHasNoDestination() async {
+        let source = URL(fileURLWithPath: "/Users/test/.opencode/bin/opencode")
+        let mover = StubTrashMover(result: TrashMoveResult(
+            destinationBySource: [:],
+            error: CocoaError(.fileWriteNoPermission)
+        ))
+
+        do {
+            try await mover.moveOneToTrash(source)
+            XCTFail("Missing destination must be reported as a failure")
+        } catch {
+            XCTAssertEqual((error as NSError).code, CocoaError.Code.fileWriteNoPermission.rawValue)
+        }
     }
 }
 
@@ -206,5 +267,18 @@ private final class BatchRecordingTrashMover: TrashMoving, @unchecked Sendable {
             ),
             error: nil
         )
+    }
+}
+
+private final class CleanupProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedEvents: [CleanupProgress] = []
+
+    var events: [CleanupProgress] {
+        lock.withLock { recordedEvents }
+    }
+
+    func append(_ progress: CleanupProgress) {
+        lock.withLock { recordedEvents.append(progress) }
     }
 }

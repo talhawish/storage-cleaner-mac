@@ -11,7 +11,7 @@ enum PendingDockerAction: Identifiable, Sendable {
         switch self {
         case let .stopContainer(container): "stop.\(container.id)"
         case let .removeContainer(container): "remove-container.\(container.id)"
-        case let .removeImage(image): "remove-image.\(image.id)"
+        case let .removeImage(image): "remove-image.\(image.rowID)"
         case let .removeVolume(volume): "remove-volume.\(volume.name)"
         case .pruneBuilderCache: "prune-builder-cache"
         }

@@ -44,16 +44,21 @@ final class CLIInstalledBinariesTests: XCTestCase {
         XCTAssertTrue(InstalledBinaryCatalog.installedPrograms(in: [binDir]).isEmpty)
     }
 
-    func testSkipsSymlinksIntoHomebrewCellarAndNodeModules() throws {
+    func testSkipsSymlinksIntoPackageManagedInstalls() throws {
         let cellarBin = root.appendingPathComponent("Cellar/git/2.0/bin", isDirectory: true)
+        let caskBin = root.appendingPathComponent("Caskroom/ghostty/1.0/bin", isDirectory: true)
         let nodeBin = root.appendingPathComponent("lib/node_modules/firebase-tools/bin", isDirectory: true)
         try FileManager.default.createDirectory(at: cellarBin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: caskBin, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: nodeBin, withIntermediateDirectories: true)
         let git = cellarBin.appendingPathComponent("git")
+        let ghostty = caskBin.appendingPathComponent("ghostty")
         let firebase = nodeBin.appendingPathComponent("firebase")
         FileManager.default.createFile(atPath: git.path, contents: Data())
+        FileManager.default.createFile(atPath: ghostty.path, contents: Data())
         FileManager.default.createFile(atPath: firebase.path, contents: Data())
         try link("git", to: git)
+        try link("ghostty", to: ghostty)
         try link("firebase", to: firebase)
 
         XCTAssertTrue(InstalledBinaryCatalog.installedPrograms(in: [binDir]).isEmpty)

@@ -5,7 +5,7 @@ struct DeveloperStorageView: View {
     let onScan: () -> Void
     let onDelete: ([URL]) -> Void
     let onOpenFinding: (StorageFinding) -> Void
-    let onRemoveRuntimeVersions: ([URL]) async -> Void
+    let onRemoveRuntimeVersions: ([URL]) async -> CleanupResult
     let permissionHandler: (any StoragePermissionHandling)?
     var canUseProActions = true
     var onRequirePro: () -> Void = {}

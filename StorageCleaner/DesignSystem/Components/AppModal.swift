@@ -497,7 +497,10 @@ private struct AppModalActionButton: View {
 
     private var label: some View {
         HStack(spacing: 6) {
-            if let symbol = action.systemImage {
+            if isProcessing {
+                ProgressView()
+                    .controlSize(.small)
+            } else if let symbol = action.systemImage {
                 Image(systemName: symbol)
                     .accessibilityHidden(true)
             }

@@ -30,6 +30,14 @@ enum ProjectDependencyInventory {
         directories(in: project.path, scopes: project.dependencyScopes, fileManager: fileManager)
     }
 
+    static func unavailableDependenciesMessage(for project: ProjectInfo) -> String {
+        if project.dependencySize > 0 {
+            return "Previously scanned dependencies are no longer visible at \(project.path.path). "
+                + "Rescan the project and confirm Home Folder access before retrying."
+        }
+        return "No regenerable dependencies were found to reclaim."
+    }
+
     static func directories(
         in projectRoot: URL,
         scopes: [ProjectDependencyScope],

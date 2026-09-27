@@ -62,7 +62,7 @@ final class DockerViewModel {
         case let .removeContainer(container):
             result = await service.removeContainer(id: container.id)
         case let .removeImage(image):
-            result = await service.removeImage(id: image.id)
+            result = await service.removeImage(reference: image.removalReference)
         case let .removeVolume(volume):
             result = await service.removeVolume(name: volume.name)
         case .pruneBuilderCache:

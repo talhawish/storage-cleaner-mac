@@ -222,6 +222,45 @@ final class AppInventoryServiceTests: XCTestCase {
         )
     }
 
+    func testFileSizeRecursesForDirectories() throws {
+        let fixture = try AppBundleFixture.create(includeAppleDouble: false)
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let expected = AppInventoryService.directorySize(at: fixture.url, fileManager: .default)
+
+        XCTAssertEqual(
+            StorageFormatting.fileSize(at: fixture.url),
+            expected,
+            "The shared formatter must not report a directory's inode size as its content size."
+        )
+    }
+
+    func testScanInstalledAppsReadsConfiguredRootsAndBundleMetadata() async throws {
+        let fixture = try AppBundleFixture.create(includeAppleDouble: false)
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture.root) }
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": "com.example.fixture",
+            "CFBundleName": "Fixture"
+        ]
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: plist,
+            format: .xml,
+            options: 0
+        )
+        try data.write(to: fixture.url.appending(path: "Contents/Info.plist"))
+
+        let service = AppInventoryService(
+            directorySizer: { _ in 42 },
+            searchRoots: [fixture.root]
+        )
+        let apps = await service.scanInstalledApps()
+
+        XCTAssertEqual(apps.count, 1)
+        XCTAssertEqual(apps.first?.name, "Fixture")
+        XCTAssertEqual(apps.first?.bundleIdentifier, "com.example.fixture")
+        XCTAssertEqual(apps.first?.sizeBytes, 42)
+    }
+
     private func makeService(recorder: AppUninstallRecorder) -> AppInventoryService {
         AppInventoryService(
             uninstallAppBundle: { url in try recorder.remove(url) },

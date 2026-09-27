@@ -22,7 +22,9 @@ struct CleanupFailureSheet: View {
                 systemImage: "arrow.clockwise",
                 isProminent: true,
                 isDefault: true,
-                help: "Try moving the failed items to the Trash again",
+                help: prompt.route == .trash
+                    ? "Try moving the failed items to the Trash again"
+                    : "Try removing the failed items again",
                 action: onRetry
             ),
             cancel: AppModalActionBar.CancelAction(

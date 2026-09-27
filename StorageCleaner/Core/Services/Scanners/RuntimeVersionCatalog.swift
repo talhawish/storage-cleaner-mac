@@ -221,6 +221,29 @@ extension RuntimeVersionCatalog {
         ]
     }
 
+    /// User-home storage roots represented by runtime-version findings. The general
+    /// folder inventory excludes these paths so it cannot count a runtime once as
+    /// a managed version and again as an unfamiliar folder.
+    static func homeStorageRoots(home: URL) -> [URL] {
+        let paths = [
+            ".asdf/installs",
+            ".asdf-vm/installs",
+            ".local/share/asdf-vm/installs",
+            ".sdkman/candidates",
+            ".local/share/mise/installs",
+            ".local/share/rtx/installs",
+            ".bun/install/install",
+            ".deno/bin",
+            ".stack/programs",
+            "Library/Application Support/Herd",
+            "development/flutter",
+            "flutter",
+            "fvm/versions"
+        ]
+        return managerDescriptors(home: home).map(\.base)
+            + paths.map { home.appendingPathComponent($0, isDirectory: true) }
+    }
+
     /// Maps an asdf plugin directory name to a runtime.
     static let asdfPluginMap: [String: DevRuntime] = [
         "nodejs": .node, "node": .node, "python": .python, "ruby": .ruby,

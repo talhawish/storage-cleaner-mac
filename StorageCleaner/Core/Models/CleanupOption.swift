@@ -90,12 +90,12 @@ enum CleanupOptionsRegistry {
         CleanupOption(
             id: "gradle-cache",
             name: "Gradle & Maven Cache",
-            description: "Gradle build cache, Maven repository, and downloaded dependencies",
+            description: "Gradle build caches and wrapper distributions, plus downloaded Maven dependencies",
             icon: "chevron.left.forwardslash.chevron.right",
             iconColor: "indigo",
             domain: .mobileDevelopment,
             safety: .review,
-            paths: ["~/.gradle/caches", "~/.m2/repository"],
+            paths: DependencyPaths.Gradle.cacheDirStrings,
             isSafeByDefault: false,
             category: .developerTools,
             storageKind: .gradleDependencies
@@ -276,11 +276,7 @@ enum CleanupOptionsRegistry {
             iconColor: "violet",
             domain: .artificialIntelligence,
             safety: .review,
-            paths: [
-                "~/.ollama/models",
-                "~/.cache/huggingface",
-                "~/Library/Application Support/LM Studio"
-            ],
+            paths: DependencyPaths.ArtificialIntelligence.cacheDirs.map(\.path),
             isSafeByDefault: false,
             category: .caches,
             storageKind: .aiModelCaches

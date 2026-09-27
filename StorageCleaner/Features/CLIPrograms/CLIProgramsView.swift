@@ -4,7 +4,7 @@ struct CLIProgramsView: View {
     let findings: [StorageFinding]
     let emptyStateMessage: String
     let onScan: () -> Void
-    let onRemove: ([URL]) async -> Void
+    let onRemove: ([URL]) async -> CleanupResult
     let permissionHandler: (any StoragePermissionHandling)?
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
@@ -16,7 +16,8 @@ struct CLIProgramsView: View {
     @State private var sizes: [URL: Int64] = [:]
     @State private var isLoading = true
     @State private var detailProgram: CLIProgram?
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isRemoving = false
     @State private var loadTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
@@ -91,19 +92,13 @@ struct CLIProgramsView: View {
         .onAppear { startLoading() }
         .onChange(of: rootsKey, initial: false) { _, _ in startLoading() }
         .onDisappear { cancelLoading() }
-        .sheet(isPresented: $showDeleteConfirmation) {
+        .sheet(item: $cleanupRequest) { request in
             DeleteConfirmationSheet(
-                selectedURLs: Array(selectedURLs),
-                totalBytes: selectedBytes,
-                onDelete: {
-                    let urls = Array(selectedURLs)
-                    selectedURLs.removeAll()
-                    Task {
-                        await onRemove(urls)
-                        startLoading()
-                    }
-                },
-                onCancel: { showDeleteConfirmation = false }
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                mode: .cliPrograms,
+                onDelete: { performRemoval(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
         .sheet(item: $detailProgram) { program in
@@ -117,7 +112,7 @@ struct CLIProgramsView: View {
 
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            if !selectedURLs.isEmpty {
+            if !selectedURLs.isEmpty && !isRemoving {
                 Button {
                     requestDeleteConfirmation()
                 } label: {
@@ -162,9 +157,25 @@ struct CLIProgramsView: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
 
+            if isRemoving {
+                ProgressView("Removing selected tools…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 12)
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+
             selectionBar
 
-            programList
+            if filteredPrograms.isEmpty, !searchText.isEmpty {
+                SearchResultsEmptyState(
+                    itemLabel: "tools",
+                    searchText: searchText,
+                    onClear: { searchText = "" }
+                )
+            } else {
+                programList
+            }
         }
     }
 
@@ -244,6 +255,7 @@ struct CLIProgramsView: View {
         .padding(.vertical, 10)
         .background(.regularMaterial)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: selectedURLs.count)
+        .disabled(isRemoving)
     }
 
     private var programList: some View {
@@ -274,6 +286,7 @@ struct CLIProgramsView: View {
         }
         .listStyle(.inset(alternatesRowBackgrounds: true))
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: filteredPrograms.count)
+        .disabled(isRemoving)
     }
 
     private var emptyState: some View {
@@ -361,7 +374,20 @@ private extension CLIProgramsView {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        guard !isRemoving else { return }
+        cleanupRequest = FileCleanupRequest(urls: selectedURLs, totalBytes: selectedBytes)
+    }
+
+    func performRemoval(_ request: FileCleanupRequest) {
+        guard !isRemoving else { return }
+        cleanupRequest = nil
+        isRemoving = true
+        Task { @MainActor in
+            let result = await onRemove(request.urls)
+            selectedURLs.subtract(result.deletedItems.map(\.originalURL))
+            isRemoving = false
+            startLoading()
+        }
     }
 
     /// Two-phase load: first discover and publish the program list so it appears
@@ -385,17 +411,27 @@ private extension CLIProgramsView {
 
         guard !Task.isCancelled else { return }
         programs = discovered
+        selectedURLs.formIntersection(Set(discovered.map(\.url)))
         isLoading = false
 
         // Phase 2 — measure on-disk sizes.
         let urls = discovered.map(\.url)
         let measured = await Task.detached(priority: .utility) {
-            var sizes: [URL: Int64] = [:]
-            for url in urls {
-                if Task.isCancelled { break }
-                sizes[url] = StorageFormatting.itemSize(at: url)
+            await withTaskGroup(of: (URL, Int64)?.self, returning: [URL: Int64].self) { group in
+                for url in urls {
+                    group.addTask {
+                        guard !Task.isCancelled else { return nil }
+                        return (url, StorageFormatting.itemSize(at: url))
+                    }
+                }
+
+                var sizes: [URL: Int64] = [:]
+                for await result in group {
+                    guard let result else { continue }
+                    sizes[result.0] = result.1
+                }
+                return sizes
             }
-            return sizes
         }.value
 
         guard !Task.isCancelled else { return }

@@ -29,7 +29,7 @@ const sections = [
     body: [
       'The App stores the following data on your device, inside its sandbox:',
       '· SwiftData history of scans, findings, and cleanup audit records.',
-      '· Your preferences (thresholds, ignore rules, scheduled scan settings).',
+      '· Your preferences (thresholds, scan scope, appearance, and Quick Clean selections).',
       'You can clear this data at any time from Settings → Reset. Uninstalling the App removes it entirely.'
     ]
   },
@@ -37,9 +37,8 @@ const sections = [
     title: '3. macOS permissions',
     body: [
       'The App requests the minimum permissions needed to function. These permissions are managed by macOS, not by us:',
-      '· Folder access — used to inventory files only in the home folder or other locations you explicitly select.',
-      '· Media Library — used to identify large and duplicate media files, such as videos and old screen recordings, so you can review them before choosing what to move to Trash. Media analysis stays on your Mac; the App does not read your Apple Music listening history or modify your music library.',
-      '· Automation (AppleScript) — used to invoke xcrun simctl runtime delete when you choose to remove an Apple simulator runtime.',
+      '· Folder access — used to inventory files only in your Home folder or other locations you explicitly select, including /Applications when you open the Applications screen.',
+      '· Developer tool commands — used to inspect and remove Apple simulator runtimes through Xcode’s xcrun simctl command when you choose that action. No Automation permission is requested.',
       'No permission is used to access or transmit data off your device.'
     ]
   },

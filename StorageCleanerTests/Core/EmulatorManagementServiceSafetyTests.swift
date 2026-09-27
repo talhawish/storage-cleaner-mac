@@ -19,7 +19,7 @@ final class EmulatorManagementServiceSafetyTests: XCTestCase {
         let result = await service.remove([simulator])
 
         XCTAssertEqual(result.removedCount, 0)
-        XCTAssertFalse(recorder.commands.contains(["simctl", "delete", udid]))
+        XCTAssertFalse(recorder.commands.contains(["delete", udid]))
     }
 
     func testRemovesSimulatorDevicesBeforeTheirRuntime() async {
@@ -56,8 +56,8 @@ final class EmulatorManagementServiceSafetyTests: XCTestCase {
         XCTAssertEqual(
             recorder.commands,
             [
-                ["simctl", "delete", "device-id"],
-                ["simctl", "runtime", "delete", "runtime-id"]
+                ["delete", "device-id"],
+                ["runtime", "delete", "runtime-id"]
             ]
         )
     }
@@ -93,15 +93,15 @@ private func makeSafetyService(
     EmulatorManagementService(
         runCommand: { _, arguments in
             recorder.commands.append(arguments)
-            if arguments == ["simctl", "runtime", "list", "-j"] {
+            if arguments == ["runtime", "list", "-j"] {
                 return .init(exitCode: 0, output: "{}")
             }
-            if arguments == ["simctl", "list", "devices", "-j"] {
+            if arguments == ["list", "devices", "-j"] {
                 return .init(exitCode: 0, output: devicesJSON)
             }
             return .init(exitCode: 0, output: "")
         },
-        locateXcrun: { URL(fileURLWithPath: "/usr/bin/xcrun") },
+        locateSimctl: { URL(fileURLWithPath: "/Applications/Xcode.app/Contents/Developer/usr/bin/simctl") },
         androidSystemImagesRoot: { nil },
         appleDeviceSupportRoots: { [] },
         readDeviceSupportVersion: { _ in nil },

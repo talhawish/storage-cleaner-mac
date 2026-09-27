@@ -5,6 +5,33 @@ import Foundation
 /// app-wide failure sheet, Quick Clean — describes outcomes with the same
 /// wording and recovery guidance.
 struct CleanupFeedback {
+    enum Operation {
+        case trash
+        case cliPrograms
+        case runtimeVersions
+
+        var successDescription: String {
+            switch self {
+            case .trash: "moved to Trash"
+            case .cliPrograms, .runtimeVersions: "removed"
+            }
+        }
+
+        var failureDescription: String {
+            switch self {
+            case .trash: "moved to Trash"
+            case .cliPrograms, .runtimeVersions: "removed"
+            }
+        }
+
+        var retryTitle: String {
+            switch self {
+            case .trash: "Retry Move"
+            case .cliPrograms, .runtimeVersions: "Retry Removal"
+            }
+        }
+    }
+
     let title: String
     let message: String
     let confirmTitle: String
@@ -20,24 +47,31 @@ struct CleanupFeedback {
         )
     }
 
-    static func failed(result: CleanupResult) -> CleanupFeedback {
+    static func failed(result: CleanupResult, operation: Operation = .trash) -> CleanupFeedback {
         let failedCount = result.failedCount
         let failedLabel = Self.itemLabel(failedCount)
         let recovery = Self.recoveryMessage(from: result)
-        let message: String
+        let allNeedPermission = !result.failedURLs.isEmpty
+            && result.failedURLs.allSatisfy { Self.isPermissionError($0.1) }
+        let failureSummary = allNeedPermission
+            ? "\(failedCount) \(failedLabel) still \(Self.needsVerb(failedCount)) permission."
+            : "\(failedCount) \(failedLabel) could not be \(operation.failureDescription)."
 
+        let message: String
         if result.deletedCount > 0 {
             let movedLabel = result.deletedCount == 1 ? "item was" : "items were"
-            message = "\(result.deletedCount) \(movedLabel) moved to Trash. "
-                + "\(failedCount) \(failedLabel) still \(Self.needsVerb(failedCount)) permission. \(recovery)"
+            message = "\(result.deletedCount) \(movedLabel) \(operation.successDescription). "
+                + "\(failureSummary) \(recovery)"
         } else {
-            message = "\(failedCount) \(failedLabel) could not be moved to Trash. \(recovery)"
+            message = "\(failedCount) \(failedLabel) could not be \(operation.failureDescription). \(recovery)"
         }
 
         return CleanupFeedback(
-            title: "\(failedCount) \(failedLabel) \(Self.needsVerb(failedCount)) permission",
+            title: allNeedPermission
+                ? "\(failedCount) \(failedLabel) \(Self.needsVerb(failedCount)) permission"
+                : "\(failedCount) \(failedLabel) could not be removed",
             message: message,
-            confirmTitle: "Retry Move",
+            confirmTitle: operation.retryTitle,
             cancelTitle: "Done"
         )
     }
@@ -51,14 +85,27 @@ struct CleanupFeedback {
     }
 
     private static func recoveryMessage(from result: CleanupResult) -> String {
-        let fallback = "Grant Full Disk Access in System Settings, choose your Home folder again, "
-            + "then retry."
-        guard let error = result.failedURLs.first?.1 else { return fallback }
+        guard let error = result.failedURLs.first?.1 else { return "Check access and retry." }
         if case CleanupError.containerAuthorizationRequired = error {
             return "Retry, then approve the macOS request to access protected app data."
         }
         let description = error.localizedDescription
-        guard !description.isEmpty else { return fallback }
-        return description + " " + fallback
+        if Self.isPermissionError(error) {
+            return description + " Check Storage Cleaner's access to this location, then retry."
+        }
+        return description
+    }
+
+    private static func isPermissionError(_ error: Error) -> Bool {
+        if case let CleanupError.deletionFailed(_, underlying) = error {
+            return isPermissionError(underlying)
+        }
+        if case CleanupError.containerAuthorizationRequired = error { return true }
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain {
+            let code = CocoaError.Code(rawValue: nsError.code)
+            return code == .fileWriteNoPermission || code == .fileReadNoPermission
+        }
+        return nsError.domain == NSPOSIXErrorDomain && (nsError.code == EACCES || nsError.code == EPERM)
     }
 }

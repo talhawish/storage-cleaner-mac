@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2660"
+   LastUpgradeVersion = "2700"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -110,7 +110,7 @@
          </BuildableReference>
       </BuildableProductRunnable>
       <StoreKitConfigurationFileReference
-         identifier = "StorageCleaner/Resources/StorageCleanerPro.storekit">
+         identifier = "../../StorageCleaner/Resources/StorageCleanerPro.storekit">
       </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction

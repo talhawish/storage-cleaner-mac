@@ -34,7 +34,12 @@ final class DeveloperDomainsTests: XCTestCase {
             finding(.aiModelCaches, .artificialIntelligence)
         ]
 
-        XCTAssertEqual(DeveloperDomains.detected(in: findings), [.artificialIntelligence])
+        XCTAssertTrue(DeveloperDomains.detected(in: findings).isEmpty)
+    }
+
+    func testAIModelStoresHaveADedicatedSection() {
+        XCTAssertFalse(DeveloperDomains.kinds.contains(.aiModelCaches))
+        XCTAssertEqual(AppSection.aiModels.filterKinds, [.aiModelCaches, .localAIModels])
     }
 
     func testNonDeveloperAndCLIToolingDomainsAreNotSurfaced() {
@@ -55,5 +60,13 @@ final class DeveloperDomainsTests: XCTestCase {
         let findings = [finding(.runtimeVersions, .otherCaches)]
         XCTAssertEqual(DeveloperDomains.detected(in: findings), [.otherCaches])
         XCTAssertTrue(DeveloperDomains.kinds.contains(.runtimeVersions))
+    }
+
+    func testLooseAndroidPackagesStayInLeftoversInsteadOfDeveloperScan() {
+        XCTAssertFalse(DeveloperDomains.kinds.contains(.androidPackages))
+        XCTAssertTrue(AppSection.leftovers.filterKinds.contains(.androidPackages))
+        XCTAssertTrue(DeveloperDomains.detected(in: [
+            finding(.androidPackages, .mobileDevelopment)
+        ]).isEmpty)
     }
 }

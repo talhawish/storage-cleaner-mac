@@ -5,7 +5,7 @@ const tiers = [
     price: '$0',
     cadence: 'forever',
     note: '',
-    summary: 'Full scan, full inventory, full preview. Clean what you want, when you want.',
+    summary: 'Full scan, full inventory, and full preview. Understand your storage before deciding what to do.',
     cta: 'Download',
     href: '#download',
     primary: false,
@@ -13,8 +13,8 @@ const tiers = [
     features: [
       'Unlimited read-only scans',
       'All 15+ storage domains',
-      'Manual Trash cleanup',
-      'Full audit log',
+      'Detailed cleanup history',
+      'Review-first safety controls',
       'macOS 14 Sonoma or later'
     ]
   },
@@ -23,7 +23,7 @@ const tiers = [
     price: '$4.99',
     cadence: 'per month',
     note: 'Billed monthly · cancel anytime',
-    summary: 'One-click Quick Clean, scheduled scans, and per-domain rules — pay as you go.',
+    summary: 'One-click Quick Clean and cleanup actions across every supported category — pay as you go.',
     cta: 'Start monthly',
     href: '#download',
     primary: false,
@@ -31,10 +31,9 @@ const tiers = [
     features: [
       'Everything in Free',
       'One-click Quick Clean',
-      'Scheduled background scans',
-      'Custom size & inactivity thresholds',
-      'Per-domain keep / ignore rules',
-      'Exportable audit history'
+      'Move selected items to Trash',
+      'Configurable size & inactivity thresholds',
+      'Detailed cleanup history'
     ]
   },
   {
@@ -87,10 +86,9 @@ const tiers = [
           Free forever, Pro when you need it.
         </h2>
         <p class="lede mt-4 text-pretty">
-          The scanner and inventory are unrestricted. Pro unlocks the
-          automation and policy tools for developers who want cleaning to
-          happen quietly, in the background. Pick the plan that fits — or
-          pay once and never think about it again.
+          The scanner and inventory are unrestricted. Pro unlocks one-click
+          cleanup and moves the items you select to Trash. Pick the plan that
+          fits — or pay once and never think about it again.
         </p>
       </div>
 

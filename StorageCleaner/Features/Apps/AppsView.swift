@@ -3,6 +3,7 @@ import SwiftUI
 struct AppsView: View {
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
+    private let permissionHandler: (any StoragePermissionHandling)?
 
     @State private var apps: [AppItem] = []
     @State private var isLoading = true
@@ -10,10 +11,22 @@ struct AppsView: View {
     @State private var sortOption: SortOption = .sizeDesc
     @State private var appToDelete: AppItem?
     @State private var loadTask: Task<Void, Never>?
+    @State private var applicationsAccessRequired = false
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
-    private let inventoryService = AppInventoryService()
+    private let inventoryService: AppInventoryService
+
+    init(
+        canUseProActions: Bool = true,
+        onRequirePro: @escaping () -> Void = {},
+        permissionHandler: (any StoragePermissionHandling)? = nil
+    ) {
+        self.canUseProActions = canUseProActions
+        self.onRequirePro = onRequirePro
+        self.permissionHandler = permissionHandler
+        self.inventoryService = AppInventoryService(permissionHandler: permissionHandler)
+    }
 
     enum SortOption: String, CaseIterable {
         case sizeDesc = "Largest First"
@@ -45,7 +58,11 @@ struct AppsView: View {
             if isLoading {
                 loadingView
             } else if apps.isEmpty {
-                emptyState
+                if applicationsAccessRequired {
+                    applicationsAccessState
+                } else {
+                    emptyState
+                }
             } else {
                 appList
             }
@@ -143,22 +160,42 @@ struct AppsView: View {
 
             statsBar
 
-            List {
-                Section {
-                    ForEach(filteredApps) { app in
-                        AppRowView(
-                            app: app,
-                            onReveal: { inventoryService.revealInFinder(app) },
-                            onUninstall: { requestUninstall(app) },
-                            canUseProActions: canUseProActions
-                        )
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
+            if filteredApps.isEmpty, !searchText.isEmpty {
+                SearchResultsEmptyState(
+                    itemLabel: "applications",
+                    searchText: searchText,
+                    onClear: { searchText = "" }
+                )
+            } else {
+                List {
+                    Section {
+                        ForEach(filteredApps) { app in
+                            AppRowView(
+                                app: app,
+                                onReveal: { inventoryService.revealInFinder(app) },
+                                onUninstall: { requestUninstall(app) },
+                                canUseProActions: canUseProActions
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
+                        }
                     }
                 }
+                .listStyle(.plain)
             }
-            .listStyle(.plain)
         }
+    }
+
+    private var applicationsAccessState: some View {
+        EmptyStateView(
+            title: "Applications access required",
+            message: "Choose /Applications so Storage Cleaner can inventory installed apps without "
+                + "guessing about app data.",
+            systemImage: "lock.app.dashed",
+            tint: AppTheme.accent,
+            actionTitle: "Grant Applications Access",
+            action: requestApplicationsAccess
+        )
     }
 
     private var statsBar: some View {
@@ -180,6 +217,16 @@ struct AppsView: View {
 
     private func loadApps() async {
         isLoading = true
+        if let permissionHandler,
+           !permissionHandler.requestApplicationsFolderAccess(
+               for: URL(fileURLWithPath: "/Applications", isDirectory: true)
+           ) {
+            applicationsAccessRequired = true
+            isLoading = false
+            loadTask = nil
+            return
+        }
+        applicationsAccessRequired = false
         let found = await inventoryService.scanInstalledApps()
         guard !Task.isCancelled else { return }
         apps = found
@@ -196,6 +243,10 @@ struct AppsView: View {
         loadTask?.cancel()
         loadTask = nil
         isLoading = false
+    }
+
+    private func requestApplicationsAccess() {
+        startLoadingApps()
     }
 
     private func uninstallApp(_ app: AppItem) async throws {

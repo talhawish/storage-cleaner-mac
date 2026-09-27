@@ -33,6 +33,49 @@ final class FileSystemPermissionServiceTests: XCTestCase {
         XCTAssertEqual(service.currentStatuses().first?.state, .accessible)
     }
 
+    @MainActor
+    func testStoresAndResolvesApplicationsBookmark() throws {
+        let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
+        let applications = home.appending(path: "Applications", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: true)
+        let store = InMemoryBookmarkDataStore()
+        let service = FileSystemPermissionService(
+            bookmarkStore: store,
+            picker: FixedHomeFolderPicker(selectedURL: home),
+            applicationsPicker: FixedApplicationsFolderPicker(selectedURL: applications),
+            homeDirectory: home
+        )
+
+        XCTAssertTrue(service.requestApplicationsFolderAccess(for: applications))
+        XCTAssertNotNil(
+            store.data(forKey: "ApplicationsFolderSecurityScopedBookmark.\(applications.path)")
+        )
+        let access = service.beginApplicationsFolderAccess(for: applications)
+        XCTAssertNotNil(access)
+        access?.stop()
+    }
+
+    @MainActor
+    func testRejectsApplicationsSelectionOutsideRequestedRoot() throws {
+        let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
+        let applications = home.appending(path: "Applications", directoryHint: .isDirectory)
+        let otherFolder = temporaryDirectory.appending(path: "Other", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: otherFolder, withIntermediateDirectories: true)
+        let store = InMemoryBookmarkDataStore()
+        let service = FileSystemPermissionService(
+            bookmarkStore: store,
+            picker: FixedHomeFolderPicker(selectedURL: home),
+            applicationsPicker: FixedApplicationsFolderPicker(selectedURL: otherFolder),
+            homeDirectory: home
+        )
+
+        XCTAssertFalse(service.requestApplicationsFolderAccess(for: applications))
+        XCTAssertNil(
+            store.data(forKey: "ApplicationsFolderSecurityScopedBookmark.\(applications.path)")
+        )
+    }
+
     func testAcceptsHomeOnlyBookmark() throws {
         let home = temporaryDirectory.appending(path: "home", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
@@ -195,6 +238,15 @@ private struct FixedHomeFolderPicker: HomeFolderPicking {
 
     @MainActor
     func pickHomeFolder(defaultURL: URL) -> URL? {
+        selectedURL
+    }
+}
+
+private struct FixedApplicationsFolderPicker: ApplicationsFolderPicking {
+    let selectedURL: URL?
+
+    @MainActor
+    func pickApplicationsFolder(defaultURL: URL) -> URL? {
         selectedURL
     }
 }

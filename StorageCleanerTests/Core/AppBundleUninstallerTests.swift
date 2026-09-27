@@ -3,6 +3,24 @@ import XCTest
 @testable import StorageCleaner
 
 final class AppBundleUninstallerTests: XCTestCase {
+    func testOnlyDirectApplicationsChildrenAreSupported() {
+        XCTAssertTrue(
+            AppBundleUninstaller.supportsAppTrashRemoval(
+                for: URL(fileURLWithPath: "/Applications/Cleaner.app")
+            )
+        )
+        XCTAssertFalse(
+            AppBundleUninstaller.supportsAppTrashRemoval(
+                for: URL(fileURLWithPath: "/Applications/Parent.app/Contents/Resources/Child.app")
+            )
+        )
+        XCTAssertFalse(
+            AppBundleUninstaller.supportsAppTrashRemoval(
+                for: URL(fileURLWithPath: "/Applications-Backup/Cleaner.app")
+            )
+        )
+    }
+
     func testDirectMoveToTrashUsesExactAppBundle() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
         let recorder = AppBundleUninstallerRecorder()
@@ -24,10 +42,10 @@ final class AppBundleUninstallerTests: XCTestCase {
 
         XCTAssertEqual(recorder.trashRequests, [app.standardizedFileURL])
         XCTAssertEqual(recorder.userAccessTrashRequests, [app.standardizedFileURL])
-        XCTAssertTrue(recorder.adminTrashRequests.isEmpty)
+        XCTAssertTrue(recorder.workspaceTrashRequests.isEmpty)
     }
 
-    func testPermissionDeniedAfterApplicationsAccessFallsBackToAdministratorAuthorization() async throws {
+    func testPermissionDeniedAfterApplicationsAccessFallsBackToWorkspaceRecycle() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
         let permissionError = CocoaError(.fileWriteNoPermission)
         let recorder = AppBundleUninstallerRecorder(
@@ -40,23 +58,23 @@ final class AppBundleUninstallerTests: XCTestCase {
 
         XCTAssertEqual(recorder.trashRequests, [app.standardizedFileURL])
         XCTAssertEqual(recorder.userAccessTrashRequests, [app.standardizedFileURL])
-        XCTAssertEqual(recorder.adminTrashRequests, [app.standardizedFileURL])
+        XCTAssertEqual(recorder.workspaceTrashRequests, [app.standardizedFileURL])
     }
 
-    func testAdministratorAuthorizationRequirementIsPreserved() async throws {
+    func testWorkspaceAuthorizationRequirementIsPreserved() async throws {
         let app = URL(fileURLWithPath: "/Applications/Cleaner.app", isDirectory: true)
         let permissionError = CocoaError(.fileWriteNoPermission)
         let authorizationError = AppBundleUninstallerError.authorizationRequired(app.standardizedFileURL)
         let recorder = AppBundleUninstallerRecorder(
             trashError: permissionError,
             userAccessTrashError: permissionError,
-            adminTrashError: authorizationError
+            workspaceTrashError: authorizationError
         )
         let uninstaller = makeUninstaller(recorder: recorder)
 
         do {
             try await uninstaller.uninstall(app)
-            XCTFail("Expected administrator-owned app to require Finder authorization.")
+            XCTFail("Expected workspace recycle authorization requirement to be preserved.")
         } catch let error as AppBundleUninstallerError {
             guard case let .authorizationRequired(url) = error else {
                 return XCTFail("Expected authorizationRequired error, got \(error).")
@@ -82,18 +100,6 @@ final class AppBundleUninstallerTests: XCTestCase {
 
         XCTAssertTrue(recorder.trashRequests.isEmpty)
         XCTAssertTrue(recorder.userAccessTrashRequests.isEmpty)
-    }
-
-    func testFinderTrashScriptDelegatesToFinderWithoutShellEscalation() {
-        let app = URL(fileURLWithPath: "/Applications/O'Reilly \"VPN\".app", isDirectory: true)
-
-        let script = AppBundleUninstaller.finderTrashScript(for: app)
-
-        XCTAssertTrue(script.contains("tell application id \"com.apple.finder\""))
-        XCTAssertTrue(script.contains("delete POSIX file targetPath"))
-        XCTAssertFalse(script.contains("do shell script"))
-        XCTAssertFalse(script.contains("administrator privileges"))
-        XCTAssertTrue(script.contains("O'Reilly \\\"VPN\\\".app"))
     }
 
     func testNonPermissionFailureIsPreserved() async throws {
@@ -138,7 +144,7 @@ final class AppBundleUninstallerTests: XCTestCase {
         AppBundleUninstaller(
             moveToTrashDirectly: { url in try recorder.moveToTrash(url) },
             moveToTrashWithUserSelectedAccess: { url in try recorder.moveToTrashWithUserAccess(url) },
-            moveToTrashWithAdminAuthorization: { url in try recorder.moveToTrashWithAdmin(url) }
+            moveToTrashWithWorkspace: { url in try recorder.moveToTrashWithWorkspace(url) }
         )
     }
 }
@@ -147,19 +153,19 @@ private final class AppBundleUninstallerRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private let trashError: Error?
     private let userAccessTrashError: Error?
-    private let adminTrashError: Error?
+    private let workspaceTrashError: Error?
     private var _trashRequests: [URL] = []
     private var _userAccessTrashRequests: [URL] = []
-    private var _adminTrashRequests: [URL] = []
+    private var _workspaceTrashRequests: [URL] = []
 
     init(
         trashError: Error? = nil,
         userAccessTrashError: Error? = nil,
-        adminTrashError: Error? = nil
+        workspaceTrashError: Error? = nil
     ) {
         self.trashError = trashError
         self.userAccessTrashError = userAccessTrashError
-        self.adminTrashError = adminTrashError
+        self.workspaceTrashError = workspaceTrashError
     }
 
     var trashRequests: [URL] {
@@ -170,8 +176,8 @@ private final class AppBundleUninstallerRecorder: @unchecked Sendable {
         lock.withLock { _userAccessTrashRequests }
     }
 
-    var adminTrashRequests: [URL] {
-        lock.withLock { _adminTrashRequests }
+    var workspaceTrashRequests: [URL] {
+        lock.withLock { _workspaceTrashRequests }
     }
 
     func moveToTrash(_ url: URL) throws {
@@ -188,10 +194,10 @@ private final class AppBundleUninstallerRecorder: @unchecked Sendable {
         }
     }
 
-    func moveToTrashWithAdmin(_ url: URL) throws {
+    func moveToTrashWithWorkspace(_ url: URL) throws {
         try lock.withLock {
-            _adminTrashRequests.append(url)
-            if let adminTrashError { throw adminTrashError }
+            _workspaceTrashRequests.append(url)
+            if let workspaceTrashError { throw workspaceTrashError }
         }
     }
 }

@@ -231,8 +231,9 @@ struct FileRowView: View {
         guard metadata == nil else { return }
         let url = url
         let precomputed = precomputedBytes
+        let categoryKind = findingKind
         let loaded = await Task.detached(priority: .utility) {
-            DetailFileMetadata.load(for: url, precomputedBytes: precomputed)
+            DetailFileMetadata.load(for: url, precomputedBytes: precomputed, findingKind: categoryKind)
         }.value
         guard !Task.isCancelled else { return }
         loadedMetadata = loaded

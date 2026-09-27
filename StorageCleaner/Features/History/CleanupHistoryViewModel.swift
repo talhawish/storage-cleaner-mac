@@ -228,7 +228,8 @@ private extension StorageFindingKind {
         case .browserCaches: .browserData
         case .dockerArtifacts: .containers
         case .flutterArtifacts, .reactNativeArtifacts, .androidStudioArtifacts, .androidPackages: .mobileDevelopment
-        case .aiModelCaches: .artificialIntelligence
+        case .aiModelCaches, .localAIModels: .artificialIntelligence
+        case .largeFolders: .otherCaches
         case .largeFiles, .largeVideos, .screenRecordings: .media
         case .largePhotos, .duplicatePhotos: .photos
         case .duplicateDocuments, .junkFiles: .documents

@@ -7,7 +7,7 @@ import SwiftUI
 /// Discovery is live (independent of a storage scan) and two-phase — the grouped list appears
 /// immediately, then on-disk sizes fill in — mirroring `CLIProgramsView`.
 struct RuntimeVersionsView: View {
-    let onRemove: ([URL]) async -> Void
+    let onRemove: ([URL]) async -> CleanupResult
     let permissionHandler: (any StoragePermissionHandling)?
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
@@ -15,7 +15,8 @@ struct RuntimeVersionsView: View {
     @State private var groups: [RuntimeVersionGroup] = []
     @State private var selectedURLs: Set<URL> = []
     @State private var isLoading = true
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isRemoving = false
     @State private var loadTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
@@ -48,20 +49,13 @@ struct RuntimeVersionsView: View {
         .toolbar { toolbarContent }
         .onAppear { startLoading() }
         .onDisappear { cancelLoading() }
-        .sheet(isPresented: $showDeleteConfirmation) {
+        .sheet(item: $cleanupRequest) { request in
             DeleteConfirmationSheet(
-                selectedURLs: Array(selectedURLs),
-                totalBytes: selectedBytes,
-                onDelete: {
-                    let urls = Array(selectedURLs)
-                    selectedURLs.removeAll()
-                    showDeleteConfirmation = false
-                    Task {
-                        await onRemove(urls)
-                        startLoading()
-                    }
-                },
-                onCancel: { showDeleteConfirmation = false }
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                mode: .runtimeVersions,
+                onDelete: { performRemoval(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
     }
@@ -74,7 +68,7 @@ struct RuntimeVersionsView: View {
 
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            if !selectedURLs.isEmpty {
+            if !selectedURLs.isEmpty && !isRemoving {
                 Button {
                     requestDeleteConfirmation()
                 } label: {
@@ -100,6 +94,11 @@ struct RuntimeVersionsView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            if isRemoving {
+                ProgressView("Removing runtime versions…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
             selectionBar
             ScrollView {
                 LazyVStack(spacing: 14) {
@@ -114,6 +113,7 @@ struct RuntimeVersionsView: View {
                 }
                 .padding(20)
             }
+            .disabled(isRemoving)
         }
     }
 
@@ -248,7 +248,20 @@ private extension RuntimeVersionsView {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        guard !isRemoving else { return }
+        cleanupRequest = FileCleanupRequest(urls: selectedURLs, totalBytes: selectedBytes)
+    }
+
+    func performRemoval(_ request: FileCleanupRequest) {
+        guard !isRemoving else { return }
+        cleanupRequest = nil
+        isRemoving = true
+        Task { @MainActor in
+            let result = await onRemove(request.urls)
+            selectedURLs.subtract(result.deletedItems.map(\.originalURL))
+            isRemoving = false
+            startLoading()
+        }
     }
 
     /// Two-phase load: discover groups (fast) then measure on-disk sizes in the background.

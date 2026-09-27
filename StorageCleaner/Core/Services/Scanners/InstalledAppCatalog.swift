@@ -19,11 +19,17 @@ struct InstalledAppCatalog: Sendable {
     /// Lowercased folder/file names considered "owned" by an installed app. Used as a fallback
     /// when an app has no usable `CFBundleIdentifier` (older or unsigned bundles).
     let directoryNames: Set<String>
+    /// `false` means at least one install root was protected by the sandbox/TCC. In that state
+    /// orphan scanners must not infer that an app's Library data is abandoned.
+    let isComplete: Bool
 
     static let defaultSearchRoots: [URL] = {
         var roots: [URL] = []
         roots.append(URL(fileURLWithPath: "/Applications", isDirectory: true))
         roots.append(URL(fileURLWithPath: "/Applications/Utilities", isDirectory: true))
+        roots.append(URL(fileURLWithPath: "/System/Applications", isDirectory: true))
+        roots.append(URL(fileURLWithPath: "/System/Applications/Utilities", isDirectory: true))
+        roots.append(URL(fileURLWithPath: "/System/Library/CoreServices/Applications", isDirectory: true))
         let home = UserHomeDirectory.url
         roots.append(home.appending(path: "Applications", directoryHint: .isDirectory))
         return roots
@@ -41,13 +47,19 @@ struct InstalledAppCatalog: Sendable {
             SystemJunkPaths.alwaysInstalledBundleIDs.map { Self.directoryName(for: $0) }
         )
 
+        var isComplete = true
         for root in searchRoots {
+            if DirectoryAccessProbe.state(of: root) == .denied {
+                isComplete = false
+                continue
+            }
             Self.collect(from: root, into: &bundleIDs, directoryNames: &directoryNames)
         }
 
         // Pre-lowercase so ownsLibraryEntry is a constant-time Set lookup.
         self.bundleIDs = Set(bundleIDs.lazy.map { $0.lowercased() })
         self.directoryNames = Set(directoryNames.lazy.map { $0.lowercased() })
+        self.isComplete = isComplete
     }
 
     /// `true` if the catalog has a bundle ID or directory name that matches `entryName` (case
@@ -84,6 +96,10 @@ struct InstalledAppCatalog: Sendable {
         lowercasedName == "com.apple"
             || lowercasedName.hasPrefix("com.apple.")
             || lowercasedName.contains(".com.apple.")
+            || lowercasedName == "apple"
+            || lowercasedName.hasPrefix("apple.")
+            || lowercasedName.contains(".apple.")
+            || lowercasedName.hasPrefix("aaprofilepicture_")
     }
 
     // MARK: - Collection
@@ -161,6 +177,10 @@ final class LazyInstalledAppCatalog: @unchecked Sendable, OrphanCatalog {
 
     func ownsLibraryEntry(named entryName: String) -> Bool {
         catalog().ownsLibraryEntry(named: entryName)
+    }
+
+    var isComplete: Bool {
+        catalog().isComplete
     }
 
     private func catalog() -> InstalledAppCatalog {

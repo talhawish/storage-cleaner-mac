@@ -92,7 +92,10 @@ struct QuickCleanScanner: Sendable {
                 return URL(fileURLWithPath: expanded)
             }
 
-            let collection = collector.collectExistingItems(at: urls)
+            let candidates = option.storageKind == .aiModelCaches
+                ? AIModelStoreDiscovery.paths(in: urls)
+                : urls
+            let collection = collector.collectExistingItems(at: candidates)
             let items = collection.candidates.map { candidate in
                 QuickCleanItem(url: candidate.url, bytes: candidate.bytes)
             }

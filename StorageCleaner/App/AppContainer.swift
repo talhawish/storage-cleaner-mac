@@ -113,6 +113,18 @@ private struct DemoStorageScanner: StorageScanning {
         demo(.nodeDependencies, .webDevelopment, bytes: 9_126_805_504, items: 286, safety: .review),
         demo(.dockerArtifacts, .containers, bytes: 6_442_450_944, items: 37, safety: .review),
         demo(.aiModelCaches, .artificialIntelligence, bytes: 4_294_967_296, items: 12, safety: .review),
+        demoPath(
+            .localAIModels,
+            .artificialIntelligence,
+            bytes: 7_516_192_768,
+            path: "/tmp/StorageCleanerDemo/Models/Example-Model.gguf"
+        ),
+        demoPath(
+            .largeFolders,
+            .otherCaches,
+            bytes: 2_684_354_560,
+            path: "/tmp/StorageCleanerDemo/Unclassified Storage/Local Data"
+        ),
         demo(.flutterArtifacts, .mobileDevelopment, bytes: 2_813_624_320, items: 58, safety: .review),
         demo(.reactNativeArtifacts, .mobileDevelopment, bytes: 2_469_396_480, items: 43, safety: .review),
         demo(.androidStudioArtifacts, .mobileDevelopment, bytes: 3_221_225_472, items: 29, safety: .review),
@@ -203,6 +215,25 @@ private struct DemoStorageScanner: StorageScanning {
         )
     }
 
+    private static func demoPath(
+        _ kind: StorageFindingKind,
+        _ domain: StorageDomain,
+        bytes: Int64,
+        path: String
+    ) -> StorageFinding {
+        let url = URL(fileURLWithPath: path, isDirectory: kind == .largeFolders)
+        return StorageFinding(
+            kind: kind,
+            domain: domain,
+            bytes: bytes,
+            itemCount: 1,
+            safety: .review,
+            examples: [url.lastPathComponent],
+            filePaths: [url],
+            pathBytes: [url: bytes]
+        )
+    }
+
     func scanEvents(for kinds: Set<StorageFindingKind>? = nil) -> AsyncStream<ScanEvent> {
         AsyncStream { continuation in
             let progress = ScannerProgress(
@@ -264,6 +295,15 @@ private struct DemoPermissionHandler: StoragePermissionHandling {
 
     func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
         SecurityScopedResourceAccess(url: URL(filePath: "/tmp/demo-stub"), didStartAccessing: false)
+    }
+
+    @MainActor
+    func requestApplicationsFolderAccess(for applicationsFolder: URL) -> Bool {
+        true
+    }
+
+    func beginApplicationsFolderAccess(for applicationsFolder: URL) -> SecurityScopedResourceAccess? {
+        SecurityScopedResourceAccess(url: applicationsFolder, didStartAccessing: false)
     }
 }
 

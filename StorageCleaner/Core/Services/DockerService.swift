@@ -110,8 +110,8 @@ struct DockerService: Sendable {
         await runDockerAction(arguments: ["rm", id], success: "Container removed.")
     }
 
-    func removeImage(id: String) async -> DockerActionResult {
-        await runDockerAction(arguments: ["image", "rm", id], success: "Image removed.")
+    func removeImage(reference: String) async -> DockerActionResult {
+        await runDockerAction(arguments: ["image", "rm", reference], success: "Image removed.")
     }
 
     func removeVolume(name: String) async -> DockerActionResult {

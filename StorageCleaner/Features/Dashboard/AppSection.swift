@@ -23,7 +23,9 @@ enum AppSection: String, CaseIterable, Identifiable {
     case developerStorage
     case docker
     case simulatorsEmulators
+    case aiModels
     case largeFiles
+    case largeFolders
     case cliPrograms
     case screenshotsAndRecordings
     case duplicates
@@ -42,7 +44,9 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .developerStorage: "Developer Storage"
         case .docker: "Docker"
         case .simulatorsEmulators: "Simulators & Emulators"
+        case .aiModels: "AI Models"
         case .largeFiles: "Large Files"
+        case .largeFolders: "Other Storage"
         case .cliPrograms: "CLI Programs & Toolchains"
         case .screenshotsAndRecordings: "Screenshots & Recordings"
         case .duplicates: "Duplicates"
@@ -61,7 +65,9 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .developerStorage: "chevron.left.forwardslash.chevron.right"
         case .docker: "shippingbox.fill"
         case .simulatorsEmulators: "iphone.gen3"
+        case .aiModels: "sparkles"
         case .largeFiles: "doc.badge.ellipsis"
+        case .largeFolders: "folder.badge.questionmark"
         case .cliPrograms: "terminal.fill"
         case .screenshotsAndRecordings: "camera.viewfinder"
         case .duplicates: "square.on.square"
@@ -75,7 +81,9 @@ enum AppSection: String, CaseIterable, Identifiable {
     var filterKinds: [StorageFindingKind] {
         switch self {
         case .docker: [.dockerArtifacts]
+        case .aiModels: [.aiModelCaches, .localAIModels]
         case .largeFiles: [.largeFiles, .largeVideos, .largePhotos]
+        case .largeFolders: [.largeFolders]
         case .cliPrograms: [.cliApps]
         case .screenshotsAndRecordings: [.screenshots, .screenRecordings]
         case .leftovers: [.installerLeftovers, .androidPackages]
@@ -85,7 +93,8 @@ enum AppSection: String, CaseIterable, Identifiable {
             .orphanedAppContainers,
             .orphanedAppPreferences,
             .orphanedSavedApplicationState,
-            .oldCrashReports
+            .oldCrashReports,
+            .browserCaches
         ]
         default: []
         }

@@ -295,14 +295,17 @@ final class SystemJunkScannersTests: XCTestCase {
     // MARK: - Old crash reports
 
     func testOldCrashReportsFindsAllSupportedExtensions() async throws {
-        try writeBytes(1024, to: "Logs/DiagnosticReports/Foo.crash")
-        try writeBytes(2048, to: "Logs/DiagnosticReports/Bar.ips")
-        try writeBytes(512, to: "Logs/CrashReporter/Baz.synced")
-        try writeBytes(256, to: "Logs/DiagnosticReports/Watchdog.diag")
-        try writeBytes(256, to: "Logs/DiagnosticReports/Kernel.panic")
-        try writeBytes(256, to: "Logs/DiagnosticReports/Sampler.spin")
-        try writeBytes(256, to: "Logs/DiagnosticReports/App.hang")
-        try writeBytes(256, to: "Logs/DiagnosticReports/Memory.memory")
+        let now = Date.now
+        let staleDate = now.addingTimeInterval(-31 * 24 * 60 * 60)
+        try writeBytes(1024, to: "Logs/DiagnosticReports/Foo.crash", modifiedAt: staleDate)
+        try writeBytes(2048, to: "Logs/DiagnosticReports/Bar.ips", modifiedAt: staleDate)
+        try writeBytes(512, to: "Logs/CrashReporter/Baz.synced", modifiedAt: staleDate)
+        try writeBytes(256, to: "Logs/DiagnosticReports/Watchdog.diag", modifiedAt: staleDate)
+        try writeBytes(256, to: "Logs/DiagnosticReports/Kernel.panic", modifiedAt: staleDate)
+        try writeBytes(256, to: "Logs/DiagnosticReports/Sampler.spin", modifiedAt: staleDate)
+        try writeBytes(256, to: "Logs/DiagnosticReports/App.hang", modifiedAt: staleDate)
+        try writeBytes(256, to: "Logs/DiagnosticReports/Memory.memory", modifiedAt: staleDate)
+        try writeBytes(2_048, to: "Logs/DiagnosticReports/Current.ips", modifiedAt: now)
         try writeBytes(128, to: "Logs/DiagnosticReports/notes.txt")
 
         let scanner = OldCrashReportsScanner(
@@ -310,7 +313,8 @@ final class SystemJunkScannersTests: XCTestCase {
             roots: [
                 temporaryLibrary.appending(path: "Logs/DiagnosticReports"),
                 temporaryLibrary.appending(path: "Logs/CrashReporter")
-            ]
+            ],
+            now: now
         )
         let result = await scanner.scan()
 
@@ -351,6 +355,20 @@ final class SystemJunkScannersTests: XCTestCase {
         XCTAssertNil(result.finding)
     }
 
+    func testOldCrashReportsSkipsReportsYoungerThanThirtyDays() async throws {
+        let now = Date.now
+        try writeBytes(128, to: "Logs/DiagnosticReports/Recent.crash", modifiedAt: now)
+        let scanner = OldCrashReportsScanner(
+            collector: collector,
+            roots: [temporaryLibrary.appending(path: "Logs/DiagnosticReports")],
+            now: now
+        )
+
+        let result = await scanner.scan()
+
+        XCTAssertNil(result.finding)
+    }
+
     func testOldCrashReportsReturnsNilWhenDiagnosticDirectoryMissing() async throws {
         let scanner = OldCrashReportsScanner(
             collector: collector,
@@ -374,13 +392,19 @@ final class SystemJunkScannersTests: XCTestCase {
         )
     }
 
-    private func writeBytes(_ count: Int, to path: String) throws {
+    private func writeBytes(_ count: Int, to path: String, modifiedAt: Date? = nil) throws {
         let url = temporaryLibrary.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         try Data(repeating: 1, count: count).write(to: url)
+        if let modifiedAt {
+            try FileManager.default.setAttributes(
+                [.modificationDate: modifiedAt],
+                ofItemAtPath: url.path
+            )
+        }
     }
 
     private func writePlist(named name: String, in folder: String) throws {
@@ -469,6 +493,21 @@ extension SystemJunkScannersTests {
 
         XCTAssertEqual(result.finding?.filePaths.map(\.lastPathComponent), ["com.orphan.deletable.plist"])
     }
+
+    func testOrphanResolverSkipsEntriesWhenInstalledAppCatalogIsIncomplete() throws {
+        try makeDirectory(relativeTo: "Application Support/com.example.orphan")
+        let resolver = OrphanDirectoryResolver(
+            root: temporaryLibrary.appending(path: "Application Support"),
+            catalog: IncompleteOrphanCatalog(),
+            limit: 200,
+            cleanupEligibility: SystemJunkCleanupEligibility { _ in true }
+        )
+
+        XCTAssertTrue(
+            resolver.resolveOrphans().isEmpty,
+            "Missing Applications permission must never turn unknown app data into an orphan candidate."
+        )
+    }
 }
 
 /// Test catalog whose "installed" set is fixed to whatever fixtures the test injects — independent
@@ -486,5 +525,13 @@ private struct StubOrphanCatalog: OrphanCatalog {
             for name in names ?? [] where name.lowercased() == lower { return true }
         }
         return false
+    }
+}
+
+private struct IncompleteOrphanCatalog: OrphanCatalog {
+    let isComplete = false
+
+    func ownsLibraryEntry(named entryName: String) -> Bool {
+        false
     }
 }

@@ -6,7 +6,7 @@ struct MediaCategoryView: View {
     let findings: [StorageFinding]
     let emptyStateMessage: String
     let onScan: () -> Void
-    let onDelete: ([URL]) -> Void
+    let onDelete: ([URL]) async -> CleanupResult
     let permissionHandler: (any StoragePermissionHandling)?
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
@@ -16,7 +16,8 @@ struct MediaCategoryView: View {
     @State private var sortOption: MediaSortOption = .sizeDesc
     @State private var viewMode: MediaViewMode = .grid
     @State private var mediaFilter: MediaFilter = .all
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isDeleting = false
     @State private var previewURL: URL?
     @State private var visibleRecordLimit = MediaPagination.initialLimit
     @Environment(\.accessibilityReduceMotion)
@@ -105,7 +106,7 @@ struct MediaCategoryView: View {
         .accessibilityIdentifier("media-category-\(titleAccessibilityID)")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if !selectedURLs.isEmpty {
+                if !selectedURLs.isEmpty && !isDeleting {
                     Button {
                         requestDeleteConfirmation()
                     } label: {
@@ -148,17 +149,12 @@ struct MediaCategoryView: View {
                 }
             }
         }
-            .sheet(isPresented: $showDeleteConfirmation) {
+            .sheet(item: $cleanupRequest) { request in
             DeleteConfirmationSheet(
-                selectedURLs: Array(selectedURLs),
-                totalBytes: selectedTotalSize,
-                onDelete: {
-                    let urls = Array(selectedURLs)
-                    selectedURLs.removeAll()
-                    showDeleteConfirmation = false
-                    onDelete(urls)
-                },
-                onCancel: { showDeleteConfirmation = false }
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                onDelete: { performDelete(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
         .sheet(isPresented: Binding(
@@ -201,6 +197,11 @@ struct MediaCategoryView: View {
                 videoCount: videoCount
             )
             MediaFilterBar(searchText: $searchText, mediaFilter: $mediaFilter)
+            if isDeleting {
+                ProgressView("Moving selected media…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
             MediaSelectionBar(
                 selectedCount: selectedURLs.count,
                 selectedTotalSize: selectedTotalSize,
@@ -208,11 +209,12 @@ struct MediaCategoryView: View {
                 isSelectionEmpty: selectedURLs.isEmpty,
                 onToggleAll: toggleAll
             )
+            .disabled(isDeleting)
 
             if viewMode == .grid {
-                gridContent
+                gridContent.disabled(isDeleting)
             } else {
-                listContent
+                listContent.disabled(isDeleting)
             }
         }
     }
@@ -300,7 +302,19 @@ private extension MediaCategoryView {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        guard !isDeleting else { return }
+        cleanupRequest = FileCleanupRequest(urls: selectedURLs, totalBytes: selectedTotalSize)
+    }
+
+    private func performDelete(_ request: FileCleanupRequest) {
+        guard !isDeleting else { return }
+        cleanupRequest = nil
+        isDeleting = true
+        Task { @MainActor in
+            let result = await onDelete(request.urls)
+            selectedURLs.subtract(result.deletedItems.map(\.originalURL))
+            isDeleting = false
+        }
     }
 
     func resetPagination() {

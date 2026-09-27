@@ -7,11 +7,15 @@ import SwiftUI
 struct SettingsFooterBar: View {
     var body: some View {
         HStack(spacing: AppTheme.Spacing.medium) {
-            SettingsFooterItem(systemImage: "app.badge.fill", text: "Version 0.1.0", tint: AppTheme.accent)
+            SettingsFooterItem(
+                systemImage: "app.badge.fill",
+                text: "Version \(AppMetadata.versionDisplay)",
+                tint: AppTheme.accent
+            )
             SettingsFooterDivider()
             SettingsFooterItem(
                 systemImage: "list.bullet.rectangle",
-                text: "33 category scanners",
+                text: "\(AppMetadata.scannerCount) category scanners",
                 tint: AppTheme.orange
             )
             SettingsFooterDivider()

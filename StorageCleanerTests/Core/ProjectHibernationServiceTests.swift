@@ -66,6 +66,110 @@ final class ProjectHibernationServiceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appending(path: "Package.swift").path))
     }
 
+    func testHibernateRemovesGradleStateAndNestedBuildOutputs() async throws {
+        let root = workingDirectory.appending(path: "gradle-app", directoryHint: .isDirectory)
+        let gradleState = root.appending(path: ".gradle/caches", directoryHint: .isDirectory)
+        let rootBuild = root.appending(path: "build/classes", directoryHint: .isDirectory)
+        let appBuild = root.appending(path: "app/build/classes", directoryHint: .isDirectory)
+        for directory in [gradleState, rootBuild, appBuild] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data(repeating: 1, count: 3_000).write(to: directory.appending(path: "generated.bin"))
+        }
+        try "plugins {}".write(to: root.appending(path: "build.gradle.kts"), atomically: true, encoding: .utf8)
+        let source = root.appending(path: "src/main/App.kt")
+        try FileManager.default.createDirectory(
+            at: source.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try "fun main() {}".write(to: source, atomically: true, encoding: .utf8)
+
+        let project = ProjectInfo(
+            name: "gradle-app",
+            path: root,
+            technology: .kotlin,
+            lastModifiedDate: .distantPast,
+            totalSize: StorageFormatting.itemSize(at: root),
+            childProjectCount: 0,
+            dependencySize: StorageFormatting.itemSize(at: root.appending(path: ".gradle"))
+                + StorageFormatting.itemSize(at: root.appending(path: "build"))
+                + StorageFormatting.itemSize(at: root.appending(path: "app/build"))
+        )
+
+        let outcome = await service.hibernate(project)
+
+        XCTAssertTrue(outcome.succeeded, outcome.failureReason ?? "")
+        XCTAssertEqual(outcome.removedDirectoryCount, 3)
+        XCTAssertEqual(outcome.remainingDependencyBytes, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appending(path: ".gradle").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appending(path: "build").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appending(path: "app/build").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    func testHibernateFlutterCleanOutputsButKeepsPlatformSource() async throws {
+        let root = workingDirectory.appending(path: "flutter-app", directoryHint: .isDirectory)
+        let outputs = [".dart_tool", "build", "android/.gradle", "ios/Pods"].map {
+            root.appending(path: $0, directoryHint: .isDirectory)
+        }
+        for output in outputs {
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try Data(repeating: 2, count: 2_000).write(to: output.appending(path: "generated.bin"))
+        }
+        try "name: flutter_app".write(to: root.appending(path: "pubspec.yaml"), atomically: true, encoding: .utf8)
+        let source = root.appending(path: "lib/main.dart")
+        try FileManager.default.createDirectory(
+            at: source.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try "void main() {}".write(to: source, atomically: true, encoding: .utf8)
+        let project = ProjectInfo(
+            name: "flutter-app",
+            path: root,
+            technology: .flutter,
+            lastModifiedDate: .distantPast,
+            totalSize: StorageFormatting.itemSize(at: root),
+            childProjectCount: 0,
+            dependencySize: outputs.reduce(0) { $0 + StorageFormatting.itemSize(at: $1) }
+        )
+
+        let outcome = await service.hibernate(project)
+
+        XCTAssertTrue(outcome.succeeded, outcome.failureReason ?? "")
+        XCTAssertEqual(outcome.removedDirectoryCount, outputs.count)
+        XCTAssertEqual(outcome.remainingDependencyBytes, 0)
+        for output in outputs {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: output.path), "removed \(output.path)")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    func testStaleDependencyEstimateReportsAccessOrRescanGuidance() async throws {
+        let project = try makeNodeProject(named: "stale", sourceBytes: 2_000, dependencyBytes: 4_000)
+        let dependencyPath = project.path.appending(path: "node_modules")
+        try FileManager.default.removeItem(at: dependencyPath)
+
+        let outcome = await service.hibernate(project)
+
+        XCTAssertFalse(outcome.succeeded)
+        XCTAssertTrue(outcome.failureReason?.contains("no longer visible") == true)
+        XCTAssertTrue(outcome.failureReason?.contains(project.path.path) == true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: project.path.appending(path: "index.js").path))
+    }
+
+    func testTrashFailureReportsFullDependencyPathAndUnderlyingError() async throws {
+        let project = try makeNodeProject(named: "trash-error", sourceBytes: 2_000, dependencyBytes: 4_000)
+        let dependencyPath = project.path.appending(path: "node_modules")
+        let permissionError = CocoaError(.fileWriteNoPermission)
+        let service = ProjectHibernationService(
+            trashMover: FailingProjectTrashMover(error: permissionError)
+        )
+
+        let outcome = await service.hibernate(project)
+
+        XCTAssertFalse(outcome.succeeded)
+        XCTAssertTrue(outcome.failureReason?.contains(dependencyPath.path) == true)
+        XCTAssertTrue(outcome.failureReason?.contains(permissionError.localizedDescription) == true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dependencyPath.path))
+    }
+
     func testHibernatePHPProjectUsesComposerVendorFallback() async throws {
         let root = workingDirectory.appending(path: "legacy-php", directoryHint: .isDirectory)
         let vendor = root.appending(path: "vendor", directoryHint: .isDirectory)
@@ -302,5 +406,13 @@ final class ProjectHibernationServiceTests: XCTestCase {
             childProjectCount: 0,
             dependencySize: Int64(dependencyBytes)
         )
+    }
+}
+
+private struct FailingProjectTrashMover: TrashMoving {
+    let error: any Error
+
+    func moveToTrash(_ urls: [URL]) async -> TrashMoveResult {
+        TrashMoveResult(destinationBySource: [:], error: error)
     }
 }

@@ -24,7 +24,7 @@ const faqs = [
   },
   {
     q: 'What happens to the free version over time?',
-    a: 'The Free plan is intentionally complete for casual use. It will never nag, watermark, or hide findings. Pro exists for users who want automation.'
+    a: 'The Free plan is intentionally complete for scanning and review. It will never nag, watermark, or hide findings. Pro adds one-click cleanup across supported categories.'
   }
 ] as const
 

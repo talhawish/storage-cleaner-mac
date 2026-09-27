@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// Lists orphaned app data and stale crash reports across `~/Library` and lets the user review
-/// and permanently delete selected items. The list is dynamically discovered at scan time — what
-/// appears depends on which apps are installed and what they've left behind in user Library.
+/// Lists eligible app data and stale crash reports from the user's Library and lets the user
+/// review selected items before moving them to Trash.
 struct SystemJunkView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
-    let onDelete: ([URL]) async -> CleanupResult
+    let onDelete: ([URL], CleanupProgressReporter) async -> CleanupResult
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
 
@@ -15,6 +14,11 @@ struct SystemJunkView: View {
     @State private var cleanupRequest: SystemJunkCleanupRequest?
     @State private var cleanupFailureFeedback: CleanupFeedback?
     @State private var isDeleting = false
+    @State private var cleanupProgress = CleanupProgress(
+        phase: .preparing,
+        completedCount: 0,
+        totalCount: 0
+    )
 
     /// Per-filter aggregates from the scan results — bytes and item counts are pre-computed off
     /// the main thread by the scanner, so they are correct for both files and directories
@@ -133,7 +137,7 @@ struct SystemJunkView: View {
                 showsCloseButton: !isDeleting,
                 preferredHeight: 520,
                 confirm: AppModalActionBar.Action(
-                    title: isDeleting ? "Moving..." : feedback.confirmTitle,
+                    title: isDeleting ? cleanupProgress.message : feedback.confirmTitle,
                     systemImage: "trash.fill",
                     isProminent: true,
                     isDestructive: true,
@@ -148,6 +152,7 @@ struct SystemJunkView: View {
             ) {
                 SystemJunkCleanupPreview(urls: request.urls)
             }
+            .interactiveDismissDisabled(isDeleting)
         }
     }
 
@@ -407,6 +412,7 @@ private extension SystemJunkView {
         case .all: "No system junk found"
         case .appSupport: "No orphaned app data found"
         case .caches: "No orphaned app caches found"
+        case .browserCaches: "No web caches found"
         case .containers: "No orphaned app containers found"
         case .preferences: "No orphaned app preferences found"
         case .savedState: "No orphaned saved state found"
@@ -433,9 +439,22 @@ private extension SystemJunkView {
         guard !isDeleting else { return }
         isDeleting = true
         cleanupFailureFeedback = nil
+        cleanupProgress = CleanupProgress(
+            phase: .preparing,
+            completedCount: 0,
+            totalCount: request.urls.count
+        )
 
         Task { @MainActor in
-            let result = await onDelete(request.urls)
+            defer { isDeleting = false }
+            let requestID = request.id
+            let progressReporter = CleanupProgressReporter { progress in
+                Task { @MainActor in
+                    guard self.cleanupRequest?.id == requestID else { return }
+                    self.cleanupProgress = progress
+                }
+            }
+            let result = await onDelete(request.urls, progressReporter)
             finishCleanup(result, for: request)
         }
     }
@@ -446,7 +465,6 @@ private extension SystemJunkView {
             selectedURLs.remove(url)
         }
 
-        isDeleting = false
         guard !result.failedURLs.isEmpty else {
             cleanupRequest = nil
             return
@@ -471,9 +489,15 @@ private struct SystemJunkRecord: Identifiable, Equatable {
 }
 
 private struct SystemJunkCleanupRequest: Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let records: [SystemJunkRecord]
     let bytes: Int64
+
+    init(id: UUID = UUID(), records: [SystemJunkRecord], bytes: Int64) {
+        self.id = id
+        self.records = records
+        self.bytes = bytes
+    }
 
     var urls: [URL] {
         records.map(\.url)
@@ -483,89 +507,9 @@ private struct SystemJunkCleanupRequest: Identifiable, Equatable {
         let failedSet = Set(failedURLs.map { $0.standardizedFileURL })
         let retainedRecords = records.filter { failedSet.contains($0.url.standardizedFileURL) }
         return SystemJunkCleanupRequest(
+            id: id,
             records: retainedRecords,
             bytes: retainedRecords.reduce(Int64(0)) { $0 + $1.bytes }
         )
-    }
-}
-
-enum SystemJunkTypeFilter: String, CaseIterable, Identifiable {
-    case all
-    case appSupport
-    case caches
-    case containers
-    case preferences
-    case savedState
-    case crashReports
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .all: "All"
-        case .appSupport: "App Data"
-        case .caches: "Caches"
-        case .containers: "Containers"
-        case .preferences: "Preferences"
-        case .savedState: "Saved State"
-        case .crashReports: "Crash Reports"
-        }
-    }
-
-    var sectionTitle: String {
-        switch self {
-        case .all: "All orphaned & stale data"
-        case .appSupport: "Orphaned app data"
-        case .caches: "Orphaned app caches"
-        case .containers: "Orphaned app containers"
-        case .preferences: "Orphaned app preferences"
-        case .savedState: "Orphaned saved state"
-        case .crashReports: "Old crash reports"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .all: "trash.slash.fill"
-        case .appSupport: "externaldrive.fill"
-        case .caches: "internaldrive.fill"
-        case .containers: "shippingbox.fill"
-        case .preferences: "slider.horizontal.3"
-        case .savedState: "macwindow.and.cursorarrow"
-        case .crashReports: "exclamationmark.triangle.fill"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .all: AppTheme.rose
-        case .appSupport: AppTheme.rose
-        case .caches: AppTheme.orange
-        case .containers: AppTheme.violet
-        case .preferences: AppTheme.indigo
-        case .savedState: AppTheme.teal
-        case .crashReports: AppTheme.amber
-        }
-    }
-
-    func contains(_ kind: StorageFindingKind) -> Bool {
-        if self == .all {
-            // `.all` matches every system-junk sub-kind. The view is only handed findings
-            // already filtered to system-junk kinds, so this is safe.
-            return Self.filter(for: kind) != .all
-        }
-        return Self.filter(for: kind) == self
-    }
-
-    static func filter(for kind: StorageFindingKind) -> SystemJunkTypeFilter {
-        switch kind {
-        case .orphanedAppSupport: .appSupport
-        case .orphanedAppCaches: .caches
-        case .orphanedAppContainers: .containers
-        case .orphanedAppPreferences: .preferences
-        case .orphanedSavedApplicationState: .savedState
-        case .oldCrashReports: .crashReports
-        default: .all
-        }
     }
 }

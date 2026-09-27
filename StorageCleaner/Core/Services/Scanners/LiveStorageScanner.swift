@@ -8,31 +8,52 @@ struct LiveStorageScanner: StorageScanning {
     static let maxConcurrentScanners = 6
 
     private let scanners: [any StorageCategoryScanning]
+    /// Live scanner construction is deferred until each scan so settings such as external-volume
+    /// inclusion are read at the moment the user starts scanning, not only at app launch.
+    private let sessionFactory: (@Sendable () -> LiveStorageScanner)?
     /// Per-scan traversal memoization shared by the user-folder scanners.
     /// `nil` in tests that construct scanners directly.
     private let snapshotCache: DirectorySnapshotCache?
+    /// Shared whole-home inventory for unclassified folders and local AI models.
+    private let homeStorageDiscoveryCache: HomeStorageDiscoveryCache?
 
-    init(scanners: [any StorageCategoryScanning], snapshotCache: DirectorySnapshotCache? = nil) {
+    init(
+        scanners: [any StorageCategoryScanning],
+        snapshotCache: DirectorySnapshotCache? = nil,
+        homeStorageDiscoveryCache: HomeStorageDiscoveryCache? = nil,
+        sessionFactory: (@Sendable () -> LiveStorageScanner)? = nil
+    ) {
         self.scanners = scanners
         self.snapshotCache = snapshotCache
+        self.homeStorageDiscoveryCache = homeStorageDiscoveryCache
+        self.sessionFactory = sessionFactory
     }
 
     func scanEvents(for kinds: Set<StorageFindingKind>? = nil) -> AsyncStream<ScanEvent> {
-        AsyncStream { continuation in
-            let task = Task { [snapshotCache] in
+        // Each live stream owns its caches. An older stream's termination can
+        // never invalidate a newly started scan or deliver its cached inventory.
+        if let sessionFactory { return sessionFactory().scanEvents(for: kinds) }
+        return AsyncStream { continuation in
+            let task = Task { [snapshotCache, homeStorageDiscoveryCache, scanners] in
                 // Fresh cache generation per scan so rescans re-read the disk.
                 await snapshotCache?.beginScan()
-                await scan(scanners: scanners(matching: kinds), to: continuation)
+                await homeStorageDiscoveryCache?.beginScan()
+                let activeScanners = Self.scanners(scanners, matching: kinds)
+                await scan(scanners: activeScanners, to: continuation)
                 await snapshotCache?.endScan()
+                await homeStorageDiscoveryCache?.endScan()
                 continuation.finish()
             }
 
-            continuation.onTermination = { [snapshotCache] _ in
+            continuation.onTermination = { [snapshotCache, homeStorageDiscoveryCache] _ in
                 task.cancel()
                 // The cache's walks are detached tasks, not children of `task`,
                 // so cancel them explicitly when the stream is torn down.
                 if let snapshotCache {
                     Task { await snapshotCache.endScan() }
+                }
+                if let homeStorageDiscoveryCache {
+                    Task { await homeStorageDiscoveryCache.endScan() }
                 }
             }
         }
@@ -142,7 +163,10 @@ struct LiveStorageScanner: StorageScanning {
         }
     }
 
-    private func scanners(matching kinds: Set<StorageFindingKind>?) -> [any StorageCategoryScanning] {
+    private static func scanners(
+        _ scanners: [any StorageCategoryScanning],
+        matching kinds: Set<StorageFindingKind>?
+    ) -> [any StorageCategoryScanning] {
         guard let kinds, !kinds.isEmpty else { return scanners }
         return scanners.filter { kinds.contains($0.kind) }
     }
@@ -226,16 +250,37 @@ extension LiveStorageScanner {
         dockerService: DockerService,
         permissionHandler: (any StoragePermissionHandling)? = nil
     ) -> LiveStorageScanner {
+        LiveStorageScanner(scanners: [], sessionFactory: {
+            let snapshotCache = DirectorySnapshotCache()
+            let homeStorageDiscoveryCache = HomeStorageDiscoveryCache()
+            let scanners = makeLiveScanners(
+                dockerService: dockerService,
+                snapshotCache: snapshotCache,
+                homeStorageDiscoveryCache: homeStorageDiscoveryCache
+            )
+            let scopedScanners: [any StorageCategoryScanning] = permissionHandler.map { handler in
+                scanners.map { SecurityScopedCategoryScanner(scanner: $0, permissionHandler: handler) }
+            } ?? scanners
+            return LiveStorageScanner(
+                scanners: scopedScanners,
+                snapshotCache: snapshotCache,
+                homeStorageDiscoveryCache: homeStorageDiscoveryCache
+            )
+        })
+    }
+
+    /// Builds one scan generation. Keeping this in a factory means `ScanPreferences` defaults
+    /// are evaluated for every scan, while the shared snapshot cache still prevents duplicate
+    /// filesystem walks inside that generation.
+    private static func makeLiveScanners(
+        dockerService: DockerService,
+        snapshotCache: DirectorySnapshotCache,
+        homeStorageDiscoveryCache: HomeStorageDiscoveryCache
+    ) -> [any StorageCategoryScanning] {
         let collector = FileSystemCollector()
         let appCatalog = LazyInstalledAppCatalog()
-        // The scanners below share the user's home folders (Downloads, Desktop,
-        // Documents, Movies, Pictures). `SnapshotTraversal` memoizes one walk
-        // per root per scan instead of each of them re-enumerating the same
-        // trees concurrently; scanners with unique roots keep the direct
-        // collector, which walks without snapshot overhead.
-        let snapshotCache = DirectorySnapshotCache()
         let shared = SnapshotTraversal(cache: snapshotCache)
-        let scanners: [any StorageCategoryScanning] = [
+        return [
             XcodeStorageScanner(collector: collector),
             IosDeviceSupportScanner(),
             DockerStorageScanner(collector: collector, dockerService: dockerService),
@@ -252,6 +297,8 @@ extension LiveStorageScanner {
             DotNetCacheScanner(collector: collector),
             GradleCacheScanner(collector: collector),
             AIModelCacheScanner(collector: collector),
+            LocalAIModelScanner(discoveryCache: homeStorageDiscoveryCache),
+            LargeFolderScanner(discoveryCache: homeStorageDiscoveryCache),
             BrowserCacheScanner(collector: collector),
             LargeFileScanner(collector: shared),
             LargeVideoScanner(collector: shared),
@@ -273,14 +320,5 @@ extension LiveStorageScanner {
             OldCrashReportsScanner(collector: collector),
             TrashStorageScanner(collector: collector)
         ]
-
-        let scopedScanners = permissionHandler.map { handler in
-            scanners.map { SecurityScopedCategoryScanner(scanner: $0, permissionHandler: handler) }
-        } ?? scanners
-
-        return LiveStorageScanner(
-            scanners: scopedScanners,
-            snapshotCache: snapshotCache
-        )
     }
 }

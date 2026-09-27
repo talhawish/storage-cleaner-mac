@@ -105,7 +105,8 @@ private extension AppShellView {
                         case .section(.apps):
                             AppsView(
                                 canUseProActions: viewModel.canCleanup,
-                                onRequirePro: { _ = viewModel.gateFileAction() }
+                                onRequirePro: { _ = viewModel.gateFileAction() },
+                                permissionHandler: viewModel.permissionHandler
                             )
                         case .section(.projectActivity):
                             ProjectActivityView(
@@ -137,9 +138,24 @@ private extension AppShellView {
                                     await viewModel.reconcileEmulatorCleanup(result, removedImages: images)
                                 }
                             )
+                        case .section(.aiModels):
+                            reviewableStorageView(
+                                title: AppSection.aiModels.title,
+                                kinds: AppSection.aiModels.filterKinds,
+                                subtitle: "Scanning for installed model stores and large model-weight files.",
+                                emptyMessage: "No supported local model stores or large model files were found."
+                            )
                         case .section(.largeFiles):
                             largeFilesView(
                                 kinds: section?.filterKinds ?? []
+                            )
+                        case .section(.largeFolders):
+                            reviewableStorageView(
+                                title: AppSection.largeFolders.title,
+                                kinds: AppSection.largeFolders.filterKinds,
+                                subtitle: "Scanning Home for large directories outside locations handled "
+                                    + "by other categories.",
+                                emptyMessage: "No unclassified Home-folder directories met the size threshold."
                             )
                         case .section(.cliPrograms):
                             cliProgramsView(

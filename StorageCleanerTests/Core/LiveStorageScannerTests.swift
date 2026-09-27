@@ -142,7 +142,7 @@ final class LiveStorageScannerTests: XCTestCase {
         XCTAssertEqual(scanner.title, StorageFindingKind.browserCaches.title)
     }
 
-    func testSystemJunkSectionAggregatesAllSixKinds() {
+    func testSystemJunkSectionAggregatesAllKinds() {
         XCTAssertEqual(
             AppSection.systemJunk.filterKinds,
             [
@@ -151,7 +151,8 @@ final class LiveStorageScannerTests: XCTestCase {
                 .orphanedAppContainers,
                 .orphanedAppPreferences,
                 .orphanedSavedApplicationState,
-                .oldCrashReports
+                .oldCrashReports,
+                .browserCaches
             ]
         )
     }

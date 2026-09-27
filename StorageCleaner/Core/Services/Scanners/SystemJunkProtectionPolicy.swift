@@ -19,10 +19,31 @@ enum SystemJunkProtectionPolicy {
             return false
         }
 
-        return protectedRoots.contains { root in
+        if protectedRoots.contains(where: { root in
             let rootComponents = root.standardizedFileURL.pathComponents
             return contains(candidateComponents, in: rootComponents)
+        }) {
+            return true
         }
+
+        let standardized = url.standardizedFileURL
+        let parentName = standardized.deletingLastPathComponent().lastPathComponent
+        if parentName == "Application Support" || parentName == "Caches" {
+            let name = standardized.lastPathComponent
+            let lower = name.lowercased()
+            if SystemJunkPaths.reservedSupportDirectoryNames.contains(where: {
+                $0.caseInsensitiveCompare(name) == .orderedSame
+            })
+                || lower == "com.apple"
+                || lower.hasPrefix("com.apple.")
+                || lower.contains(".com.apple.")
+                || lower == "apple"
+                || lower.hasPrefix("apple.") {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func contains(_ candidate: [String], in root: [String]) -> Bool {

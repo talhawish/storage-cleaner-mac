@@ -140,26 +140,6 @@ struct GradleCacheScanner: StorageCategoryScanning {
     }
 }
 
-struct AIModelCacheScanner: StorageCategoryScanning {
-    let kind: StorageFindingKind = .aiModelCaches
-    let title = StorageFindingKind.aiModelCaches.title
-    private let scanner: PathListScanner
-
-    init(collector: FileSystemCollector) {
-        scanner = PathListScanner(
-            kind: .aiModelCaches,
-            domain: .artificialIntelligence,
-            paths: DependencyPaths.ArtificialIntelligence.cacheDirs,
-            safety: .review,
-            collector: collector
-        )
-    }
-
-    func scan() async -> CategoryScanResult {
-        await scanner.scan()
-    }
-}
-
 struct LargeVideoScanner: StorageCategoryScanning {
     let kind: StorageFindingKind = .largeVideos
     let title = StorageFindingKind.largeVideos.title

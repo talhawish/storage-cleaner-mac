@@ -6,7 +6,7 @@ import SwiftUI
 struct DuplicatesView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
-    let onDelete: ([URL]) -> Void
+    let onDelete: ([URL]) async -> CleanupResult
     let permissionHandler: (any StoragePermissionHandling)?
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
@@ -15,6 +15,7 @@ struct DuplicatesView: View {
     @State private var filter: DuplicateMediaFilter = .all
     @State private var previewURL: URL?
     @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isDeleting = false
 
     /// Duplicate groups for the active filter, largest reclaim first.
     private var groups: [DuplicateGroup] {
@@ -47,6 +48,11 @@ struct DuplicatesView: View {
                 emptyState
             } else {
                 VStack(spacing: 0) {
+                    if isDeleting {
+                        ProgressView("Moving duplicate files…")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                    }
                     DuplicatesSummaryHeader(
                         groupCount: groups.count,
                         copyCount: totalCopyCount,
@@ -59,6 +65,7 @@ struct DuplicatesView: View {
                         onReset: { selection.reset() },
                         onRemoveSelected: requestDeleteConfirmation
                     )
+                    .disabled(isDeleting)
 
                     if groups.isEmpty {
                         filteredEmptyState
@@ -80,6 +87,7 @@ struct DuplicatesView: View {
                             }
                             .padding(AppTheme.Spacing.mediumLarge)
                         }
+                        .disabled(isDeleting)
                     }
                 }
             }
@@ -136,9 +144,13 @@ struct DuplicatesView: View {
     }
 
     private func performDelete(_ request: FileCleanupRequest) {
+        guard !isDeleting else { return }
         cleanupRequest = nil
-        selection.reset()
-        onDelete(request.urls)
+        isDeleting = true
+        Task { @MainActor in
+            _ = await onDelete(request.urls)
+            isDeleting = false
+        }
     }
 
     private func requestDeleteConfirmation() {

@@ -7,7 +7,11 @@ struct DetailFileMetadata: Equatable, Sendable {
     let displayName: String?
     let parentDisplayName: String?
 
-    static func load(for url: URL, precomputedBytes: Int64? = nil) -> DetailFileMetadata {
+    static func load(
+        for url: URL,
+        precomputedBytes: Int64? = nil,
+        findingKind: StorageFindingKind? = nil
+    ) -> DetailFileMetadata {
         let fileManager = FileManager.default
         let exists = fileManager.fileExists(atPath: url.path)
         guard exists else {
@@ -26,9 +30,21 @@ struct DetailFileMetadata: Equatable, Sendable {
             exists: true,
             bytes: bytes,
             modifiedAt: values?.contentModificationDate,
-            displayName: simulatorDisplayName(at: url),
+            displayName: categoryDisplayName(at: url, findingKind: findingKind) ?? simulatorDisplayName(at: url),
             parentDisplayName: simulatorRuntimeName(at: url)
         )
+    }
+
+    private static func categoryDisplayName(at url: URL, findingKind: StorageFindingKind?) -> String? {
+        guard findingKind == .gradleDependencies else { return nil }
+        let components = url.standardizedFileURL.pathComponents
+        if components.suffix(2).elementsEqual(["wrapper", "dists"]) {
+            return "Gradle wrapper distributions"
+        }
+        if components.suffix(2).elementsEqual([".m2", "repository"]) {
+            return "Maven local repository"
+        }
+        return components.last == "caches" ? "Gradle caches" : nil
     }
 
     private static func simulatorDisplayName(at url: URL) -> String? {

@@ -19,9 +19,9 @@ struct SettingsView: View {
             Section("Scanning") {
                 Toggle("Include connected external volumes", isOn: $includeExternalVolumes)
                 Toggle("Show items that require review", isOn: $showReviewItems)
-                Picker("Large file threshold", selection: $largeFileThresholdMB) {
+                Picker("Large file threshold", selection: largeFileThresholdBinding) {
                     ForEach(LargeFileThreshold.allCases) { threshold in
-                        Text(threshold.label).tag(threshold.megabytes)
+                        Text(threshold.label).tag(threshold)
                     }
                 }
             }
@@ -45,12 +45,23 @@ struct SettingsView: View {
             }
 
             Section("About") {
-                LabeledContent("Version", value: "0.1.0")
-                LabeledContent("Scanner", value: "33 category scanners")
+                LabeledContent("Version", value: AppMetadata.versionDisplay)
+                LabeledContent("Scanner", value: "\(AppMetadata.scannerCount) category scanners")
             }
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 410)
         .navigationTitle("Settings")
+    }
+
+    private var threshold: LargeFileThreshold {
+        LargeFileThreshold(rawValue: largeFileThresholdMB) ?? .hundredMB
+    }
+
+    private var largeFileThresholdBinding: Binding<LargeFileThreshold> {
+        Binding(
+            get: { threshold },
+            set: { largeFileThresholdMB = $0.megabytes }
+        )
     }
 }

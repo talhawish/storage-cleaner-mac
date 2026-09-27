@@ -116,7 +116,12 @@ actor DirectorySnapshotCache {
     /// the blocking `FileManager` enumeration never occupies a cooperative
     /// thread that scanners need.
     private static func walk(root: URL) -> DirectorySnapshot {
-        let sizeKeys: Set<URLResourceKey> = [.isRegularFileKey, .fileAllocatedSizeKey, .fileSizeKey]
+        let sizeKeys: Set<URLResourceKey> = [
+            .isRegularFileKey,
+            .fileAllocatedSizeKey,
+            .fileSizeKey,
+            .contentModificationDateKey
+        ]
         let fileManager = FileManager.default
         var records: [FileRecord] = []
         var inspectedItemCount = 0
@@ -143,7 +148,8 @@ actor DirectorySnapshotCache {
                 inspectedItemCount += 1
                 records.append(FileRecord(
                     url: url,
-                    bytes: Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+                    bytes: Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0),
+                    modificationDate: values?.contentModificationDate
                 ))
                 return true
             }

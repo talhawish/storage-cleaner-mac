@@ -20,7 +20,13 @@ struct SecurityScopedStorageScanner: StorageScanning {
                     return
                 }
 
+                let applicationsFolder = URL(fileURLWithPath: "/Applications", isDirectory: true)
+                let applicationsAccess = permissionHandler.beginApplicationsFolderAccess(
+                    for: applicationsFolder
+                )
+
                 defer {
+                    applicationsAccess?.stop()
                     access.stop()
                     continuation.finish()
                 }

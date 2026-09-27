@@ -81,9 +81,7 @@ extension AppShellView {
                 Task { await viewModel.deleteFiles(urls) }
             },
             onOpenFinding: openFinding,
-            onRemoveRuntimeVersions: { urls in
-                _ = await viewModel.removeRuntimeVersions(urls)
-            },
+            onRemoveRuntimeVersions: { urls in await viewModel.removeRuntimeVersions(urls) },
             permissionHandler: viewModel.permissionHandler,
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
@@ -133,9 +131,7 @@ extension AppShellView {
             LargeFilesView(
                 findings: sectionFindings,
                 onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                },
+                onDelete: { urls in await viewModel.deleteFiles(urls) },
                 permissionHandler: viewModel.permissionHandler,
                 canUseProActions: viewModel.canCleanup,
                 onRequirePro: { _ = viewModel.gateFileAction() }
@@ -186,9 +182,7 @@ extension AppShellView {
             LeftoversView(
                 findings: sectionFindings,
                 onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                },
+                onDelete: { urls in await viewModel.deleteFiles(urls) },
                 canUseProActions: viewModel.canCleanup,
                 onRequirePro: { _ = viewModel.gateFileAction() }
             )
@@ -238,10 +232,12 @@ extension AppShellView {
             SystemJunkView(
                 findings: sectionFindings,
                 onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
+                onDelete: { urls, progressReporter in
                     // System Junk surfaces failures inline via `CleanupFeedback`,
                     // so the app-wide failure sheet stays out of the way.
-                    await viewModel.deleteFiles(urls, surfacingFailure: false)
+                    await viewModel.deleteFiles(urls, surfacingFailure: false) { progress in
+                        progressReporter.report(progress)
+                    }
                 },
                 canUseProActions: viewModel.canCleanup,
                 onRequirePro: { _ = viewModel.gateFileAction() }
@@ -342,9 +338,7 @@ extension AppShellView {
             DuplicatesView(
                 findings: sectionFindings,
                 onScan: { viewModel.startScan(for: kinds) },
-                onDelete: { urls in
-                    Task { await viewModel.deleteFiles(urls) }
-                },
+                onDelete: { urls in await viewModel.deleteFiles(urls) },
                 permissionHandler: viewModel.permissionHandler,
                 canUseProActions: viewModel.canCleanup,
                 onRequirePro: { _ = viewModel.gateFileAction() }
@@ -397,7 +391,7 @@ extension AppShellView {
                 findings: sectionFindings,
                 emptyStateMessage: emptyStateMessage,
                 onScan: scanAction,
-                onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) },
+                onRemove: { urls in await viewModel.removeCLIPrograms(urls) },
                 permissionHandler: viewModel.permissionHandler,
                 canUseProActions: viewModel.canCleanup,
                 onRequirePro: { _ = viewModel.gateFileAction() }
@@ -437,7 +431,7 @@ extension AppShellView {
             findings: findings,
             emptyStateMessage: emptyStateMessage,
             onScan: scanAction,
-            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            onDelete: { urls in await viewModel.deleteFiles(urls) },
             permissionHandler: viewModel.permissionHandler,
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
@@ -448,7 +442,7 @@ extension AppShellView {
         DuplicatesView(
             findings: [finding],
             onScan: { viewModel.startScan(for: DuplicateMediaFilter.all.kinds) },
-            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            onDelete: { urls in await viewModel.deleteFiles(urls) },
             permissionHandler: viewModel.permissionHandler,
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
@@ -467,7 +461,7 @@ extension AppShellView {
 
     private func runtimeVersionsDestination() -> some View {
         RuntimeVersionsView(
-            onRemove: { urls in _ = await viewModel.removeRuntimeVersions(urls) },
+            onRemove: { urls in await viewModel.removeRuntimeVersions(urls) },
             permissionHandler: viewModel.permissionHandler,
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
@@ -478,7 +472,7 @@ extension AppShellView {
         LeftoversView(
             findings: filteredFindings(for: AppSection.leftovers.filterKinds),
             onScan: { viewModel.startScan(for: AppSection.leftovers.filterKinds) },
-            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            onDelete: { urls in await viewModel.deleteFiles(urls) },
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
         )
@@ -488,7 +482,11 @@ extension AppShellView {
         SystemJunkView(
             findings: filteredFindings(for: AppSection.systemJunk.filterKinds),
             onScan: { viewModel.startScan(for: AppSection.systemJunk.filterKinds) },
-            onDelete: { urls in await viewModel.deleteFiles(urls, surfacingFailure: false) },
+            onDelete: { urls, progressReporter in
+                await viewModel.deleteFiles(urls, surfacingFailure: false) { progress in
+                    progressReporter.report(progress)
+                }
+            },
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
         )
@@ -497,7 +495,7 @@ extension AppShellView {
     private func categoryDestination(for finding: StorageFinding) -> some View {
         CategoryDetailView(
             finding: finding,
-            onDelete: { urls in Task { await viewModel.deleteFiles(urls) } },
+            onDelete: { urls in await viewModel.deleteFiles(urls) },
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }
         )
@@ -510,7 +508,7 @@ extension AppShellView {
             emptyStateMessage: "Homebrew, version managers, global npm packages, "
                 + "and standalone CLI tools you've installed.",
             onScan: { viewModel.startScan(for: [.cliApps]) },
-            onRemove: { urls in _ = await viewModel.removeCLIPrograms(urls) },
+            onRemove: { urls in await viewModel.removeCLIPrograms(urls) },
             permissionHandler: viewModel.permissionHandler,
             canUseProActions: viewModel.canCleanup,
             onRequirePro: { _ = viewModel.gateFileAction() }

@@ -226,18 +226,44 @@ enum ProjectMarker: Hashable, Sendable {
         }
     }
 
-    func matches(in directory: URL, contents: Set<String>, fileManager: FileManager) -> Bool {
+    func matches(
+        in directory: URL,
+        contents: ProjectDirectoryContents,
+        fileExtensions: inout Set<String>?,
+        fileManager: FileManager
+    ) -> Bool {
         switch self {
         case let .file(name):
-            contents.contains(name)
+            return contents.fileNames.contains(name)
         case let .fileExtension(ext):
-            contents.contains { $0.hasSuffix(".\(ext)") }
+            if fileExtensions == nil {
+                fileExtensions = contents.fileExtensions()
+            }
+            return fileExtensions?.contains(ext) == true
         case let .relativePath(path):
-            fileManager.fileExists(atPath: directory.appendingPathComponent(path).path)
+            return fileManager.fileExists(atPath: directory.appendingPathComponent(path).path)
         case .composerProject:
-            ProjectDependencyRules.isComposerProject(at: directory, fileManager: fileManager)
+            return ProjectDependencyRules.isComposerProject(at: directory, fileManager: fileManager)
         case let .packageJSONWithDependency(dep):
-            ProjectDependencyRules.packageJSONContains(dep, at: directory, fileManager: fileManager)
+            return ProjectDependencyRules.packageJSONContains(dep, at: directory, fileManager: fileManager)
+        }
+    }
+}
+
+/// One directory listing shared by all marker checks for a candidate project.
+/// Extension markers build one shared index lazily, only when exact-name and
+/// path markers have not already identified a technology.
+struct ProjectDirectoryContents: Sendable {
+    let fileNames: Set<String>
+
+    init(fileNames: [String]) {
+        self.fileNames = Set(fileNames)
+    }
+
+    func fileExtensions() -> Set<String> {
+        fileNames.reduce(into: Set<String>()) { extensions, fileName in
+            guard let separator = fileName.lastIndex(of: ".") else { return }
+            extensions.insert(String(fileName[fileName.index(after: separator)...]))
         }
     }
 }
@@ -326,13 +352,36 @@ enum ProjectDetector {
     /// Detect the technology of the project rooted at `directory`, or `nil` if
     /// the directory contains no recognised project markers.
     static func detect(at directory: URL, fileManager: FileManager = .default) -> ProjectTechnology? {
-        let entries = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
-        guard !entries.isEmpty else { return nil }
-        let contents = Set(entries)
+        guard let contents = directoryContents(at: directory, fileManager: fileManager) else { return nil }
+        return detect(at: directory, contents: contents, fileManager: fileManager)
+    }
 
-        return rules.first { rule in
-            rule.markers.contains { $0.matches(in: directory, contents: contents, fileManager: fileManager) }
-        }?.technology
+    static func directoryContents(
+        at directory: URL,
+        fileManager: FileManager = .default
+    ) -> ProjectDirectoryContents? {
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return nil }
+        return ProjectDirectoryContents(fileNames: entries)
+    }
+
+    static func detect(
+        at directory: URL,
+        contents: ProjectDirectoryContents,
+        fileManager: FileManager = .default
+    ) -> ProjectTechnology? {
+        guard !contents.fileNames.isEmpty else { return nil }
+
+        var fileExtensions: Set<String>?
+        for rule in rules where matches(
+            rule,
+            at: directory,
+            contents: contents,
+            fileExtensions: &fileExtensions,
+            fileManager: fileManager
+        ) {
+            return rule.technology
+        }
+        return nil
     }
 
     /// Detect every independently useful stack rooted in the same directory.
@@ -342,14 +391,27 @@ enum ProjectDetector {
         at directory: URL,
         fileManager: FileManager = .default
     ) -> Set<ProjectTechnology> {
-        let entries = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
-        guard !entries.isEmpty else { return [] }
-        let contents = Set(entries)
-        var technologies = Set(rules.compactMap { rule in
-            rule.markers.contains {
-                $0.matches(in: directory, contents: contents, fileManager: fileManager)
-            } ? rule.technology : nil
-        })
+        guard let contents = directoryContents(at: directory, fileManager: fileManager) else { return [] }
+        return detectAll(at: directory, contents: contents, fileManager: fileManager)
+    }
+
+    static func detectAll(
+        at directory: URL,
+        contents: ProjectDirectoryContents,
+        fileManager: FileManager = .default
+    ) -> Set<ProjectTechnology> {
+        guard !contents.fileNames.isEmpty else { return [] }
+        var fileExtensions: Set<String>?
+        var technologies = Set<ProjectTechnology>()
+        for rule in rules where matches(
+            rule,
+            at: directory,
+            contents: contents,
+            fileExtensions: &fileExtensions,
+            fileManager: fileManager
+        ) {
+            technologies.insert(rule.technology)
+        }
 
         if technologies.contains(.flutter) {
             technologies.remove(.android)
@@ -363,6 +425,24 @@ enum ProjectDetector {
             technologies.remove(.java)
         }
         return technologies
+    }
+
+    private static func matches(
+        _ rule: ProjectDetectionRule,
+        at directory: URL,
+        contents: ProjectDirectoryContents,
+        fileExtensions: inout Set<String>?,
+        fileManager: FileManager
+    ) -> Bool {
+        for marker in rule.markers where marker.matches(
+            in: directory,
+            contents: contents,
+            fileExtensions: &fileExtensions,
+            fileManager: fileManager
+        ) {
+            return true
+        }
+        return false
     }
 
     static func primaryTechnology(in technologies: Set<ProjectTechnology>) -> ProjectTechnology? {

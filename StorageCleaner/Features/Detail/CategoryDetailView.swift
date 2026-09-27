@@ -2,14 +2,15 @@ import SwiftUI
 
 struct CategoryDetailView: View {
     let finding: StorageFinding
-    let onDelete: ([URL]) -> Void
+    let onDelete: ([URL]) async -> CleanupResult
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
 
     @State private var selectedURLs: Set<URL> = []
     @State private var searchText = ""
     @State private var sortOption: SortOption = .sizeDesc
-    @State private var showDeleteConfirmation = false
+    @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isDeleting = false
     @State private var showInfo = false
     @State private var fileMetadata: [URL: DetailFileMetadata] = [:]
     @State private var childLevels: [URL: DetailDirectoryLevel] = [:]
@@ -83,18 +84,12 @@ struct CategoryDetailView: View {
         .toolbar {
             toolbarContent(visibleURLs: visibleURLs)
         }
-        .sheet(isPresented: $showDeleteConfirmation) {
+        .sheet(item: $cleanupRequest) { request in
             DeleteConfirmationSheet(
-                selectedURLs: Array(selectedURLs),
-                totalBytes: totalSelectedBytes,
-                onDelete: {
-                    let urls = Array(selectedURLs)
-                    removedURLs.formUnion(urls)
-                    selectedURLs.removeAll()
-                    showDeleteConfirmation = false
-                    onDelete(urls)
-                },
-                onCancel: { showDeleteConfirmation = false }
+                selectedURLs: request.urls,
+                totalBytes: request.totalBytes,
+                onDelete: { performDelete(request) },
+                onCancel: { cleanupRequest = nil }
             )
         }
         .sheet(isPresented: $showInfo) {
@@ -108,7 +103,7 @@ struct CategoryDetailView: View {
     @ToolbarContentBuilder
     private func toolbarContent(visibleURLs: [URL]) -> some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            if !selectedURLs.isEmpty {
+            if !selectedURLs.isEmpty && !isDeleting {
                 Button {
                     requestDeleteConfirmation()
                 } label: {
@@ -184,11 +179,26 @@ struct CategoryDetailView: View {
             onRequirePro()
             return
         }
-        showDeleteConfirmation = true
+        cleanupRequest = FileCleanupRequest(urls: selectedURLs, totalBytes: totalSelectedBytes)
+    }
+
+    private func performDelete(_ request: FileCleanupRequest) {
+        guard !isDeleting else { return }
+        cleanupRequest = nil
+        isDeleting = true
+        Task { @MainActor in
+            let result = await onDelete(request.urls)
+            let deleted = Set(result.deletedItems.map(\.originalURL))
+            removedURLs.formUnion(deleted)
+            selectedURLs.subtract(deleted)
+            isDeleting = false
+        }
     }
 
     private func pushDirectoryLevel(from url: URL) {
-        guard let level = childLevels[url] ?? DetailDirectoryChildren.level(for: url) else { return }
+        // Child levels are populated by `loadFileMetadata()` on a utility task. Never fall back
+        // to synchronous directory enumeration from a row action on the main actor.
+        guard let level = childLevels[url] else { return }
         directoryStack.append(level)
         selectedURLs.removeAll()
         searchText = ""
@@ -240,19 +250,28 @@ struct CategoryDetailView: View {
     private func loadFileMetadata() async {
         let urls = currentURLs
         let pathBytes = finding.pathBytes
-        let loaded = await Task.detached(priority: .utility) {
-            let metadata = Dictionary(
-                urls.map { ($0, DetailFileMetadata.load(for: $0, precomputedBytes: pathBytes[$0])) },
-                uniquingKeysWith: { first, _ in first }
-            )
-            let levels = Dictionary(
-                urls.compactMap { url in
-                    DetailDirectoryChildren.level(for: url).map { (url, $0) }
-                },
-                uniquingKeysWith: { first, _ in first }
-            )
+        let findingKind = finding.kind
+        let includesHiddenFiles = [.largeFolders, .localAIModels, .aiModelCaches].contains(findingKind)
+        let task = Task.detached(priority: .utility) {
+            var metadata: [URL: DetailFileMetadata] = [:]
+            var levels: [URL: DetailDirectoryLevel] = [:]
+            for url in urls {
+                guard !Task.isCancelled else { break }
+                metadata[url] = DetailFileMetadata.load(
+                    for: url,
+                    precomputedBytes: pathBytes[url],
+                    findingKind: findingKind
+                )
+                guard !Task.isCancelled else { break }
+                levels[url] = DetailDirectoryChildren.level(for: url, includingHiddenFiles: includesHiddenFiles)
+            }
             return (metadata, levels)
-        }.value
+        }
+        let loaded = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         guard !Task.isCancelled else { return }
         fileMetadata.merge(loaded.0, uniquingKeysWith: { _, new in new })
         childLevels.merge(loaded.1, uniquingKeysWith: { _, new in new })
@@ -275,9 +294,33 @@ extension CategoryDetailView {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
 
-            selectionBar(visibleURLs: visibleURLs)
+            if isDeleting {
+                ProgressView("Moving selected files…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 12)
+            }
 
-            fileList(visibleURLs: visibleURLs)
+            selectionBar(visibleURLs: visibleURLs)
+                .disabled(isDeleting)
+
+            if visibleURLs.isEmpty, !searchText.isEmpty {
+                SearchResultsEmptyState(
+                    itemLabel: "files",
+                    searchText: searchText,
+                    onClear: { searchText = "" }
+                )
+            } else if visibleURLs.isEmpty {
+                EmptyStateView(
+                    title: "No files remain",
+                    message: "The files in this category have already been moved to the Trash.",
+                    systemImage: "checkmark.seal.fill",
+                    tint: AppTheme.mint
+                )
+            } else {
+                fileList(visibleURLs: visibleURLs)
+                    .disabled(isDeleting)
+            }
         }
     }
 

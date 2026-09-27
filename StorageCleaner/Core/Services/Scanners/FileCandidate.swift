@@ -12,12 +12,15 @@ struct FileRecord: Equatable, Sendable {
     let url: URL
     /// Allocated size captured from the enumeration's prefetched resource values.
     let bytes: Int64
+    /// Modification date captured with the size so age-based scanners do not stat every match.
+    let modificationDate: Date?
     let pathExtensionLowercased: String
     let nameLowercased: String
 
-    init(url: URL, bytes: Int64) {
+    init(url: URL, bytes: Int64, modificationDate: Date? = nil) {
         self.url = url
         self.bytes = bytes
+        self.modificationDate = modificationDate
         pathExtensionLowercased = url.pathExtension.lowercased()
         nameLowercased = url.lastPathComponent.lowercased()
     }
@@ -28,6 +31,7 @@ extension [FileCandidate] {
     /// candidates by byte size. Shared by every traversal implementation so
     /// `prioritizeLargest` behaves identically with or without the snapshot cache.
     mutating func retainLargest(_ candidate: FileCandidate, limit: Int) {
+        guard limit > 0 else { return }
         guard count >= limit else {
             append(candidate)
             return

@@ -22,8 +22,8 @@ struct EmulatorDiscovery: Sendable {
 ///
 /// Removal is the safest mechanism per platform:
 /// * Apple simulator runtimes live under SIP-protected `/System/Library/AssetsV2`, so they are removed
-///   with `xcrun simctl runtime delete` (permanent, but re-downloadable from Apple).
-/// * Simulator device instances use `xcrun simctl delete <udid>` (re-creatable from Xcode).
+///   with Xcode's `simctl runtime delete` command (permanent, but re-downloadable from Apple).
+/// * Simulator device instances use `simctl delete <udid>` (re-creatable from Xcode).
 /// * Android system images and Device Support packs are user-owned folders, so they are moved to the
 ///   Trash (restorable).
 ///
@@ -39,8 +39,8 @@ struct EmulatorManagementService: Sendable {
 
     /// Runs a command and returns its exit code and combined stdout/stderr.
     var runCommand: @Sendable (_ tool: URL, _ arguments: [String]) async -> CommandOutput
-    /// Absolute path to `xcrun`, or nil when the Xcode command-line tools are unavailable.
-    var locateXcrun: @Sendable () -> URL?
+    /// Absolute path to Xcode's `simctl` executable, or nil when Xcode is unavailable.
+    var locateSimctl: @Sendable () -> URL?
     /// Root of the Android `system-images` directory, or nil when no SDK is installed.
     var androidSystemImagesRoot: @Sendable () -> URL?
     /// Apple Device Support roots (iOS, tvOS, watchOS, visionOS). Empty array when no Xcode developer
@@ -54,7 +54,7 @@ struct EmulatorManagementService: Sendable {
     /// Measures an item's on-disk size.
     var measure: @Sendable (_ url: URL) -> Int64
     /// Moves an item to the Trash.
-    var trashItem: @Sendable (_ url: URL) throws -> Void
+    var trashItem: @Sendable (_ url: URL) async throws -> Void
 
     // MARK: - Discovery
 
@@ -102,9 +102,9 @@ struct EmulatorManagementService: Sendable {
     }
 
     private func discoverAppleRuntimes() async -> (images: [EmulatorImage], failureMessage: String?) {
-        // No xcrun means no Xcode tooling: an empty result is a true empty, not a failure.
-        guard let xcrun = locateXcrun() else { return ([], nil) }
-        let output = await runCommand(xcrun, ["simctl", "runtime", "list", "-j"])
+        // No simctl means no Xcode tooling: an empty result is a true empty, not a failure.
+        guard let simctl = locateSimctl() else { return ([], nil) }
+        let output = await runCommand(simctl, ["runtime", "list", "-j"])
         guard output.succeeded, let data = output.output.data(using: .utf8) else {
             return ([], Self.simctlFailureMessage(listing: "simulator runtimes", output: output))
         }
@@ -175,12 +175,12 @@ struct EmulatorManagementService: Sendable {
     }
 
     private func discoverSimulatorDevicesFromSimctl() async -> SimulatorDeviceDiscovery {
-        guard let xcrun = locateXcrun() else {
+        guard let simctl = locateSimctl() else {
             return SimulatorDeviceDiscovery(
                 images: [], deviceDirectories: [], didInspect: false, failureMessage: nil
             )
         }
-        let output = await runCommand(xcrun, ["simctl", "list", "devices", "-j"])
+        let output = await runCommand(simctl, ["list", "devices", "-j"])
         guard output.succeeded, let data = output.output.data(using: .utf8),
               let decoded = try? JSONDecoder().decode(SimulatorDevicesJSON.self, from: data) else {
             return SimulatorDeviceDiscovery(
@@ -304,7 +304,7 @@ struct EmulatorManagementService: Sendable {
         var reclaimed: Int64 = 0
         var failures: [EmulatorCleanupResult.Failure] = []
 
-        let xcrun = locateXcrun()
+        let simctl = locateSimctl()
         // Remove device records before runtimes. A selected runtime can be shared by many
         // devices, and deleting it first can make the subsequent device cleanup fail or leave
         // stale device records associated with a runtime that no longer exists.
@@ -312,7 +312,7 @@ struct EmulatorManagementService: Sendable {
             Self.removalPriority(for: $0.removal) < Self.removalPriority(for: $1.removal)
         }
         for image in orderedImages where image.isRemovable {
-            let result = await removeSingle(image, using: xcrun)
+            let result = await removeSingle(image, using: simctl)
             if let failure = result.failure {
                 failures.append(failure)
             } else if let removedID = result.removedID {
@@ -334,24 +334,24 @@ struct EmulatorManagementService: Sendable {
         let failure: EmulatorCleanupResult.Failure?
     }
 
-    private func removeSingle(_ image: EmulatorImage, using xcrun: URL?) async -> SingleRemovalResult {
+    private func removeSingle(_ image: EmulatorImage, using simctl: URL?) async -> SingleRemovalResult {
         switch image.removal {
         case let .simctlRuntime(identifier):
             return await removeWithSimctl(
                 image,
-                xcrun: xcrun,
-                arguments: ["simctl", "runtime", "delete", identifier]
+                simctl: simctl,
+                arguments: ["runtime", "delete", identifier]
             )
         case let .simctlDevice(udid):
             return await removeWithSimctl(
                 image,
-                xcrun: xcrun,
-                arguments: ["simctl", "delete", udid]
+                simctl: simctl,
+                arguments: ["delete", udid]
             )
         case let .trashDirectory(url):
             let size = image.bytes > 0 ? image.bytes : measure(url)
             do {
-                try trashItem(url)
+                try await trashItem(url)
                 return SingleRemovalResult(removedID: image.id, reclaimedBytes: size, failure: nil)
             } catch {
                 return SingleRemovalResult(
@@ -365,17 +365,17 @@ struct EmulatorManagementService: Sendable {
 
     private func removeWithSimctl(
         _ image: EmulatorImage,
-        xcrun: URL?,
+        simctl: URL?,
         arguments: [String]
     ) async -> SingleRemovalResult {
-        guard let xcrun else {
+        guard let simctl else {
             return SingleRemovalResult(
                 removedID: nil,
                 reclaimedBytes: 0,
-                failure: .init(id: image.id, message: "Xcode command-line tools not found.")
+                failure: .init(id: image.id, message: "Xcode's simctl command was not found.")
             )
         }
-        let output = await runCommand(xcrun, arguments)
+        let output = await runCommand(simctl, arguments)
         if output.succeeded {
             return SingleRemovalResult(removedID: image.id, reclaimedBytes: image.bytes, failure: nil)
         }
@@ -405,33 +405,50 @@ struct EmulatorManagementService: Sendable {
 extension EmulatorManagementService {
     static let live = EmulatorManagementService(
         runCommand: { tool, arguments in
-            await Task.detached(priority: .userInitiated) {
-                let process = Process()
-                process.executableURL = tool
-                process.arguments = arguments
-
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
-
-                do {
-                    try process.run()
-                } catch {
-                    return CommandOutput(exitCode: -1, output: error.localizedDescription)
-                }
-
-                // Drain before waiting so a full pipe buffer can't deadlock the child.
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                return CommandOutput(
-                    exitCode: process.terminationStatus,
-                    output: String(bytes: data, encoding: .utf8) ?? ""
+            do {
+                let result = try await SystemProcessExecutor().run(
+                    executable: tool,
+                    arguments: arguments
                 )
-            }.value
+                return CommandOutput(exitCode: result.exitCode, output: result.combinedOutput)
+            } catch {
+                return CommandOutput(exitCode: -1, output: error.localizedDescription)
+            }
         },
-        locateXcrun: {
-            let url = URL(fileURLWithPath: "/usr/bin/xcrun")
-            return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+        locateSimctl: {
+            let fileManager = FileManager.default
+            var developerDirectories: [URL] = []
+            if let developerDirectory = ProcessInfo.processInfo.environment["DEVELOPER_DIR"],
+               developerDirectory.hasPrefix("/") {
+                developerDirectories.append(URL(fileURLWithPath: developerDirectory, isDirectory: true))
+            }
+
+            let selectedDeveloperDirectory = URL(fileURLWithPath: "/var/db/xcode_select_link")
+                .resolvingSymlinksInPath()
+            if selectedDeveloperDirectory.path != "/var/db/xcode_select_link" {
+                developerDirectories.append(selectedDeveloperDirectory)
+            }
+            developerDirectories.append(URL(
+                fileURLWithPath: "/Applications/Xcode.app/Contents/Developer",
+                isDirectory: true
+            ))
+
+            if let applications = try? fileManager.contentsOfDirectory(
+                at: URL(fileURLWithPath: "/Applications", isDirectory: true),
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) {
+                developerDirectories.append(contentsOf: applications
+                    .filter { $0.lastPathComponent.hasPrefix("Xcode") && $0.pathExtension == "app" }
+                    .map { $0.appending(path: "Contents/Developer", directoryHint: .isDirectory) })
+            }
+
+            var seen = Set<String>()
+            for developerDirectory in developerDirectories where seen.insert(developerDirectory.path).inserted {
+                let simctl = developerDirectory.appending(path: "usr/bin/simctl")
+                if fileManager.isExecutableFile(atPath: simctl.path) { return simctl }
+            }
+            return nil
         },
         androidSystemImagesRoot: {
             let fileManager = FileManager.default
@@ -467,13 +484,13 @@ extension EmulatorManagementService {
             return FileManager.default.fileExists(atPath: url.path) ? url : nil
         },
         measure: { StorageFormatting.itemSize(at: $0) },
-        trashItem: { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+        trashItem: { try await WorkspaceTrashMover().moveOneToTrash($0) }
     )
 }
 
 // MARK: - simctl JSON
 
-/// One entry from `xcrun simctl runtime list -j` (keyed by UUID at the top level). All fields except
+/// One entry from `simctl runtime list -j` (keyed by UUID at the top level). All fields except
 /// `identifier` are optional in the output; `deletable` defaults to `false` so a missing flag never
 /// makes a bundled runtime appear removable.
 private struct RuntimeJSON: Decodable {
@@ -508,7 +525,7 @@ private struct SimulatorDeviceDiscovery: Sendable {
     let images: [EmulatorImage]
     let deviceDirectories: Set<String>
     let didInspect: Bool
-    /// Set when simctl ran but failed; `nil` when xcrun is simply absent.
+    /// Set when simctl ran but failed; `nil` when Xcode is simply absent.
     let failureMessage: String?
 }
 

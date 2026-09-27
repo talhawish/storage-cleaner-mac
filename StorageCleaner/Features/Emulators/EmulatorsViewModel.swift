@@ -45,6 +45,7 @@ final class EmulatorsViewModel {
 
     private(set) var images: [EmulatorImage] = []
     private(set) var state: State = .loading
+    private(set) var diagnosticMessage: String?
     private(set) var isDeleting = false
     private(set) var cleanupFailureMessage: String?
     var selectedIDs: Set<String> = []
@@ -102,6 +103,7 @@ final class EmulatorsViewModel {
     func start() {
         loadTask?.cancel()
         state = .loading
+        diagnosticMessage = nil
         loadStartedAt = Date()
         let statuses = permissionHandler.currentStatuses()
         let blocked = statuses.filter { $0.state == .denied && $0.scope.isBlocking }
@@ -210,6 +212,7 @@ final class EmulatorsViewModel {
         let discovery = await service.discoverWithDiagnostics()
         let discovered = discovery.images
         guard !Task.isCancelled else { return }
+        diagnosticMessage = discovery.failureMessage
 
         // Two-phase sizing: show the list immediately, then fill in on-disk sizes for
         // Trash-managed folders (Device Support, simulator devices, Android images).

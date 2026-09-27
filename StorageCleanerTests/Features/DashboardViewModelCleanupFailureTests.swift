@@ -144,6 +144,7 @@ final class DashboardViewModelCleanupFailureTests: XCTestCase {
             isDangling: { _ in false },
             removeSymlink: { _ in },
             isExecutable: { _ in false },
+            itemExists: { _ in false },
             userBinDirectories: { [] }
         )
     }

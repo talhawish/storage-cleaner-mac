@@ -158,6 +158,51 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
         XCTAssertFalse(permissionHandler.isAccessActive)
     }
 
+    func testCLIRemovalKeepsHomeFolderAccessActiveUntilTrashMoveFinishes() async {
+        let removed = URL(fileURLWithPath: "/Users/test/.opencode/bin/opencode")
+        let permissionHandler = RecordingPermissionHandler()
+        let observation = ScopeObservation()
+        let cliService = CLIRemovalService(
+            locateBrew: { nil },
+            runCommand: { _, _ in .init(exitCode: 0, output: "") },
+            measure: { _ in 40 },
+            trashItem: { _ in observation.record(permissionHandler.isAccessActive) },
+            homebrewLinkDirectories: { [] },
+            symlinks: { _ in [] },
+            isDangling: { _ in false },
+            removeSymlink: { _ in },
+            isExecutable: { _ in false },
+            itemExists: { _ in false },
+            userBinDirectories: { [] }
+        )
+        let viewModel = DashboardViewModel(
+            scanner: FixedSnapshotScanner(snapshot: ScanSnapshot(
+                findings: [StorageFinding(
+                    kind: .cliApps,
+                    domain: .cliTooling,
+                    bytes: 40,
+                    itemCount: 1,
+                    safety: .review,
+                    examples: [],
+                    filePaths: [removed]
+                )],
+                scannedItemCount: 1,
+                duration: .seconds(1)
+            )),
+            permissionHandler: permissionHandler,
+            cliRemovalService: cliService
+        )
+        await loadSnapshot(in: viewModel)
+        let accessCountBeforeRemoval = permissionHandler.beginAccessCount
+
+        let result = await viewModel.removeCLIPrograms([removed])
+
+        XCTAssertEqual(result.deletedItems.map(\.originalURL), [removed])
+        XCTAssertEqual(permissionHandler.beginAccessCount, accessCountBeforeRemoval + 1)
+        XCTAssertTrue(observation.wasActive)
+        XCTAssertFalse(permissionHandler.isAccessActive)
+    }
+
     func testEmulatorCleanupReconcilesPathBackedDashboardFindingsAndHistory() async {
         let pack = URL(fileURLWithPath: "/Users/test/Library/Developer/Xcode/iOS DeviceSupport/26.0")
         let store = SpyHistoryStore()
@@ -293,6 +338,7 @@ final class DashboardViewModelCleanupRegressionTests: XCTestCase {
             isDangling: { _ in false },
             removeSymlink: { _ in },
             isExecutable: { _ in false },
+            itemExists: { _ in false },
             userBinDirectories: { [] }
         )
     }
@@ -380,5 +426,16 @@ private final class ScopeCheckingCleanupService: @unchecked Sendable, CleanupSer
             failedURLs: [],
             totalBytesReclaimed: 40
         )
+    }
+}
+
+private final class ScopeObservation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var active = false
+
+    var wasActive: Bool { lock.withLock { active } }
+
+    func record(_ value: Bool) {
+        lock.withLock { active = value }
     }
 }

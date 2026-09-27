@@ -59,7 +59,7 @@ final class StorageCleanerUITests: XCTestCase {
 
         let settingsRow = app.descendants(matching: .any)["sidebar-settings"]
         XCTAssertTrue(settingsRow.waitForExistence(timeout: 3))
-        settingsRow.click()
+        clickSidebarItem("sidebar-settings", in: app)
 
         let thresholdPicker = app.descendants(matching: .any)["large-file-threshold-picker"]
         XCTAssertTrue(thresholdPicker.waitForExistence(timeout: 3))
@@ -102,9 +102,11 @@ final class StorageCleanerUITests: XCTestCase {
             ("projectActivity", ["project-activity-root"]),
             ("apps", ["applications-root"]),
             ("developerStorage", ["developer-storage-root", "developer-storage-empty"]),
+            ("aiModels", ["storage-findings-ai-models"]),
             ("simulatorsEmulators", ["simulators-emulators-root"]),
             ("cliPrograms", ["cli-programs-root", "cli-programs-empty"]),
             ("largeFiles", ["large-files-root", "large-files-empty"]),
+            ("largeFolders", ["storage-findings-other-storage"]),
             ("leftovers", ["leftovers-root", "leftovers-empty"]),
             ("screenshotsAndRecordings", [
                 "media-category-screenshots-recordings",
@@ -126,7 +128,7 @@ final class StorageCleanerUITests: XCTestCase {
             if sidebarID != "overview" {
                 let row = app.descendants(matching: .any)["sidebar-\(sidebarID)"]
                 XCTAssertTrue(row.waitForExistence(timeout: 4), "Missing sidebar row \(sidebarID)")
-                row.click()
+                clickSidebarItem("sidebar-\(sidebarID)", in: app)
 
                 found = rootIDs.contains { identifier in
                     app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)
@@ -134,7 +136,7 @@ final class StorageCleanerUITests: XCTestCase {
 
                 // XCTest can consume the first click solely to reveal an off-screen row.
                 if !found {
-                    row.click()
+                    clickSidebarItem("sidebar-\(sidebarID)", in: app)
                     found = rootIDs.contains { identifier in
                         app.descendants(matching: .any)[identifier].waitForExistence(timeout: 4)
                     }
@@ -150,6 +152,33 @@ final class StorageCleanerUITests: XCTestCase {
         app.descendants(matching: .any)["sidebar-developerStorage"].click()
         XCTAssertTrue(app.descendants(matching: .any)["developer-storage-root"].waitForExistence(timeout: 4))
         XCTAssertFalse(app.descendants(matching: .any)["category-detail-xcodeArtifacts"].exists)
+    }
+
+    @MainActor
+    func testAIModelsSectionShowsReviewNoticeAndOpensModelPaths() {
+        let app = launchApp(extraArguments: ["--complete-demo-scan-immediately"])
+        startScanAndWaitForResults(in: app)
+
+        clickSidebarItem("sidebar-aiModels", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["storage-review-notice"].waitForExistence(timeout: 4))
+
+        let modelRow = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Local AI model files")
+        ).firstMatch
+        XCTAssertTrue(modelRow.waitForExistence(timeout: 4))
+        let inventoryScreenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        inventoryScreenshot.name = "AI Models inventory"
+        inventoryScreenshot.lifetime = .keepAlways
+        add(inventoryScreenshot)
+        modelRow.click()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["category-detail-localAIModels"].waitForExistence(timeout: 4)
+        )
+        let modelPath = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "/tmp/StorageCleanerDemo/Models/Example-Model.gguf")
+        ).firstMatch
+        XCTAssertTrue(modelPath.waitForExistence(timeout: 4))
     }
 
     @MainActor
@@ -301,6 +330,19 @@ final class StorageCleanerUITests: XCTestCase {
         app.launch()
         app.activate()
         return app
+    }
+
+    @MainActor
+    private func clickSidebarItem(_ identifier: String, in app: XCUIApplication) {
+        let row = app.descendants(matching: .any)[identifier]
+        let sidebar = app.outlines["Sidebar"]
+        XCTAssertTrue(row.waitForExistence(timeout: 4))
+        for _ in 0..<8 {
+            if sidebar.frame.contains(row.frame) { break }
+            sidebar.scroll(byDeltaX: 0, deltaY: row.frame.midY > sidebar.frame.midY ? -150 : 150)
+        }
+        XCTAssertTrue(sidebar.frame.contains(row.frame), "Sidebar item should be visible before clicking")
+        row.click()
     }
 
     @MainActor

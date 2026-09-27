@@ -4,7 +4,8 @@ struct FileSystemCollector: Sendable {
     private static let sizeKeys: Set<URLResourceKey> = [
         .isRegularFileKey,
         .fileAllocatedSizeKey,
-        .fileSizeKey
+        .fileSizeKey,
+        .contentModificationDateKey
     ]
 
     func collectExistingItems(at urls: [URL]) -> FileCollectionResult {
@@ -126,7 +127,11 @@ struct FileSystemCollector: Sendable {
                 guard values?.isRegularFile == true else { return true }
                 inspectedItemCount += 1
 
-                let record = FileRecord(url: url, bytes: allocatedSize(from: values))
+                let record = FileRecord(
+                    url: url,
+                    bytes: allocatedSize(from: values),
+                    modificationDate: values?.contentModificationDate
+                )
                 guard matcher(record) else { return true }
 
                 let candidate = FileCandidate(url: record.url, bytes: record.bytes)

@@ -136,6 +136,7 @@ final class InstalledAppCatalogTests: XCTestCase {
         let catalog = InstalledAppCatalog(searchRoots: [missing])
 
         XCTAssertFalse(catalog.bundleIDs.isEmpty, "Apple baseline should still be present")
+        XCTAssertTrue(catalog.isComplete, "A missing optional install root is not a permission failure.")
     }
 
     func testLazyCatalogDefersFilesystemWalkUntilFirstLookup() throws {

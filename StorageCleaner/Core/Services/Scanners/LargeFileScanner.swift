@@ -16,6 +16,7 @@ struct LargeFileScanner: StorageCategoryScanning {
         ]),
         minimumBytes: Int64 = LargeFileThreshold.collectionFloor.bytes,
         safetyPolicy: LargeFileSafetyPolicy = LargeFileSafetyPolicy(),
+        modelDiscoveryPolicy: HomeStorageDiscoveryPolicy = .live,
         collector: any FileTraversing
     ) {
         self.safetyPolicy = safetyPolicy
@@ -31,12 +32,23 @@ struct LargeFileScanner: StorageCategoryScanning {
             // so the safety policy (which may stat for executability) only
             // runs for files already past the floor.
             record.bytes >= minimumBytes
+                && !Self.isLocalAIModel(record, policy: modelDiscoveryPolicy)
                 && safetyPolicy.isReviewSafeCandidate(record.url)
         }
     }
 
     func scan() async -> CategoryScanResult {
         await scanner.scan()
+    }
+
+    private static func isLocalAIModel(_ record: FileRecord, policy: HomeStorageDiscoveryPolicy) -> Bool {
+        guard policy.includesModelLocation(record.url),
+              let format = LocalAIModelFormat(url: record.url) else { return false }
+        return format.isLikelyModel(
+            at: record.url,
+            bytes: record.bytes,
+            defaultMinimum: policy.minimumModelBytes
+        )
     }
 }
 

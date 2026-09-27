@@ -73,15 +73,25 @@ final class CLIRemovalServiceTests: XCTestCase {
         XCTAssertEqual(message, "Error: git is required by foo")
     }
 
-    func testFallsBackToTrashWhenHomebrewIsMissing() async {
+    func testBrewSuccessIsNotReportedWhileInstallationStillExists() async {
+        let recorder = Recorder()
+        recorder.existingItems = [cellarFormula]
+        let result = await makeService(recorder: recorder).remove([cellarFormula])
+
+        XCTAssertTrue(result.deletedURLs.isEmpty)
+        XCTAssertEqual(result.failedCount, 1)
+    }
+
+    func testHomebrewItemIsPreservedWhenHomebrewIsMissing() async {
         let recorder = Recorder()
         let service = makeService(recorder: recorder, brew: nil)
 
         let result = await service.remove([cellarFormula])
 
         XCTAssertTrue(recorder.commands.isEmpty)
-        XCTAssertEqual(recorder.trashed, [cellarFormula])
-        XCTAssertEqual(result.deletedURLs, [cellarFormula])
+        XCTAssertTrue(recorder.trashed.isEmpty)
+        XCTAssertTrue(result.deletedURLs.isEmpty)
+        XCTAssertEqual(result.failedCount, 1)
     }
 
     // MARK: - Non-Homebrew
@@ -228,7 +238,7 @@ final class CLIRemovalServiceTests: XCTestCase {
         XCTAssertEqual(result.deletedURLs, [pkg])
     }
 
-    func testNodeGlobalFallsBackToTrashWhenNoManagerFound() async {
+    func testNodeGlobalIsPreservedWhenManagerIsUnavailable() async {
         let pkg = URL(fileURLWithPath: "/opt/homebrew/lib/node_modules/firebase-tools", isDirectory: true)
         let recorder = Recorder() // executableTools empty → npm not found
         let service = makeService(recorder: recorder)
@@ -236,8 +246,14 @@ final class CLIRemovalServiceTests: XCTestCase {
         let result = await service.remove([pkg])
 
         XCTAssertTrue(recorder.commands.isEmpty)
-        XCTAssertEqual(recorder.trashed, [pkg])
-        XCTAssertEqual(result.deletedURLs, [pkg])
+        XCTAssertTrue(recorder.trashed.isEmpty)
+        XCTAssertTrue(result.deletedURLs.isEmpty)
+        XCTAssertEqual(result.failedCount, 1)
+        guard case let CLIRemovalError.nodeUninstallFailed(package, message)? = result.failedURLs.first?.1 else {
+            return XCTFail("Expected actionable package-manager failure")
+        }
+        XCTAssertEqual(package, "firebase-tools")
+        XCTAssertTrue(message.contains("package manager is unavailable"))
     }
 
     func testFailedNodeUninstallIsReported() async {
@@ -258,6 +274,18 @@ final class CLIRemovalServiceTests: XCTestCase {
         guard case CLIRemovalError.nodeUninstallFailed? = result.failedURLs.first?.1 else {
             return XCTFail("Expected nodeUninstallFailed")
         }
+    }
+
+    func testNodeSuccessIsNotReportedWhilePackageStillExists() async {
+        let pkg = URL(fileURLWithPath: "/opt/homebrew/lib/node_modules/firebase-tools", isDirectory: true)
+        let recorder = Recorder()
+        recorder.executableTools = [URL(fileURLWithPath: "/opt/homebrew/bin/npm")]
+        recorder.existingItems = [pkg]
+
+        let result = await makeService(recorder: recorder).remove([pkg])
+
+        XCTAssertTrue(result.deletedURLs.isEmpty)
+        XCTAssertEqual(result.failedCount, 1)
     }
 
     // MARK: - Helpers
@@ -283,6 +311,7 @@ final class CLIRemovalServiceTests: XCTestCase {
             isDangling: { recorder.danglingSymlinks.contains($0) },
             removeSymlink: { recorder.recordRemovedSymlink($0) },
             isExecutable: { recorder.executableTools.contains($0) },
+            itemExists: { recorder.existingItems.contains($0) },
             userBinDirectories: { recorder.userBinDirectories }
         )
     }
@@ -301,6 +330,7 @@ private final class Recorder: @unchecked Sendable {
     var symlinksByDirectory: [URL: [URL]] = [:]
     var danglingSymlinks: Set<URL> = []
     var executableTools: Set<URL> = []
+    var existingItems: Set<URL> = []
     var userBinDirectories: [URL] = []
 
     var commands: [[String]] { lock.withLock { _commands } }

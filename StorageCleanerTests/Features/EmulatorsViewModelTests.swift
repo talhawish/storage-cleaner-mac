@@ -162,6 +162,7 @@ final class EmulatorsViewModelTests: XCTestCase {
         try? await Task.sleep(for: .milliseconds(700))
         XCTAssertEqual(viewModel.state, .loaded)
         XCTAssertEqual(viewModel.images.count, 1)
+        XCTAssertEqual(viewModel.diagnosticMessage, "simctl couldn't list simulator runtimes")
     }
 
     /// Retry from the error state re-runs discovery and recovers once the

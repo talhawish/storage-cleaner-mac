@@ -13,6 +13,7 @@ struct EmulatorsView: View {
     var onCleanupComplete: (EmulatorCleanupResult, [EmulatorImage]) async -> Void = { _, _ in }
 
     @State private var viewModel: EmulatorsViewModel
+    @State private var confirmationImages: [EmulatorImage] = []
     @Environment(\.accessibilityReduceMotion)
     private var reduceMotion
 
@@ -59,7 +60,7 @@ struct EmulatorsView: View {
         .onDisappear { viewModel.cancel() }
         .sheet(isPresented: $viewModel.showConfirmation) {
             EmulatorDeleteConfirmationSheet(
-                images: viewModel.selectedImages,
+                images: confirmationImages,
                 onConfirm: performDeletion,
                 onCancel: { viewModel.showConfirmation = false }
             )
@@ -106,6 +107,14 @@ struct EmulatorsView: View {
             selectionBar
             ScrollView {
                 LazyVStack(spacing: 14) {
+                    if let diagnosticMessage = viewModel.diagnosticMessage {
+                        AppModalBanner(
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: AppTheme.orange,
+                            text: diagnosticMessage
+                        )
+                        .accessibilityIdentifier("simulators-diagnostic-message")
+                    }
                     ForEach(viewModel.sections, id: \.platform) { section in
                         EmulatorSectionCard(
                             platform: section.platform,
@@ -258,11 +267,12 @@ struct EmulatorsView: View {
             onRequirePro()
             return
         }
-        viewModel.showConfirmation = true
+        confirmationImages = viewModel.selectedImages
+        viewModel.showConfirmation = !confirmationImages.isEmpty
     }
 
     private func performDeletion() {
-        let toRemove = viewModel.selectedImages
+        let toRemove = confirmationImages
         viewModel.showConfirmation = false
         Task {
             let result = await viewModel.delete(toRemove)

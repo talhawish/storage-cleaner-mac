@@ -1,8 +1,13 @@
+import Foundation
+
 protocol StoragePermissionHandling: Sendable {
     func currentStatuses() -> [StoragePermissionStatus]
     @MainActor
     func requestHomeFolderAccess() -> Bool
     func beginHomeFolderAccess() -> SecurityScopedResourceAccess?
+    @MainActor
+    func requestApplicationsFolderAccess(for applicationsFolder: URL) -> Bool
+    func beginApplicationsFolderAccess(for applicationsFolder: URL) -> SecurityScopedResourceAccess?
 }
 
 extension StoragePermissionHandling {
@@ -12,6 +17,15 @@ extension StoragePermissionHandling {
     }
 
     func beginHomeFolderAccess() -> SecurityScopedResourceAccess? {
+        nil
+    }
+
+    @MainActor
+    func requestApplicationsFolderAccess(for applicationsFolder: URL) -> Bool {
+        false
+    }
+
+    func beginApplicationsFolderAccess(for applicationsFolder: URL) -> SecurityScopedResourceAccess? {
         nil
     }
 }
@@ -34,6 +48,18 @@ extension StoragePermissionHandling {
         _ body: (SecurityScopedResourceAccess?) async -> T
     ) async -> T {
         let access = beginHomeFolderAccess()
+        defer { access?.stop() }
+        return await body(access)
+    }
+
+    /// Acquires the security scope for one Applications folder while `body` runs.
+    /// Applications access is deliberately separate from Home-folder access in the macOS
+    /// sandbox, so callers must request the exact root they intend to enumerate.
+    func withApplicationsFolderAccess<T>(
+        for applicationsFolder: URL,
+        _ body: (SecurityScopedResourceAccess?) async -> T
+    ) async -> T {
+        let access = beginApplicationsFolderAccess(for: applicationsFolder)
         defer { access?.stop() }
         return await body(access)
     }

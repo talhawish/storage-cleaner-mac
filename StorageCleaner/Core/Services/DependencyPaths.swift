@@ -88,10 +88,33 @@ enum DependencyPaths {
     // MARK: - Gradle / Maven
 
     enum Gradle {
-        static let cacheDirs: [URL] = [
-            home(".gradle/caches"),
-            home(".m2/repository")
-        ]
+        static var cacheDirs: [URL] {
+            let environment = ProcessInfo.processInfo.environment
+            let customGradleHome = environment["GRADLE_USER_HOME"].flatMap { path -> URL? in
+                guard path.hasPrefix("/"), !path.isEmpty else { return nil }
+                return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+            }
+            let gradleHomes = [customGradleHome, home(".gradle")].compactMap { $0 }
+            var seen = Set<String>()
+            let uniqueGradleHomes = gradleHomes.filter { seen.insert($0.standardizedFileURL.path).inserted }
+            let gradleCaches = uniqueGradleHomes.flatMap { gradleHome in
+                [
+                    gradleHome.appending(path: "caches", directoryHint: .isDirectory),
+                    gradleHome.appending(path: "wrapper/dists", directoryHint: .isDirectory)
+                ]
+            }
+            return gradleCaches + [home(".m2/repository")]
+        }
+
+        /// Tilde-prefixed equivalents for cleanup options, keeping the scan and cleanup roots in sync.
+        static var cacheDirStrings: [String] {
+            let homePath = UserHomeDirectory.path
+            return cacheDirs.map { url in
+                let path = url.standardizedFileURL.path
+                guard path.hasPrefix(homePath + "/") else { return path }
+                return "~/" + String(path.dropFirst(homePath.count + 1))
+            }
+        }
     }
 
     // MARK: - CLI Tools
@@ -190,7 +213,6 @@ enum DependencyPaths {
     enum Android {
         static let cacheDirs: [URL] = [
             home("Library/Android/sdk"),
-            home("Library/Android/sdk/system-images"),
             home(".android/avd"),
             home("Library/Caches/Google/AndroidStudio")
         ]
@@ -199,12 +221,69 @@ enum DependencyPaths {
     // MARK: - AI Models
 
     enum ArtificialIntelligence {
+        static let huggingFaceHub = home(".cache/huggingface/hub")
         static let cacheDirs: [URL] = [
             home(".ollama/models"),
-            home(".cache/huggingface"),
-            home("Library/Application Support/LM Studio"),
+            huggingFaceHub,
+            home(".lmstudio/models"),
+            home(".cache/lm-studio/models"),
             home("stable-diffusion-webui/models")
         ]
+    }
+
+    // MARK: - General Home Storage Inventory
+
+    /// Locations already owned by focused scanners, plus broad user locations
+    /// covered by the media/project scanners. The generic folder inventory uses
+    /// this list to avoid presenting the same bytes a second time. Unknown sibling
+    /// directories remain eligible without requiring a vendor-specific entry.
+    enum StorageInventory {
+        /// These trees have dedicated storage scanners. Prune them from model
+        /// discovery too: bundled dependency weights are not independent downloads.
+        static var ownedStorageRoots: [URL] {
+            [DependencyPaths.Apple.derivedData, DependencyPaths.Apple.archives,
+             DependencyPaths.Apple.coreSimulator, DependencyPaths.Apple.swiftPM]
+                + DependencyPaths.Apple.deviceSupportRoots
+                + DependencyPaths.Node.cacheDirs
+                + DependencyPaths.Python.cacheDirs
+                + DependencyPaths.Rust.cacheDirs
+                + DependencyPaths.Golang.cacheDirs
+                + DependencyPaths.PHP.cacheDirs
+                + DependencyPaths.Ruby.cacheDirs
+                + DependencyPaths.DotNet.cacheDirs
+                + DependencyPaths.Gradle.cacheDirs
+                + DependencyPaths.CLI.homeDirs
+                + DependencyPaths.Docker.cacheDirs
+                + DependencyPaths.Flutter.cacheDirs
+                + DependencyPaths.Android.cacheDirs
+                + DependencyPaths.ArtificialIntelligence.cacheDirs
+                + DependencyPaths.Browser.cacheDirs
+                + RuntimeVersionCatalog.homeStorageRoots(home: home)
+        }
+
+        static var excludedModelRoots: [URL] {
+            ownedStorageRoots + [home(".Trash"), home("Applications"), DependencyPaths.SystemJunk.caches]
+        }
+
+        static var excludedFolderRoots: [URL] {
+            let paths = ownedStorageRoots + [
+                home("Desktop"), home("Downloads"), home("Documents"), home("Movies"),
+                home("Pictures"), home("Music"), home("Public"), home("Applications"), home(".Trash"),
+                DependencyPaths.SystemJunk.applicationSupport,
+                DependencyPaths.SystemJunk.caches,
+                DependencyPaths.SystemJunk.containers,
+                DependencyPaths.SystemJunk.groupContainers,
+                DependencyPaths.SystemJunk.preferences,
+                DependencyPaths.SystemJunk.savedApplicationState,
+                DependencyPaths.SystemJunk.diagnosticReports,
+                DependencyPaths.SystemJunk.crashReporter
+            ] + DependencyPaths.Projects.searchRoots
+
+            var seen = Set<String>()
+            return paths
+                .map(\.standardizedFileURL)
+                .filter { seen.insert($0.path).inserted }
+        }
     }
 
     // MARK: - Browser Caches
@@ -319,9 +398,21 @@ enum DependencyPaths {
 
     // MARK: - Developer Project Roots
 
-    /// Common locations where developers keep source-code projects. Used by
-    /// `ProjectActivityScanner` to discover projects across the home directory.
+    /// Conventional project roots used by developer storage category scanners.
+    /// Project Activity uses the broader `activitySearchRoots` collection.
     enum Projects {
+        /// Project Activity walks the whole accessible Home folder so projects
+        /// in custom and hidden locations aren't limited to conventional roots.
+        /// External volumes are included only when the user enables that setting.
+        static var activitySearchRoots: [URL] {
+            ScanPreferences.includingExternalVolumes([home])
+        }
+
+        /// Project Activity has no arbitrary depth or size cutoff. Its traversal
+        /// policy prunes generated dependency trees instead.
+        static let activityMaxDepth = Int.max
+        static let activityMinimumProjectSize: Int64 = 0
+
         static var searchRoots: [URL] {
             ScanPreferences.includingExternalVolumes([
                 home("Developer"),

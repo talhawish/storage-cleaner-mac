@@ -20,15 +20,18 @@ enum CLIRemovalError: Error, LocalizedError, Equatable {
     }
 }
 
-/// Removes CLI programs *properly*, without leaving abandoned files behind.
+/// Removes supported CLI programs through their package manager or moves the
+/// selected standalone item to the Trash.
 ///
 /// - Homebrew formulae and casks are removed with `brew uninstall`, which also
 ///   tears down the symlinks Homebrew created in `bin`, `opt`, `share`, etc. and
 ///   keeps Homebrew's own bookkeeping consistent. Trashing the keg directly would
 ///   leave those symlinks dangling and Homebrew believing the package is still
 ///   installed — exactly the orphaned state we want to avoid.
+/// - Global Node packages require their matching package manager. Moving only
+///   the package folder would leave the manager's links or records behind.
 /// - Everything else (version-manager versions, toolchain dirs, installed binaries)
-///   is moved to the Trash.
+///   is moved to the Trash. This does not claim to remove settings elsewhere.
 /// - After any Homebrew removal, a safety sweep deletes broken symlinks left in the
 ///   Homebrew link directories, covering anything a previous partial removal orphaned.
 ///
@@ -49,7 +52,7 @@ struct CLIRemovalService: Sendable {
     /// Measures an item's on-disk size before it is removed.
     var measure: @Sendable (_ url: URL) -> Int64
     /// Moves an item to the Trash.
-    var trashItem: @Sendable (_ url: URL) throws -> Void
+    var trashItem: @Sendable (_ url: URL) async throws -> Void
     /// Directories swept for broken symlinks after a Homebrew removal.
     var homebrewLinkDirectories: @Sendable () -> [URL]
     /// Lists the immediate symlinks within a directory.
@@ -60,6 +63,8 @@ struct CLIRemovalService: Sendable {
     var removeSymlink: @Sendable (_ symlink: URL) throws -> Void
     /// True when a path is an existing executable file.
     var isExecutable: @Sendable (_ url: URL) -> Bool
+    /// Verifies the selected installation path is gone after a manager exits.
+    var itemExists: @Sendable (_ url: URL) -> Bool
     /// User `bin` directories swept for dangling PATH symlinks after any removal
     /// (e.g. `~/.local/bin/claude` left behind when a tool's install is deleted).
     var userBinDirectories: @Sendable () -> [URL]
@@ -99,7 +104,7 @@ struct CLIRemovalService: Sendable {
             case let .manualRemovalRequired(message):
                 outcome.recordFailure(url, CLIRemovalError.manualRemovalRequired(url, message: message))
             case .other:
-                trash(url, into: &outcome)
+                await trash(url, into: &outcome)
             }
         }
 
@@ -127,20 +132,24 @@ struct CLIRemovalService: Sendable {
     ) async {
         outcome.directoriesToSweep.formUnion(homebrewLinkDirectories())
         guard let brew else {
-            // No Homebrew on this machine — fall back to trashing the keg.
-            trash(url, into: &outcome)
+            outcome.recordFailure(url, CLIRemovalError.homebrewUninstallFailed(
+                name: name,
+                message: "Homebrew is unavailable. Reinstall Homebrew or remove this formula with its package manager."
+            ))
             return
         }
 
         // Measure before uninstalling — the files are gone afterwards.
         let size = measure(url)
         let output = await runCommand(brew, ["uninstall", isCask ? "--cask" : "--formula", name])
-        if output.succeeded {
+        if output.succeeded && !itemExists(url) {
             outcome.removed(url, size)
         } else {
             outcome.recordFailure(url, CLIRemovalError.homebrewUninstallFailed(
                 name: name,
-                message: Self.firstMeaningfulLine(of: output.output)
+                message: output.succeeded
+                    ? "Homebrew finished, but the selected installation is still present."
+                    : Self.firstMeaningfulLine(of: output.output)
             ))
         }
     }
@@ -152,29 +161,33 @@ struct CLIRemovalService: Sendable {
     ) async {
         outcome.directoriesToSweep.insert(plan.binDirectory)
         guard let tool = plan.toolCandidates.first(where: isExecutable) else {
-            // No package manager available — trash the package directory. npm keeps
-            // no separate bookkeeping, so the bin sweep completes the removal cleanly.
-            trash(url, into: &outcome)
+            outcome.recordFailure(url, CLIRemovalError.nodeUninstallFailed(
+                package: plan.packageName,
+                message: "The matching package manager is unavailable. "
+                    + "Reinstall it or remove this package with its manager."
+            ))
             return
         }
 
         // Measure before uninstalling — the files are gone afterwards.
         let size = measure(url)
         let output = await runCommand(tool, plan.arguments)
-        if output.succeeded {
+        if output.succeeded && !itemExists(url) {
             outcome.removed(url, size)
         } else {
             outcome.recordFailure(url, CLIRemovalError.nodeUninstallFailed(
                 package: plan.packageName,
-                message: Self.firstMeaningfulLine(of: output.output)
+                message: output.succeeded
+                    ? "The package manager finished, but the selected package is still present."
+                    : Self.firstMeaningfulLine(of: output.output)
             ))
         }
     }
 
-    private func trash(_ url: URL, into outcome: inout Outcome) {
+    private func trash(_ url: URL, into outcome: inout Outcome) async {
         let size = measure(url)
         do {
-            try trashItem(url)
+            try await trashItem(url)
             outcome.removed(url, size)
         } catch {
             outcome.recordFailure(url, error)
@@ -355,40 +368,25 @@ extension CLIRemovalService {
             return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
         },
         runCommand: { tool, arguments in
-            await Task.detached(priority: .userInitiated) {
-                let process = Process()
-                process.executableURL = tool
-                process.arguments = arguments
+            var environment = ProcessInfo.processInfo.environment
+            // Keep uninstall fast and side-effect free.
+            environment["HOMEBREW_NO_AUTO_UPDATE"] = "1"
+            environment["HOMEBREW_NO_INSTALL_CLEANUP"] = "1"
+            environment["HOMEBREW_NO_ENV_HINTS"] = "1"
 
-                var environment = ProcessInfo.processInfo.environment
-                // Keep uninstall fast and side-effect free.
-                environment["HOMEBREW_NO_AUTO_UPDATE"] = "1"
-                environment["HOMEBREW_NO_INSTALL_CLEANUP"] = "1"
-                environment["HOMEBREW_NO_ENV_HINTS"] = "1"
-                process.environment = environment
-
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
-
-                do {
-                    try process.run()
-                } catch {
-                    return CommandOutput(exitCode: -1, output: error.localizedDescription)
-                }
-
-                // Drain before waiting so a full pipe buffer can't deadlock the child.
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                return CommandOutput(
-                    exitCode: process.terminationStatus,
-                    output: String(bytes: data, encoding: .utf8) ?? ""
+            do {
+                let result = try await SystemProcessExecutor(environment: environment).run(
+                    executable: tool,
+                    arguments: arguments
                 )
-            }.value
+                return CommandOutput(exitCode: result.exitCode, output: result.combinedOutput)
+            } catch {
+                return CommandOutput(exitCode: -1, output: error.localizedDescription)
+            }
         },
         measure: { StorageFormatting.itemSize(at: $0) },
         trashItem: { url in
-            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            try await WorkspaceTrashMover().moveOneToTrash(url)
         },
         homebrewLinkDirectories: {
             let prefixes = ["/opt/homebrew", "/usr/local"]
@@ -425,6 +423,7 @@ extension CLIRemovalService {
             try FileManager.default.removeItem(at: symlink)
         },
         isExecutable: { FileManager.default.isExecutableFile(atPath: $0.path) },
+        itemExists: { FileManager.default.fileExists(atPath: $0.path) },
         userBinDirectories: {
             let fileManager = FileManager.default
             let home = UserHomeDirectory.url

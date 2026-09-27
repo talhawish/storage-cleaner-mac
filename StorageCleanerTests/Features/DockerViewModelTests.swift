@@ -95,7 +95,7 @@ private actor DockerCommandStub {
                     output: #"{"ID":"img1","Repository":"demo","Tag":"latest","Size":"100MB"}"#
                 )
             }
-        case "image rm img1":
+        case "image rm demo:latest":
             removeImage()
         case "system df --format {{json .}}":
             .init(exitCode: 0, output: diskUsage)

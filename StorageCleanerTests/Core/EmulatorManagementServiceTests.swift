@@ -298,7 +298,7 @@ final class EmulatorManagementServiceTests: XCTestCase {
 
         XCTAssertEqual(result.removedCount, 1)
         XCTAssertTrue(recorder.trashed.isEmpty)
-        XCTAssertTrue(recorder.commands.contains(["simctl", "delete", udid]))
+        XCTAssertTrue(recorder.commands.contains(["delete", udid]))
         XCTAssertEqual(result.totalBytesReclaimed, 9_500_000_000)
     }
 
@@ -321,7 +321,7 @@ final class EmulatorManagementServiceTests: XCTestCase {
             [device.resolvingSymlinksInPath()]
         )
         XCTAssertFalse(
-            recorder.commands.contains(["simctl", "delete", sim.id]),
+            recorder.commands.contains(["delete", sim.id]),
             "Only known CoreSimulator devices should remove through simctl."
         )
     }
@@ -339,7 +339,7 @@ final class EmulatorManagementServiceTests: XCTestCase {
 
         let result = await service.remove([appleNewest, android])
 
-        XCTAssertTrue(recorder.commands.contains(["simctl", "runtime", "delete", appleNewest.id]))
+        XCTAssertTrue(recorder.commands.contains(["runtime", "delete", appleNewest.id]))
         XCTAssertEqual(
             recorder.trashed.map { $0.resolvingSymlinksInPath() },
             [abi.resolvingSymlinksInPath()]
@@ -366,15 +366,15 @@ final class EmulatorManagementServiceTests: XCTestCase {
         let service = EmulatorManagementService(
             runCommand: { _, arguments in
                 recorder.commands.append(arguments)
-                if arguments == ["simctl", "runtime", "list", "-j"] {
+                if arguments == ["runtime", "list", "-j"] {
                     return .init(exitCode: 0, output: emulatorSimctlRuntimesJSON)
                 }
-                if arguments == ["simctl", "list", "devices", "-j"] {
+                if arguments == ["list", "devices", "-j"] {
                     return .init(exitCode: 0, output: emptyEmulatorDevicesJSON)
                 }
                 return .init(exitCode: 1, output: "Unable to delete: runtime is in use")
             },
-            locateXcrun: { URL(fileURLWithPath: "/usr/bin/xcrun") },
+            locateSimctl: { URL(fileURLWithPath: "/Applications/Xcode.app/Contents/Developer/usr/bin/simctl") },
             androidSystemImagesRoot: { nil },
             appleDeviceSupportRoots: { [] },
             readDeviceSupportVersion: { _ in nil },
@@ -456,15 +456,15 @@ private func makeService(
     return EmulatorManagementService(
         runCommand: { _, arguments in
             recorder.commands.append(arguments)
-            if arguments == ["simctl", "runtime", "list", "-j"] {
+            if arguments == ["runtime", "list", "-j"] {
                 return .init(exitCode: 0, output: emulatorSimctlRuntimesJSON)
             }
-            if arguments == ["simctl", "list", "devices", "-j"] {
+            if arguments == ["list", "devices", "-j"] {
                 return .init(exitCode: 0, output: devicesJSON)
             }
             return .init(exitCode: 0, output: "")
         },
-        locateXcrun: { URL(fileURLWithPath: "/usr/bin/xcrun") },
+        locateSimctl: { URL(fileURLWithPath: "/Applications/Xcode.app/Contents/Developer/usr/bin/simctl") },
         androidSystemImagesRoot: { androidRoot },
         appleDeviceSupportRoots: { appleDeviceSupportRoots ?? [] },
         readDeviceSupportVersion: { folder in

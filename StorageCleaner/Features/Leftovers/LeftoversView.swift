@@ -6,13 +6,14 @@ import SwiftUI
 struct LeftoversView: View {
     let findings: [StorageFinding]
     let onScan: () -> Void
-    let onDelete: ([URL]) -> Void
+    let onDelete: ([URL]) async -> CleanupResult
     var canUseProActions = true
     var onRequirePro: () -> Void = {}
 
     @State private var typeFilter: LeftoverTypeFilter = .all
     @State private var selectedURLs: Set<URL> = []
     @State private var cleanupRequest: FileCleanupRequest?
+    @State private var isDeleting = false
     @State private var allRecords: [FindingFileRecord] = []
     @State private var isLoadingRecords = false
 
@@ -61,7 +62,7 @@ struct LeftoversView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if !selectedURLs.isEmpty {
+                if !selectedURLs.isEmpty && !isDeleting {
                     Button {
                         requestDeleteConfirmation()
                     } label: {
@@ -109,6 +110,10 @@ struct LeftoversView: View {
 
     private var content: some View {
         List {
+            if isDeleting {
+                ProgressView("Moving selected files…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             typeSection
 
             if filteredRecords.isEmpty {
@@ -117,6 +122,7 @@ struct LeftoversView: View {
                 filesSection
             }
         }
+        .disabled(isDeleting)
         .listStyle(.inset(alternatesRowBackgrounds: true))
     }
 
@@ -196,9 +202,14 @@ struct LeftoversView: View {
     }
 
     private func performDelete(_ request: FileCleanupRequest) {
+        guard !isDeleting else { return }
         cleanupRequest = nil
-        selectedURLs.subtract(request.urls)
-        onDelete(request.urls)
+        isDeleting = true
+        Task { @MainActor in
+            let result = await onDelete(request.urls)
+            selectedURLs.subtract(result.deletedItems.map(\.originalURL))
+            isDeleting = false
+        }
     }
 
     private func loadRecords() async {

@@ -1,8 +1,9 @@
 import Foundation
 
-/// Walks the common developer project roots, detects the technology of each
+/// Walks the accessible Home folder, detects the technology of each
 /// project via `ProjectDetector`, and measures its size and last activity in a
-/// single read-only filesystem pass. Cancellable throughout.
+/// single read-only filesystem pass. Generated dependency trees are pruned;
+/// traversal remains cancellable throughout.
 actor ProjectActivityScanner {
     private let searchPaths: [URL]
     private let maxDepth: Int
@@ -10,9 +11,9 @@ actor ProjectActivityScanner {
     private let permissionHandler: (any StoragePermissionHandling)?
 
     init(
-        searchPaths: [URL] = DependencyPaths.Projects.searchRoots,
-        maxDepth: Int = DependencyPaths.Projects.maxDepth,
-        minimumProjectSize: Int64 = DependencyPaths.Projects.minimumProjectSize,
+        searchPaths: [URL] = DependencyPaths.Projects.activitySearchRoots,
+        maxDepth: Int = DependencyPaths.Projects.activityMaxDepth,
+        minimumProjectSize: Int64 = DependencyPaths.Projects.activityMinimumProjectSize,
         permissionHandler: (any StoragePermissionHandling)? = nil
     ) {
         self.searchPaths = searchPaths
@@ -72,9 +73,8 @@ actor ProjectActivityScanner {
         )
     }
 
-    /// Removes duplicates and descendants of roots already being scanned. The
-    /// default roots include `Documents` and `Documents/GitHub`; scanning both
-    /// would repeat all filesystem work under the latter.
+    /// Removes duplicate roots and descendants of a root already being scanned.
+    /// This also keeps explicitly supplied overlapping roots from repeating work.
     static func nonOverlappingSearchRoots(_ paths: [URL]) -> [URL] {
         var seen = Set<String>()
         let uniquePaths = paths.compactMap { path -> URL? in
@@ -103,11 +103,15 @@ actor ProjectActivityScanner {
         fileMgr: FileManager
     ) -> [ProjectInfo] {
         var found: [ProjectInfo] = []
+        if let rootProject = project(at: dir, minimumProjectSize: minimumProjectSize, fileManager: fileMgr) {
+            return [rootProject]
+        }
         let rootDepth = dir.pathComponents.count
         let enumerator = fileMgr.enumerator(
             at: dir,
             includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            options: [.skipsPackageDescendants],
+            errorHandler: { _, _ in true }
         )
 
         while !Task.isCancelled {
@@ -120,20 +124,20 @@ actor ProjectActivityScanner {
                 guard (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
                     return true
                 }
-                if ProjectActivityDiscoveryExclusions.shouldSkipProjectDiscovery(at: item, fileManager: fileMgr) {
+                if ProjectDiscoveryTraversalPolicy.shouldSkipHomeSearch(
+                    at: item,
+                    fileManager: fileMgr
+                ) {
                     enumerator?.skipDescendants()
                     return true
                 }
-                if let tech = ProjectDetector.detect(at: item, fileManager: fileMgr),
-                   let info = build(
+                guard let info = project(
                     at: item,
-                    technology: tech,
                     minimumProjectSize: minimumProjectSize,
-                    fileMgr: fileMgr
-                   ) {
-                    found.append(info)
-                    enumerator?.skipDescendants()
-                }
+                    fileManager: fileMgr
+                ) else { return true }
+                found.append(info)
+                enumerator?.skipDescendants()
                 return true
             }
             guard hasItem else { break }
@@ -141,9 +145,30 @@ actor ProjectActivityScanner {
         return found
     }
 
+    private static func project(
+        at directory: URL,
+        minimumProjectSize: Int64,
+        fileManager: FileManager
+    ) -> ProjectInfo? {
+        guard let contents = ProjectDetector.directoryContents(at: directory, fileManager: fileManager),
+              let technology = ProjectDetector.detect(
+                at: directory,
+                contents: contents,
+                fileManager: fileManager
+              ) else { return nil }
+        return build(
+            at: directory,
+            technology: technology,
+            contents: contents,
+            minimumProjectSize: minimumProjectSize,
+            fileMgr: fileManager
+        )
+    }
+
     private static func build(
         at dir: URL,
         technology: ProjectTechnology,
+        contents: ProjectDirectoryContents,
         minimumProjectSize: Int64,
         fileMgr: FileManager
     ) -> ProjectInfo? {
@@ -152,7 +177,11 @@ actor ProjectActivityScanner {
             rootTechnology: technology,
             fileManager: fileMgr
         )
-        let detectedRootTechnologies = ProjectDetector.detectAll(at: dir, fileManager: fileMgr)
+        let detectedRootTechnologies = ProjectDetector.detectAll(
+            at: dir,
+            contents: contents,
+            fileManager: fileMgr
+        )
         let rootTechnologies = detectedRootTechnologies.isEmpty ? [technology] : detectedRootTechnologies
         let dependencyScopes = [ProjectDependencyScope(root: dir, technologies: rootTechnologies)]
             + components.map { ProjectDependencyScope(root: $0.path, technologies: $0.technologies) }
@@ -314,21 +343,4 @@ actor ProjectActivityScanner {
         metrics.considerIcon(at: item, score: iconScore, depth: max(0, comps.count - rootDepth), size: size)
     }
 
-}
-
-private enum ProjectActivityDiscoveryExclusions {
-    static func shouldSkipProjectDiscovery(at directory: URL, fileManager: FileManager) -> Bool {
-        isFlutterSDKCheckout(directory, fileManager: fileManager)
-    }
-
-    private static func isFlutterSDKCheckout(_ directory: URL, fileManager: FileManager) -> Bool {
-        let binFlutter = directory.appending(path: "bin/flutter")
-        let frameworkLibrary = directory.appending(path: "packages/flutter/lib", directoryHint: .isDirectory)
-        let engine = directory.appending(path: "engine", directoryHint: .isDirectory)
-        let dev = directory.appending(path: "dev", directoryHint: .isDirectory)
-
-        return fileManager.fileExists(atPath: binFlutter.path)
-            && fileManager.fileExists(atPath: frameworkLibrary.path)
-            && (fileManager.fileExists(atPath: engine.path) || fileManager.fileExists(atPath: dev.path))
-    }
 }

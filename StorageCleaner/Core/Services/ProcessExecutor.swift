@@ -14,6 +14,15 @@ struct ProcessRunResult: Equatable, Sendable {
     var standardErrorText: String {
         String(data: standardError, encoding: .utf8) ?? ""
     }
+
+    /// The command-line services expose one diagnostic string to their callers. Keep stdout and
+    /// stderr together while preserving whichever stream is available when the other is empty.
+    var combinedOutput: String {
+        let separator = standardOutput.isEmpty || standardError.isEmpty ? "" : "\n"
+        return (String(data: standardOutput, encoding: .utf8) ?? "")
+            + separator
+            + (String(data: standardError, encoding: .utf8) ?? "")
+    }
 }
 
 /// An error thrown when a subprocess exits non-zero or cannot be launched.
@@ -43,6 +52,12 @@ struct SystemProcessExecutor: ProcessExecuting {
     /// bounded prefix so a noisy tool cannot exhaust application memory.
     static let maximumCapturedBytesPerStream = 8 * 1_024 * 1_024
 
+    private let environment: [String: String]?
+
+    init(environment: [String: String]? = nil) {
+        self.environment = environment
+    }
+
     func run(executable: URL, arguments: [String]) async throws -> ProcessRunResult {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
@@ -61,6 +76,7 @@ struct SystemProcessExecutor: ProcessExecuting {
                 stderr: stderr
             )
 
+            process.environment = environment
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 

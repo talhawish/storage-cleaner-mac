@@ -4,8 +4,8 @@ A native macOS application that helps developers understand and safely reclaim s
 artifacts, package caches, simulators, containers, large videos, large photos, duplicate photos, duplicate documents,
 screenshots, loose APKs, browser caches, Trash, local AI models, and other development tools.
 
-> The current scanner performs read-only filesystem inspection. It estimates candidate sizes and counts,
-> but does not move, modify, or delete user files.
+> Scanning performs read-only filesystem inspection. Cleanup is a separate, explicit workflow: selected
+> items are confirmed and moved to the macOS Trash so they remain recoverable.
 
 ## Current foundation
 
@@ -37,12 +37,11 @@ screenshots, loose APKs, browser caches, Trash, local AI models, and other devel
 | Xcode | 16.4 | Build, run, test, and analyze |
 | Swift | 6.1 | Language and concurrency checks |
 | Homebrew | Current | Optional developer-tool installation |
-| XcodeGen | Current | Reproducible `.xcodeproj` generation |
 | SwiftLint | Current | Style and correctness linting |
 | Periphery | Current | Unused-code detection |
 
-Xcode includes Swift and the macOS SDK. XcodeGen, SwiftLint, and Periphery are needed for the complete
-verification pipeline.
+Xcode includes Swift and the macOS SDK. SwiftLint and Periphery are needed for the complete verification
+pipeline.
 
 ## First-time setup
 
@@ -64,7 +63,6 @@ verification pipeline.
 3. Install the analysis tools:
 
    ```bash
-   brew install xcodegen
    brew install swiftlint
    brew install peripheryapp/periphery/periphery
    ```
@@ -79,15 +77,23 @@ No API keys, database, code generation, or external services are currently requi
 
 ## Open and run in Xcode
 
-1. Run `make bootstrap` to generate `StorageCleaner.xcodeproj`.
+1. Run `make bootstrap` to resolve Swift packages.
 2. Launch Xcode.
 3. Open `StorageCleaner.xcodeproj`.
 4. Choose the **StorageCleaner** scheme and **My Mac** destination.
 5. Press **⌘R**.
 
-The generated project is intentionally ignored by Git; rerun `make generate` after changing `project.yml`.
-You can also open `Package.swift` directly for source development. The app requires a minimum window size
-of 920 × 640 points.
+The committed project uses filesystem-synchronized groups, so files under the app and test folders are
+picked up automatically. You can also open `Package.swift` directly for source development. The app
+requires a minimum window size of 920 × 640 points.
+
+## macOS sandbox permissions
+
+The app is sandboxed and requests access only when a feature needs it. The first scan asks you to choose
+your Home folder. The Applications screen separately asks you to choose `/Applications`; that bookmark
+is reused for app inventory and app-bundle moves to Trash. The app does not use Apple Events, AppleScript,
+or automation of Finder. macOS may also ask for Files & Folders consent when a scan first reaches a
+protected location such as Documents; Home-folder access and that system consent are separate grants.
 
 ## Run from Terminal
 
@@ -124,7 +130,6 @@ Useful direct commands:
 ```bash
 swift build -Xswiftc -warnings-as-errors
 swift test --parallel
-xcodegen generate
 xcodebuild test -project StorageCleaner.xcodeproj -scheme StorageCleaner -destination 'platform=macOS' -derivedDataPath .build/XcodeDerivedData
 swiftlint lint --strict --no-cache
 xcodebuild analyze -project StorageCleaner.xcodeproj -scheme StorageCleaner -destination 'platform=macOS' -derivedDataPath .build/XcodeDerivedData CODE_SIGNING_ALLOWED=NO
@@ -286,6 +291,22 @@ simulator runtimes use their owning CLI and are explicitly labeled when removal 
 successful cleanup is written to Cleanup History. File cleanup confirmations use an immutable,
 non-empty selection snapshot and preview the exact names, full paths, item count, and estimated size
 before the action begins.
+CLI tool and runtime version confirmations keep that snapshot while removal runs. The sheet closes
+when removal starts, the list shows progress, successful entries disappear after a fresh inventory,
+and failed entries remain available with a retry prompt. Package-managed tools use their package
+manager for uninstall; standalone binaries and other runtime versions move to the Trash.
+If Homebrew is unavailable, its formula or cask stays installed and the app reports the failure.
+Global Node packages also stay installed when their matching package manager is unavailable;
+trashing a package folder alone can leave manager records or links behind. CLI confirmations show
+the removal method and full path for each selected item. A standalone executable removal moves
+only that file to Trash, so settings and saved data elsewhere remain. A selected directory moves
+with all of its contents. Homebrew uninstall does not request `--zap`; any optional cleanup of
+settings and saved data requires a separate, explicit review. System JDKs require manual removal
+and cannot be confirmed for automatic cleanup.
+Standalone CLI tools, Android system images, Device Support packs, and project hibernation and
+compression use the same Finder-style Trash operation as ordinary file cleanup. A move is recorded
+as successful only when macOS returns the item's Trash destination. Failure prompts describe the
+actual operation and error; they do not assume every failure is a Full Disk Access problem.
 Cleanup History keeps one latest overall scan snapshot for context and lists only real cleanup
 actions below it; newer full scans replace older scan-only records so routine scanning does not
 fill the audit trail with "No cleanup" entries.
@@ -302,11 +323,17 @@ The live scanner currently inspects these storage candidate types:
   Detection includes React/Next.js, Vue/Nuxt/Quasar, Angular, Svelte/SvelteKit, Express, NestJS,
   Laravel, Symfony, WordPress, Django, Flask, FastAPI, Rails, Sinatra, Spring Boot, Ktor, ASP.NET Core,
   Blazor, Vapor, and common Rust and Go web frameworks. Layered frameworks are shown together without
-  double-counting project storage. Monorepos remain one storage-owning root while bounded nested-project
+  double-counting project storage. Discovery searches accessible Home folders at any depth, including
+  hidden project directories and small projects, while pruning known dependency, cache, and VCS trees.
+  Monorepos remain one storage-owning root while nested-project
   discovery identifies apps and packages inside workspace containers, counts their frameworks, and adds
   their technologies to dependency sizing and hibernation rules. Those rules are scoped to the nearest
   project boundary, preventing generic names such as `vendor`, `build`, or `dist` from affecting a sibling;
   a single polyglot component can safely contribute multiple manifest technologies at the same boundary.
+  For example, a Laravel project with both `composer.json` and `package.json` can reclaim Composer's
+  `vendor` and Node's `node_modules` together while keeping source files. Project hibernation and
+  compression reacquire Home Folder access for the full operation in sandboxed builds; if access
+  has been revoked, the confirmation shows the access error before moving any files.
 - Xcode artifacts: DerivedData, archives, simulators, and SwiftPM checkouts
 - Node dependencies: `node_modules`, npm, pnpm, and yarn caches
 - Docker artifacts: the Docker screen queries the active Docker context for images, containers,
@@ -319,7 +346,23 @@ The live scanner currently inspects these storage candidate types:
 - Leftover mobile packages: loose APK and AAB files from Android builds or emulator exports
 - Leftover installers: loose DMG, PKG, IPA, ISO, and other installer/package files left in
   Downloads, Desktop, and Documents long after the app they installed (surfaced regardless of size)
-- AI model caches: Ollama, LM Studio, HuggingFace, Stable Diffusion, and generated assets
+- AI model stores: Ollama, LM Studio's model directories, Stable Diffusion model directories,
+  and Hugging Face `models--*` repositories. Hugging Face datasets/credentials and LM Studio's
+  general application data are not offered as models. Quick Clean uses the same restricted paths.
+- Local AI models: large weight files discovered by format across Home (including hidden folders),
+  such as GGUF, GGML, SafeTensors, ONNX, TFLite, PyTorch, Core ML, and large binary weights.
+  Ambiguous protobuf and binary files only qualify when their path also identifies models, weights,
+  or checkpoints. Format and path matching identify candidates, not proof that an app can regenerate them.
+  Known cache, SDK, simulator, runtime, Trash, and app-bundle trees are pruned; standalone models
+  outside Home remain eligible for Large Files when external-volume scanning is enabled.
+  Model stores and individual model files always require review before moving them to Trash.
+- Other large folders: directories over 1 GiB in Home that are not already covered by focused storage
+  scanners. Discovery is location-agnostic and includes hidden directories; every result is marked
+  “Review first” because unfamiliar folders may contain active app or user data. Broad media/project
+  locations and managed Library locations are excluded from this fallback inventory; it is not a
+  complete disk-usage map. Unreadable subtrees prevent their ancestors from being offered with a
+  misleading partial size. Results are largest first, and opening a row scopes the preview to that path.
+  The folder and model categories share one cancellable walk per scan; separate scans own separate caches.
 - Large files: any oversized file in Desktop, Downloads, Documents, Pictures, and Movies regardless of
   type — documents (PDF, DOCX, CSV, spreadsheets, slides), datasets, archives, disk images, and more.
   The scanner collects from a 10 MB floor; a single configurable threshold (shared between Settings and
@@ -348,13 +391,15 @@ The live scanner currently inspects these storage candidate types:
   home-folder access remains active. Partial failures stay selected and report their removal error so
   they can be retried safely.
 - Applications: app bundles are moved to Trash through security-scoped Applications access. Bundles
-  that require administrator approval use AppKit's Finder-style recycle operation so macOS owns the
-  authentication UI and the item remains recoverable from Trash.
+  that require additional authorization use AppKit's `NSWorkspace.recycle` operation, which keeps
+  the item recoverable in Trash without Apple Events automation. If macOS still requires an
+  administrator, the app directs the user to complete that move in Finder.
 - Junk files: temporary files, logs, crash reports, disposable archives, and old disk images
-- System Junk: actionable orphaned Application Support data, caches, sandbox containers,
-  preferences, saved application state, and old crash reports. Cleanup uses Finder-style Trash
-  semantics, excludes protected app-container and macOS-managed state, and only counts successfully
-  moved entries toward reclaimed storage.
+- System Junk: browser caches, eligible orphaned Application Support data, caches, preferences,
+  saved application state, and crash reports older than 30 days. General temporary files from
+  Downloads and Desktop stay in Junk Files. Protected app-container and macOS-managed state is not
+  offered as a cleanup candidate. Trash moves report per-item progress, and only successful moves
+  are reconciled from the scan results.
 - Trash: files already moved to Trash but still occupying disk space
 
 Production scanning must keep videos, photos, screenshots, mobile packages, and Trash in review-first mode.
@@ -398,6 +443,8 @@ Keyboard shortcuts currently available:
 Developer Storage only presents results after all developer-storage categories have been scanned.
 Results from overlapping targeted scans, such as simulator or Docker scans, remain available in their
 dedicated sections but do not replace Developer Storage's initial full-scan prompt.
+Its targeted scan covers toolchains and developer caches; loose APK/AAB installers are scanned
+under Leftovers so opening Developer Storage does not access Desktop, Downloads, or Documents.
 
 ## Development workflow
 
@@ -444,9 +491,9 @@ rm -rf ~/Library/Developer/Xcode/DerivedData/StorageCleaner-*
 
 ## Roadmap
 
-See `TODO.md` for planned scanner domains and release milestones. The immediate next milestone is the
-production read-only filesystem inventory engine with permission handling, streaming traversal, cancellation,
-and deterministic scanner fixtures.
+See `TODO.md` for planned scanner domains and release milestones. The current scanner provides
+permission-aware, streaming, cancelable inventory with deterministic fixtures; future work is tracked in
+`TODO.md`.
 
 ## Landing page
 

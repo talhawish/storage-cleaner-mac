@@ -4,7 +4,7 @@ import SwiftData
 enum PersistenceController {
     static let shared = makeContainer(inMemory: false)
 
-    nonisolated(unsafe) static var preview = makeContainer(inMemory: true)
+    static let preview = makeContainer(inMemory: true)
 
     /// A fresh in-memory container for transient runs (UI tests, demo mode) that must never
     /// touch the user's on-disk store.

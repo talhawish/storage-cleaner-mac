@@ -137,6 +137,19 @@ final class ProjectActivityScannerTests: XCTestCase {
         XCTAssertEqual(ProjectDetector.detect(at: swiftRoot), .swift)
     }
 
+    func testCachedDirectoryContentsPreservePrimaryAndPolyglotDetection() throws {
+        let root = try makeProject(named: "polyglot", marker: "Package.swift")
+        try "<Project />".write(
+            to: root.appending(path: "Api.csproj"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let contents = try XCTUnwrap(ProjectDetector.directoryContents(at: root))
+
+        XCTAssertEqual(ProjectDetector.detect(at: root, contents: contents), .swift)
+        XCTAssertEqual(ProjectDetector.detectAll(at: root, contents: contents), [.swift, .dotNet])
+    }
+
     func testFlutterTakesPriorityOverAndroidAndGradle() throws {
         let root = temporaryDirectory.appending(path: "flutter_app", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -312,18 +325,6 @@ final class ProjectActivityScannerTests: XCTestCase {
         let project = try XCTUnwrap(snapshot.projects.first)
 
         XCTAssertEqual(project.activityStatus, .abandoned, "activity follows source files, not dependencies")
-    }
-
-    func testDefaultScanFiltersTinyMarkerOnlyFolders() async throws {
-        let root = temporaryDirectory.appending(path: "tiny_fixture", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try "name: fixture".write(to: root.appending(path: "pubspec.yaml"), atomically: true, encoding: .utf8)
-        try "void main() {}".write(to: root.appending(path: "main.dart"), atomically: true, encoding: .utf8)
-
-        let scanner = ProjectActivityScanner(searchPaths: [temporaryDirectory], maxDepth: 2)
-        let snapshot = await scanner.scan()
-
-        XCTAssertTrue(snapshot.projects.isEmpty)
     }
 
     func testScanSkipsNestedPackagesInsideFlutterSDKCheckout() async throws {

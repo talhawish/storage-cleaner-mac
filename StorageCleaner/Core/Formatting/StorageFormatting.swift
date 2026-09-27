@@ -38,7 +38,14 @@ enum StorageFormatting {
     }
 
     static func fileSize(at url: URL) -> Int64 {
-        let values = try? url.resourceValues(forKeys: [.fileAllocatedSizeKey, .fileSizeKey])
+        let values = try? url.resourceValues(forKeys: [
+            .isDirectoryKey,
+            .fileAllocatedSizeKey,
+            .fileSizeKey
+        ])
+        if values?.isDirectory == true {
+            return itemSize(at: url)
+        }
         return Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
     }
 

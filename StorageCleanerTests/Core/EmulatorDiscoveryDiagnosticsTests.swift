@@ -11,7 +11,7 @@ final class EmulatorDiscoveryDiagnosticsTests: XCTestCase {
     func testDiscoverWithDiagnosticsReportsSimctlFailure() async {
         let service = makeService(
             runCommand: { _, _ in .init(exitCode: 1, output: "error: broken CoreSimulator service\n") },
-            locateXcrun: { URL(fileURLWithPath: "/usr/bin/xcrun") }
+            locateSimctl: { URL(fileURLWithPath: "/Applications/Xcode.app/Contents/Developer/usr/bin/simctl") }
         )
 
         let discovery = await service.discoverWithDiagnostics()
@@ -23,12 +23,12 @@ final class EmulatorDiscoveryDiagnosticsTests: XCTestCase {
         )
     }
 
-    /// No xcrun means no Xcode tooling — an empty inventory is a true empty,
+    /// No simctl means no Xcode tooling — an empty inventory is a true empty,
     /// never a failure.
     func testDiscoverWithDiagnosticsIsCleanWhenXcodeToolingIsAbsent() async {
         let service = makeService(
             runCommand: { _, _ in .init(exitCode: 1, output: "unused") },
-            locateXcrun: { nil }
+            locateSimctl: { nil }
         )
 
         let discovery = await service.discoverWithDiagnostics()
@@ -39,11 +39,11 @@ final class EmulatorDiscoveryDiagnosticsTests: XCTestCase {
 
     private func makeService(
         runCommand: @escaping @Sendable (URL, [String]) async -> EmulatorManagementService.CommandOutput,
-        locateXcrun: @escaping @Sendable () -> URL?
+        locateSimctl: @escaping @Sendable () -> URL?
     ) -> EmulatorManagementService {
         EmulatorManagementService(
             runCommand: runCommand,
-            locateXcrun: locateXcrun,
+            locateSimctl: locateSimctl,
             androidSystemImagesRoot: { nil },
             appleDeviceSupportRoots: { [] },
             readDeviceSupportVersion: { _ in nil },
